@@ -6,9 +6,11 @@
 #![deny(clippy::float_arithmetic)]
 
 pub mod date;
+pub mod kinds;
 pub mod money;
 pub mod period;
 
+pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
 pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
 
