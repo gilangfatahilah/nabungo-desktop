@@ -5,6 +5,10 @@ use uuid::Uuid;
 
 use crate::{AccountKind, CategoryKind, CurrencyCode, TxnKind};
 
+/// Batas nominal satu posting (10^15 satuan minor = 1 kuadriliun rupiah). Menjamin
+/// `SUM(amount)` di SQL tidak overflow `i64` walau ada jutaan posting di satu akun.
+pub const MAX_AMOUNT: i64 = 1_000_000_000_000_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountRef {
     pub id: Uuid,
@@ -41,6 +45,8 @@ pub enum TxnError {
     NoPostings,
     #[error("posting amount must not be zero")]
     ZeroAmount,
+    #[error("posting amount exceeds the maximum of {MAX_AMOUNT}")]
+    AmountTooLarge,
     #[error("posting requires a category")]
     MissingCategory,
     #[error("posting category must be {expected:?}")]
@@ -70,6 +76,12 @@ pub fn validate(draft: &TxnDraft) -> Result<(), TxnError> {
     }
     if postings.iter().any(|p| p.amount == 0) {
         return Err(TxnError::ZeroAmount);
+    }
+    if postings
+        .iter()
+        .any(|p| p.amount.unsigned_abs() > MAX_AMOUNT.unsigned_abs())
+    {
+        return Err(TxnError::AmountTooLarge);
     }
     match draft.kind {
         TxnKind::Income => require_category(postings, CategoryKind::Income),
@@ -338,7 +350,7 @@ mod tests {
             i64::MAX,
             1,
         );
-        assert_eq!(validate(&d), Err(TxnError::Overflow));
+        assert_eq!(validate(&d), Err(TxnError::AmountTooLarge));
     }
 
     #[test]
@@ -371,9 +383,20 @@ mod tests {
         assert_eq!(validate(&two), Err(TxnError::OpeningPostingCount(2)));
     }
 
+    #[test]
+    fn amount_above_max_rejected() {
+        let acc = account(AccountKind::Bank);
+        let ok = draft(TxnKind::Adjustment, vec![posting(acc, None, -MAX_AMOUNT)]);
+        assert_eq!(validate(&ok), Ok(()));
+        for bad in [MAX_AMOUNT + 1, -MAX_AMOUNT - 1, i64::MAX, i64::MIN] {
+            let d = draft(TxnKind::Adjustment, vec![posting(acc, None, bad)]);
+            assert_eq!(validate(&d), Err(TxnError::AmountTooLarge), "{bad}");
+        }
+    }
+
     proptest! {
         #[test]
-        fn any_balanced_transfer_is_valid(x in 1i64..=i64::MAX) {
+        fn any_balanced_transfer_is_valid(x in 1i64..=MAX_AMOUNT) {
             let d = transfer(account(AccountKind::Bank), account(AccountKind::Ewallet), -x, x);
             prop_assert_eq!(validate(&d), Ok(()));
         }
