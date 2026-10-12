@@ -5,15 +5,30 @@ use std::path::Path;
 use rusqlite::Connection;
 use rusqlite_migration::{M, Migrations};
 
+pub mod account;
+pub mod category;
+pub mod txn;
+
+pub use rusqlite;
+
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Migration(#[from] rusqlite_migration::Error),
+    #[error("corrupt data: {0}")]
+    Corrupt(String),
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;
+
+/// Timestamp audit ISO-8601 UTC.
+pub fn now_utc() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("RFC 3339 formatting of current time cannot fail")
+}
 
 /// Daftar migrasi ber-versi (`PRAGMA user_version`). Hanya boleh ditambah di akhir;
 /// migrasi yang sudah dirilis tidak boleh diubah.
