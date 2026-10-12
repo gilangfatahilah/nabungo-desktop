@@ -16,3 +16,6 @@ ui/dist/
 .DS_Store
 .idea/
 *.log
+
+# Workspace eksekusi plan (superpowers)
+.superpowers/
