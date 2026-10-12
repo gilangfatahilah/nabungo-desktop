@@ -5,9 +5,12 @@
 //! Nominal uang selalu `i64` dalam satuan minor; floating point dilarang.
 #![deny(clippy::float_arithmetic)]
 
+pub mod date;
 pub mod money;
+pub mod period;
 
 pub use money::{CurrencyCode, Money, MoneyError};
+pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
 
 /// Versi crate domain, dipakai untuk smoke test lintas layer.
 pub fn version() -> &'static str {
