@@ -1966,7 +1966,10 @@ version = "0.1.0"
 dependencies = [
  "nabungo-core",
  "nabungo-storage",
+ "proptest",
  "thiserror 2.0.21",
+ "time",
+ "uuid",
 ]
 
 [[package]]
