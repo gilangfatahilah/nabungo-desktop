@@ -9,10 +9,12 @@ pub mod date;
 pub mod kinds;
 pub mod money;
 pub mod period;
+pub mod txn;
 
 pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
 pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
+pub use txn::{AccountRef, CategoryRef, PostingDraft, TxnDraft, TxnError, validate};
 
 /// Versi crate domain, dipakai untuk smoke test lintas layer.
 pub fn version() -> &'static str {

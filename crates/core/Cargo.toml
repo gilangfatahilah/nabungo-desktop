@@ -12,6 +12,7 @@ workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["macros", "parsing", "formatting"] }
+uuid = { version = "1.28.0", features = ["serde", "v7"] }
 
 [dev-dependencies]
 proptest = "1.12.0"
