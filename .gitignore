@@ -1,0 +1,18 @@
+# Rust
+/target/
+src-tauri/gen/schemas/
+
+# Node
+node_modules/
+ui/dist/
+*.tsbuildinfo
+
+# Data lokal / DB dev
+*.db
+*.db-wal
+*.db-shm
+
+# Editor/OS
+.DS_Store
+.idea/
+*.log

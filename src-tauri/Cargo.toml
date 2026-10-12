@@ -1,0 +1,26 @@
+[package]
+name = "nabungo-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "nabungo_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.2", features = [] }
+
+[dependencies]
+anyhow = "1.0.104"
+directories = "6.0.0"
+nabungo-app = { version = "0.1.0", path = "../crates/app" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri = { version = "2.12.3", features = [] }
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
