@@ -5,12 +5,14 @@
 //! Nominal uang selalu `i64` dalam satuan minor; floating point dilarang.
 #![deny(clippy::float_arithmetic)]
 
+pub mod amount;
 pub mod date;
 pub mod kinds;
 pub mod money;
 pub mod period;
 pub mod txn;
 
+pub use amount::{AmountParseError, parse_amount};
 pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
 pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
