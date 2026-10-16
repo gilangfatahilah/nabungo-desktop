@@ -1,0 +1,97 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from '@/components/ui/sidebar'
+import { Button } from '@/components/ui/button'
+import type { RouteName } from '@/router'
+
+interface Item {
+  name: RouteName
+  to: string
+  keys: string
+}
+
+// Hint shortcut sesuai PRD §9; pendaftaran tombolnya ada di Task 7.
+const main: Item[] = [
+  { name: 'dashboard', to: '/', keys: 'G D' },
+  { name: 'transactions', to: '/transactions', keys: 'G T' },
+  { name: 'budget', to: '/budget', keys: 'G B' },
+  { name: 'allocation', to: '/allocation', keys: 'G A' },
+  { name: 'reports', to: '/reports', keys: 'G R' },
+]
+const manage: Item[] = [
+  { name: 'accounts', to: '/accounts', keys: '' },
+  { name: 'categories', to: '/categories', keys: '' },
+  { name: 'scheduled', to: '/scheduled', keys: '' },
+]
+const settings: Item = { name: 'settings', to: '/settings', keys: 'Ctrl+,' }
+
+const route = useRoute()
+const current = computed(() => route.name)
+</script>
+
+<template>
+  <Sidebar>
+    <SidebarHeader class="gap-3 p-3">
+      <p class="px-1 text-lg font-semibold">{{ $t('app.name') }}</p>
+      <Button class="w-full justify-between" data-testid="new-txn">
+        <span>+ {{ $t('sidebar.newTransaction') }}</span>
+        <kbd class="rounded border border-primary-foreground/40 px-1.5 text-xs font-sans">N</kbd>
+      </Button>
+    </SidebarHeader>
+    <SidebarContent>
+      <SidebarGroup>
+        <SidebarGroupLabel>{{ $t('sidebar.main') }}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem v-for="item in main" :key="item.name">
+              <SidebarMenuButton as-child :is-active="current === item.name">
+                <RouterLink :to="item.to">
+                  <span>{{ $t(`nav.${item.name}`) }}</span>
+                  <kbd class="ml-auto text-xs font-sans text-muted-foreground">{{ item.keys }}</kbd>
+                </RouterLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>{{ $t('sidebar.manage') }}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem v-for="item in manage" :key="item.name">
+              <SidebarMenuButton as-child :is-active="current === item.name">
+                <RouterLink :to="item.to">
+                  <span>{{ $t(`nav.${item.name}`) }}</span>
+                </RouterLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </SidebarContent>
+    <SidebarFooter>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton as-child :is-active="current === settings.name">
+            <RouterLink :to="settings.to">
+              <span>{{ $t(`nav.${settings.name}`) }}</span>
+              <kbd class="ml-auto text-xs font-sans text-muted-foreground">{{ settings.keys }}</kbd>
+            </RouterLink>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarFooter>
+  </Sidebar>
+</template>

@@ -2,7 +2,25 @@ import type { ErrorCode } from '@/ipc'
 
 export default {
   app: { name: 'Nabungo' },
-  nav: { dashboard: 'Dasbor' },
+  nav: {
+    dashboard: 'Dasbor',
+    transactions: 'Transaksi',
+    budget: 'Budget',
+    allocation: 'Alokasi',
+    reports: 'Laporan',
+    accounts: 'Akun',
+    categories: 'Kategori',
+    scheduled: 'Terjadwal',
+    settings: 'Pengaturan',
+  },
+  common: { comingSoon: 'Segera hadir' },
+  settings: {
+    theme: 'Tema',
+    language: 'Bahasa',
+    themes: { light: 'Terang', dark: 'Gelap', system: 'Ikuti sistem' },
+    locales: { id: 'Indonesia', en: 'English' },
+  },
+  sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi' },
   dashboard: { netWorth: 'Kekayaan bersih' },
   errors: {
     not_found: '{entity} tidak ditemukan',

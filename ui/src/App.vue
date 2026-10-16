@@ -2,6 +2,8 @@
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { onMounted } from 'vue'
+import AppSidebar from '@/components/AppSidebar.vue'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
@@ -11,16 +13,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen bg-background text-foreground">
-    <aside class="w-60 shrink-0 border-r p-4">
-      <p class="text-lg font-semibold">{{ $t('app.name') }}</p>
-      <nav class="mt-6 flex flex-col gap-1 text-sm">
-        <RouterLink to="/" class="rounded-md px-2 py-1.5 hover:bg-accent">{{ $t('nav.dashboard') }}</RouterLink>
-      </nav>
-    </aside>
-    <main class="flex-1 overflow-auto p-6">
-      <RouterView />
-    </main>
+  <SidebarProvider>
+    <AppSidebar />
+    <SidebarInset class="h-screen overflow-auto">
+      <main class="flex-1 p-6">
+        <RouterView />
+      </main>
+    </SidebarInset>
     <Toaster />
-  </div>
+  </SidebarProvider>
 </template>

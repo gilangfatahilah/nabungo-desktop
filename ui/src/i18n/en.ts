@@ -2,7 +2,25 @@ import type { MessageSchema } from '.'
 
 export default {
   app: { name: 'Nabungo' },
-  nav: { dashboard: 'Dashboard' },
+  nav: {
+    dashboard: 'Dashboard',
+    transactions: 'Transactions',
+    budget: 'Budget',
+    allocation: 'Allocation',
+    reports: 'Reports',
+    accounts: 'Accounts',
+    categories: 'Categories',
+    scheduled: 'Scheduled',
+    settings: 'Settings',
+  },
+  common: { comingSoon: 'Coming soon' },
+  settings: {
+    theme: 'Theme',
+    language: 'Language',
+    themes: { light: 'Light', dark: 'Dark', system: 'Follow system' },
+    locales: { id: 'Indonesia', en: 'English' },
+  },
+  sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'Transaction' },
   dashboard: { netWorth: 'Net worth' },
   errors: {
     not_found: '{entity} not found',
