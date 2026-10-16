@@ -7,6 +7,7 @@ use rusqlite_migration::{M, Migrations};
 
 pub mod account;
 pub mod category;
+pub mod setting;
 pub mod txn;
 
 pub use rusqlite;

@@ -89,7 +89,7 @@ impl TxnInput {
 }
 
 pub struct Ledger {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Ledger {

@@ -7,5 +7,7 @@ pub fn version() -> &'static str {
 }
 
 mod ledger;
+mod settings;
 
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
+pub use settings::{Locale, Theme, UiSettings};
