@@ -1,12 +1,13 @@
-use nabungo_core::TxnDraft;
+use nabungo_core::ValidTxn;
 use nabungo_core::date::format_date;
 use rusqlite::{Connection, Transaction, params};
 use uuid::Uuid;
 
 use crate::Result;
 
-/// Simpan header + postings. Pemanggil WAJIB sudah menjalankan `nabungo_core::validate`.
-pub fn insert_txn(tx: &Transaction, draft: &TxnDraft, now: &str) -> Result<Uuid> {
+/// Simpan header + postings. Hanya menerima [`ValidTxn`], jadi invariant sudah dicek di core.
+pub fn insert_txn(tx: &Transaction, txn: &ValidTxn, now: &str) -> Result<Uuid> {
+    let draft = txn.draft();
     let id = Uuid::now_v7();
     tx.execute(
         "INSERT INTO txn (id, kind, date, note, created_at, updated_at)
@@ -36,16 +37,20 @@ pub fn insert_txn(tx: &Transaction, draft: &TxnDraft, now: &str) -> Result<Uuid>
     Ok(id)
 }
 
-/// Soft delete (`Some(ts)`) atau restore (`None`). Mengembalikan `false` bila ID tidak ada.
-pub fn set_deleted(
-    tx: &Transaction,
-    id: Uuid,
-    deleted_at: Option<&str>,
-    now: &str,
-) -> Result<bool> {
+/// Soft delete transaksi aktif. `false` bila ID tidak ada atau sudah terhapus.
+pub fn soft_delete(tx: &Transaction, id: Uuid, now: &str) -> Result<bool> {
     let changed = tx.execute(
-        "UPDATE txn SET deleted_at = ?2, updated_at = ?3 WHERE id = ?1",
-        params![id.to_string(), deleted_at, now],
+        "UPDATE txn SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![id.to_string(), now],
+    )?;
+    Ok(changed == 1)
+}
+
+/// Kembalikan transaksi yang terhapus. `false` bila ID tidak ada atau tidak sedang terhapus.
+pub fn restore(tx: &Transaction, id: Uuid, now: &str) -> Result<bool> {
+    let changed = tx.execute(
+        "UPDATE txn SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NOT NULL",
+        params![id.to_string(), now],
     )?;
     Ok(changed == 1)
 }
@@ -68,7 +73,8 @@ mod tests {
     use crate::category::{get_category_ref, insert_category};
     use crate::{now_utc, open_in_memory};
     use nabungo_core::{
-        AccountKind, AccountRef, CategoryKind, CategoryRef, CurrencyCode, PostingDraft, TxnKind,
+        AccountKind, AccountRef, CategoryKind, CategoryRef, CurrencyCode, PostingDraft, TxnDraft,
+        TxnKind,
     };
     use time::macros::date;
 
@@ -79,11 +85,11 @@ mod tests {
             currency: CurrencyCode::IDR,
         };
         let id = insert_account(tx, &new, &now_utc()).unwrap();
-        get_account_ref(tx, id).unwrap().unwrap()
+        get_account_ref(tx, id).unwrap().unwrap().value
     }
 
-    fn draft(kind: TxnKind, postings: Vec<(AccountRef, Option<CategoryRef>, i64)>) -> TxnDraft {
-        TxnDraft {
+    fn draft(kind: TxnKind, postings: Vec<(AccountRef, Option<CategoryRef>, i64)>) -> ValidTxn {
+        ValidTxn::new(TxnDraft {
             kind,
             date: date!(2026 - 10 - 12),
             note: None,
@@ -96,7 +102,8 @@ mod tests {
                     memo: None,
                 })
                 .collect(),
-        }
+        })
+        .unwrap()
     }
 
     #[test]
@@ -116,7 +123,29 @@ mod tests {
         let parent = insert_category(&tx, CategoryKind::Expense, "Makan & Minum", None).unwrap();
         let child = insert_category(&tx, CategoryKind::Expense, "Kopi", Some(parent)).unwrap();
         let r = get_category_ref(&tx, child).unwrap().unwrap();
-        assert_eq!(r.kind, CategoryKind::Expense);
+        assert_eq!(r.value.kind, CategoryKind::Expense);
+        assert!(!r.archived);
+    }
+
+    #[test]
+    fn lookup_reports_archived() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let acc = bank(&tx, "Kartu Lama");
+        let cat = insert_category(&tx, CategoryKind::Expense, "Rokok", None).unwrap();
+        tx.execute_batch("UPDATE account SET archived_at = '2026-10-16T00:00:00.000Z'; UPDATE category SET archived_at = '2026-10-16T00:00:00.000Z';")
+            .unwrap();
+        assert!(get_account_ref(&tx, acc.id).unwrap().unwrap().archived);
+        assert!(get_category_ref(&tx, cat).unwrap().unwrap().archived);
+    }
+
+    #[test]
+    fn root_category_names_unique_per_kind() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        insert_category(&tx, CategoryKind::Expense, "Makan", None).unwrap();
+        assert!(insert_category(&tx, CategoryKind::Expense, "Makan", None).is_err());
+        insert_category(&tx, CategoryKind::Income, "Makan", None).unwrap();
     }
 
     #[test]
@@ -157,13 +186,26 @@ mod tests {
         )
         .unwrap();
 
-        assert!(set_deleted(&tx, id, Some(&now), &now).unwrap());
+        assert!(!restore(&tx, id, &now).unwrap(), "restore of a live txn");
+        assert!(soft_delete(&tx, id, &now).unwrap());
         assert_eq!(account_balance(&tx, a.id).unwrap(), 0);
+        assert!(!soft_delete(&tx, id, "2099-01-01T00:00:00.000Z").unwrap());
+        let deleted_at: String = tx
+            .query_row(
+                "SELECT deleted_at FROM txn WHERE id = ?1",
+                [id.to_string()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            deleted_at, now,
+            "second delete must not overwrite the timestamp"
+        );
 
-        assert!(set_deleted(&tx, id, None, &now).unwrap());
+        assert!(restore(&tx, id, &now).unwrap());
         assert_eq!(account_balance(&tx, a.id).unwrap(), 500_000);
 
-        assert!(!set_deleted(&tx, Uuid::now_v7(), Some(&now), &now).unwrap());
+        assert!(!soft_delete(&tx, Uuid::now_v7(), &now).unwrap());
     }
 
     #[test]

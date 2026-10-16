@@ -34,8 +34,8 @@ impl PeriodStartDay {
 /// dengan start day 25, periode "2026-11" = 25 Okt s/d 24 Nov.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BudgetPeriod {
-    pub year: i32,
-    pub month: u8,
+    year: i32,
+    month: u8,
 }
 
 impl BudgetPeriod {
@@ -45,6 +45,14 @@ impl BudgetPeriod {
         } else {
             Err(PeriodError::InvalidMonth(month))
         }
+    }
+
+    pub fn year(self) -> i32 {
+        self.year
+    }
+
+    pub fn month(self) -> u8 {
+        self.month
     }
 
     pub fn next(self) -> Self {

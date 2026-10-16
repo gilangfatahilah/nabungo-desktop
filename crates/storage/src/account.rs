@@ -2,7 +2,7 @@ use nabungo_core::{AccountKind, AccountRef, CurrencyCode};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use crate::{Result, StorageError};
+use crate::{Lookup, Result, StorageError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewAccount {
@@ -27,20 +27,29 @@ pub fn insert_account(tx: &Transaction, new: &NewAccount, now: &str) -> Result<U
     Ok(id)
 }
 
-pub fn get_account_ref(conn: &Connection, id: Uuid) -> Result<Option<AccountRef>> {
+pub fn get_account_ref(conn: &Connection, id: Uuid) -> Result<Option<Lookup<AccountRef>>> {
     let row = conn
         .query_row(
-            "SELECT kind, currency FROM account WHERE id = ?1",
+            "SELECT kind, currency, archived_at IS NOT NULL FROM account WHERE id = ?1",
             [id.to_string()],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            },
         )
         .optional()?;
-    let Some((kind, currency)) = row else {
+    let Some((kind, currency, archived)) = row else {
         return Ok(None);
     };
     let kind = AccountKind::parse(&kind)
         .ok_or_else(|| StorageError::Corrupt(format!("account {id}: unknown kind {kind:?}")))?;
     let currency = CurrencyCode::parse(&currency)
         .map_err(|e| StorageError::Corrupt(format!("account {id}: {e}")))?;
-    Ok(Some(AccountRef { id, kind, currency }))
+    Ok(Some(Lookup {
+        value: AccountRef { id, kind, currency },
+        archived,
+    }))
 }

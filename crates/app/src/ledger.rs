@@ -2,10 +2,10 @@
 
 use std::path::Path;
 
-use nabungo_core::{AccountRef, CategoryKind, PostingDraft, TxnDraft, TxnError, TxnKind, validate};
+use nabungo_core::{AccountRef, CategoryKind, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn};
 use nabungo_storage::account::{self, NewAccount};
 use nabungo_storage::rusqlite::{self, Connection};
-use nabungo_storage::{StorageError, category, now_utc, txn};
+use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
 use time::Date;
 use uuid::Uuid;
 
@@ -19,6 +19,11 @@ pub enum AppError {
     Txn(#[from] TxnError),
     #[error("{0} not found")]
     NotFound(&'static str),
+    #[error("{0} is archived")]
+    Archived(&'static str),
+    /// Saldo awal hanya dibuat oleh `create_account`, tidak lewat `record`.
+    #[error("opening balance can only be set when creating an account")]
+    OpeningNotAllowed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +65,7 @@ impl TxnInput {
 
     /// `amount` positif: keluar dari `from`, masuk ke `to`.
     pub fn transfer(date: Date, from: Uuid, to: Uuid, amount: i64) -> Self {
+        // saturating: i64::MIN tidak punya negasi; hasilnya tetap ditolak `AmountTooLarge`.
         Self {
             kind: TxnKind::Transfer,
             date,
@@ -68,7 +74,7 @@ impl TxnInput {
                 PostingInput {
                     account_id: from,
                     category_id: None,
-                    amount: -amount,
+                    amount: amount.saturating_neg(),
                     memo: None,
                 },
                 PostingInput {
@@ -125,8 +131,7 @@ impl Ledger {
                     memo: None,
                 }],
             };
-            validate(&draft)?;
-            txn::insert_txn(&tx, &draft, &now)?;
+            txn::insert_txn(&tx, &ValidTxn::new(draft)?, &now)?;
         }
         tx.commit()?;
         Ok(id)
@@ -140,37 +145,39 @@ impl Ledger {
     }
 
     pub fn record(&mut self, input: &TxnInput) -> Result<Uuid, AppError> {
+        if input.kind == TxnKind::Opening {
+            return Err(AppError::OpeningNotAllowed);
+        }
         let now = now_utc();
         let tx = self.conn.transaction()?;
-        let draft = resolve(&tx, input)?;
-        validate(&draft)?;
-        let id = txn::insert_txn(&tx, &draft, &now)?;
+        let valid = ValidTxn::new(resolve(&tx, input)?)?;
+        let id = txn::insert_txn(&tx, &valid, &now)?;
         tx.commit()?;
         Ok(id)
     }
 
+    /// `NotFound` bila ID tidak dikenal atau transaksi sudah terhapus.
     pub fn delete_txn(&mut self, id: Uuid) -> Result<(), AppError> {
-        let now = now_utc();
-        self.set_deleted(id, Some(&now), &now)
+        self.change_deleted(id, txn::soft_delete)
     }
 
+    /// `NotFound` bila ID tidak dikenal atau transaksi tidak sedang terhapus.
     pub fn undo_delete_txn(&mut self, id: Uuid) -> Result<(), AppError> {
-        let now = now_utc();
-        self.set_deleted(id, None, &now)
+        self.change_deleted(id, txn::restore)
     }
 
     pub fn balance(&self, account_id: Uuid) -> Result<i64, AppError> {
         Ok(txn::account_balance(&self.conn, account_id)?)
     }
 
-    fn set_deleted(
+    fn change_deleted(
         &mut self,
         id: Uuid,
-        deleted_at: Option<&str>,
-        now: &str,
+        op: fn(&rusqlite::Transaction, Uuid, &str) -> nabungo_storage::Result<bool>,
     ) -> Result<(), AppError> {
+        let now = now_utc();
         let tx = self.conn.transaction()?;
-        if !txn::set_deleted(&tx, id, deleted_at, now)? {
+        if !op(&tx, id, &now)? {
             return Err(AppError::NotFound("transaction"));
         }
         tx.commit()?;
@@ -183,12 +190,9 @@ fn resolve(conn: &Connection, input: &TxnInput) -> Result<TxnDraft, AppError> {
         .postings
         .iter()
         .map(|p| {
-            let account = account::get_account_ref(conn, p.account_id)?
-                .ok_or(AppError::NotFound("account"))?;
+            let account = active(account::get_account_ref(conn, p.account_id)?, "account")?;
             let category = match p.category_id {
-                Some(id) => Some(
-                    category::get_category_ref(conn, id)?.ok_or(AppError::NotFound("category"))?,
-                ),
+                Some(id) => Some(active(category::get_category_ref(conn, id)?, "category")?),
                 None => None,
             };
             Ok(PostingDraft {
@@ -205,6 +209,15 @@ fn resolve(conn: &Connection, input: &TxnInput) -> Result<TxnDraft, AppError> {
         note: input.note.clone(),
         postings,
     })
+}
+
+/// Transaksi baru tidak boleh menyentuh akun/kategori yang sudah diarsip.
+fn active<T>(found: Option<Lookup<T>>, what: &'static str) -> Result<T, AppError> {
+    match found {
+        None => Err(AppError::NotFound(what)),
+        Some(l) if l.archived => Err(AppError::Archived(what)),
+        Some(l) => Ok(l.value),
+    }
 }
 
 #[cfg(test)]
@@ -297,5 +310,64 @@ mod tests {
             ledger.delete_txn(Uuid::now_v7()),
             Err(AppError::NotFound("transaction"))
         ));
+        assert!(matches!(
+            ledger.undo_delete_txn(id),
+            Err(AppError::NotFound("transaction"))
+        ));
+    }
+
+    #[test]
+    fn transfer_of_i64_min_is_rejected_not_panicking() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let (a, b) = (bank(&mut ledger, 0), bank(&mut ledger, 0));
+        let err = ledger
+            .record(&TxnInput::transfer(D, a, b, i64::MIN))
+            .unwrap_err();
+        assert!(matches!(err, AppError::Txn(TxnError::AmountTooLarge)));
+    }
+
+    #[test]
+    fn record_rejects_opening() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let acc = bank(&mut ledger, 1_000_000);
+        let err = ledger
+            .record(&TxnInput::single(TxnKind::Opening, D, acc, None, 5))
+            .unwrap_err();
+        assert!(matches!(err, AppError::OpeningNotAllowed));
+        assert_eq!(txn_count(&ledger), 1);
+    }
+
+    #[test]
+    fn archived_account_and_category_reject_new_txn() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let acc = bank(&mut ledger, 0);
+        let food = ledger
+            .create_category(CategoryKind::Expense, "Makan")
+            .unwrap();
+        ledger
+            .conn
+            .execute(
+                "UPDATE category SET archived_at = '2026-10-16T00:00:00.000Z'",
+                [],
+            )
+            .unwrap();
+        let expense = TxnInput::single(TxnKind::Expense, D, acc, Some(food), -1_000);
+        assert!(matches!(
+            ledger.record(&expense),
+            Err(AppError::Archived("category"))
+        ));
+        ledger
+            .conn
+            .execute(
+                "UPDATE account SET archived_at = '2026-10-16T00:00:00.000Z'",
+                [],
+            )
+            .unwrap();
+        let adj = TxnInput::single(TxnKind::Adjustment, D, acc, None, 1);
+        assert!(matches!(
+            ledger.record(&adj),
+            Err(AppError::Archived("account"))
+        ));
+        assert_eq!(txn_count(&ledger), 0);
     }
 }

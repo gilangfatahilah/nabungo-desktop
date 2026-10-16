@@ -5,9 +5,9 @@ use uuid::Uuid;
 
 use crate::{AccountKind, CategoryKind, CurrencyCode, TxnKind};
 
-/// Batas nominal satu posting (10^15 satuan minor = 1 kuadriliun rupiah). Menjamin
-/// `SUM(amount)` di SQL tidak overflow `i64` walau ada jutaan posting di satu akun.
-pub const MAX_AMOUNT: i64 = 1_000_000_000_000_000;
+/// Batas nominal satu posting (10^12 satuan minor = 1 triliun rupiah). `SUM(amount)` di SQL
+/// baru bisa overflow `i64` setelah ~9,2 juta posting bernilai maksimum di satu akun.
+pub const MAX_AMOUNT: i64 = 1_000_000_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountRef {
@@ -67,6 +67,22 @@ pub enum TxnError {
     ValuationNonInvestment,
     #[error("opening balance needs exactly 1 posting, got {0}")]
     OpeningPostingCount(usize),
+}
+
+/// Draft yang sudah lolos [`validate`]. Field privat: satu-satunya cara membuatnya adalah
+/// [`ValidTxn::new`], sehingga storage tidak bisa menyimpan transaksi yang melanggar invariant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidTxn(TxnDraft);
+
+impl ValidTxn {
+    pub fn new(draft: TxnDraft) -> Result<Self, TxnError> {
+        validate(&draft)?;
+        Ok(Self(draft))
+    }
+
+    pub fn draft(&self) -> &TxnDraft {
+        &self.0
+    }
 }
 
 pub fn validate(draft: &TxnDraft) -> Result<(), TxnError> {
@@ -343,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn transfer_sum_overflow_is_error_not_panic() {
+    fn transfer_leg_above_max_is_rejected_not_overflowed() {
         let d = transfer(
             account(AccountKind::Bank),
             account(AccountKind::Ewallet),
@@ -392,6 +408,15 @@ mod tests {
             let d = draft(TxnKind::Adjustment, vec![posting(acc, None, bad)]);
             assert_eq!(validate(&d), Err(TxnError::AmountTooLarge), "{bad}");
         }
+    }
+
+    #[test]
+    fn valid_txn_only_from_valid_draft() {
+        let acc = account(AccountKind::Bank);
+        let ok = draft(TxnKind::Adjustment, vec![posting(acc, None, 500)]);
+        assert_eq!(ValidTxn::new(ok.clone()).unwrap().draft(), &ok);
+        let bad = draft(TxnKind::Adjustment, vec![posting(acc, None, 0)]);
+        assert_eq!(ValidTxn::new(bad), Err(TxnError::ZeroAmount));
     }
 
     proptest! {

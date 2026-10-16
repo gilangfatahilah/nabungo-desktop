@@ -14,7 +14,9 @@ pub mod txn;
 pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
 pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
-pub use txn::{AccountRef, CategoryRef, MAX_AMOUNT, PostingDraft, TxnDraft, TxnError, validate};
+pub use txn::{
+    AccountRef, CategoryRef, MAX_AMOUNT, PostingDraft, TxnDraft, TxnError, ValidTxn, validate,
+};
 
 /// Versi crate domain, dipakai untuk smoke test lintas layer.
 pub fn version() -> &'static str {
