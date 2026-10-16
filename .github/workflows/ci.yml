@@ -26,6 +26,11 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # Binding TS di-generate oleh test export_bindings; harus sudah di-commit.
+      # Windows dilewati karena line ending checkout.
+      - name: Check generated IPC bindings are committed
+        if: runner.os == 'Linux'
+        run: git diff --exit-code ui/src/ipc/bindings.ts
 
   ui:
     runs-on: ubuntu-24.04

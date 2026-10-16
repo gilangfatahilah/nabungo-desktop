@@ -6,13 +6,12 @@ use nabungo_app::Ledger;
 
 use crate::paths::DataDir;
 
-// Dibaca oleh command di Task 4.
-#[allow(dead_code)]
 pub struct AppState {
     pub ledger: Mutex<Ledger>,
     pub data_dir: DataDir,
 }
 
 /// Penahan `WorkerGuard` log selama app berjalan.
+// Tidak pernah dibaca: cukup ditahan agar log di-flush saat app berhenti.
 #[allow(dead_code)]
 pub struct LogGuard(pub tracing_appender::non_blocking::WorkerGuard);

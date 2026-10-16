@@ -1,15 +1,33 @@
 //! Lapisan Tauri: command tipis + DTO serde. Logika bisnis ada di `nabungo-app`.
 
+mod commands;
+mod dto;
+mod error;
 mod logging;
 mod paths;
 mod state;
 
 use anyhow::Context;
 
-#[tauri::command]
-fn app_version() -> &'static str {
-    nabungo_app::version()
+/// Registry command + konfigurasi binding; dipakai `run()` dan test ekspor.
+pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            commands::app_info,
+            commands::get_ui_settings,
+            commands::set_theme,
+            commands::set_locale,
+            commands::parse_amount,
+        ])
+        // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
+        .dangerously_cast_bigints_to_number()
 }
+
+fn bindings_exporter() -> specta_typescript::Typescript {
+    specta_typescript::Typescript::default()
+}
+
+const BINDINGS_PATH: &str = "../ui/src/ipc/bindings.ts";
 
 fn init(app: &tauri::App) -> anyhow::Result<()> {
     use tauri::Manager;
@@ -39,9 +57,28 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let builder = specta_builder();
+
+    #[cfg(debug_assertions)]
+    builder
+        .export(bindings_exporter(), BINDINGS_PATH)
+        .expect("gagal ekspor bindings TypeScript");
+
     tauri::Builder::default()
         .setup(|app| init(app).map_err(Into::into))
-        .invoke_handler(tauri::generate_handler![app_version])
+        .invoke_handler(builder.invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running Nabungo");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_bindings() {
+        specta_builder()
+            .export(bindings_exporter(), BINDINGS_PATH)
+            .expect("gagal ekspor bindings");
+    }
 }

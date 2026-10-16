@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { appVersion } from '@/ipc'
+import { appInfo } from '@/ipc'
 
 const version = ref<string>('')
 
 onMounted(async () => {
-  version.value = await appVersion()
+  version.value = (await appInfo()).version
 })
 </script>
 
