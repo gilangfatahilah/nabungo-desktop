@@ -21,6 +21,15 @@ export default {
     locales: { id: 'Indonesia', en: 'English' },
   },
   sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'Transaction' },
+  txn: { new: 'New transaction', formComingSoon: 'The transaction form arrives in Phase 4.' },
+  palette: {
+    title: 'Command palette',
+    description: 'Search for a screen or action, then press Enter.',
+    placeholder: 'Type a command or screen name...',
+    empty: 'No results.',
+    navigation: 'Navigation',
+    actions: 'Actions',
+  },
   dashboard: { netWorth: 'Net worth' },
   errors: {
     not_found: '{entity} not found',

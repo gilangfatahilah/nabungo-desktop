@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
+import { useUiStore } from '@/stores/ui'
 import type { RouteName } from '@/router'
 
 interface Item {
@@ -22,7 +23,7 @@ interface Item {
   keys: string
 }
 
-// Hint shortcut sesuai PRD §9; pendaftaran tombolnya ada di Task 7.
+// Hint shortcut sesuai PRD §9; handler-nya di App.vue (lib/shortcuts).
 const main: Item[] = [
   { name: 'dashboard', to: '/', keys: 'G D' },
   { name: 'transactions', to: '/transactions', keys: 'G T' },
@@ -38,6 +39,7 @@ const manage: Item[] = [
 const settings: Item = { name: 'settings', to: '/settings', keys: 'Ctrl+,' }
 
 const route = useRoute()
+const ui = useUiStore()
 const current = computed(() => route.name)
 </script>
 
@@ -45,7 +47,7 @@ const current = computed(() => route.name)
   <Sidebar>
     <SidebarHeader class="gap-3 p-3">
       <p class="px-1 text-lg font-semibold">{{ $t('app.name') }}</p>
-      <Button class="w-full justify-between" data-testid="new-txn">
+      <Button class="w-full justify-between" data-testid="new-txn" @click="ui.newTxnOpen = true">
         <span>+ {{ $t('sidebar.newTransaction') }}</span>
         <kbd class="rounded border border-primary-foreground/40 px-1.5 text-xs font-sans">N</kbd>
       </Button>

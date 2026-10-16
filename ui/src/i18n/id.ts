@@ -21,6 +21,15 @@ export default {
     locales: { id: 'Indonesia', en: 'English' },
   },
   sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi' },
+  txn: { new: 'Transaksi baru', formComingSoon: 'Formulir transaksi hadir di Fase 4.' },
+  palette: {
+    title: 'Palet perintah',
+    description: 'Cari layar atau aksi lalu tekan Enter.',
+    placeholder: 'Ketik perintah atau nama layar...',
+    empty: 'Tidak ada hasil.',
+    navigation: 'Navigasi',
+    actions: 'Aksi',
+  },
   dashboard: { netWorth: 'Kekayaan bersih' },
   errors: {
     not_found: '{entity} tidak ditemukan',
