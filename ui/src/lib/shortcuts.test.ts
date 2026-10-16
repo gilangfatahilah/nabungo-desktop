@@ -80,4 +80,31 @@ describe('shortcuts', () => {
     press(document.body, 'n', { ctrlKey: true })
     expect(actions).toEqual([{ kind: 'palette' }, { kind: 'navigate', route: 'settings' }])
   })
+
+  it('Ctrl+B tidak di-preventDefault', () => {
+    const { actions, press } = setup()
+    const e = press(document.body, 'b', { ctrlKey: true })
+    expect(e.defaultPrevented).toBe(false)
+    expect(actions).toEqual([])
+  })
+
+  it('Meta+K membuka palette', () => {
+    const { actions, press } = setup()
+    press(document.body, 'k', { metaKey: true })
+    expect(actions).toEqual([{ kind: 'palette' }])
+  })
+
+  it('Alt+huruf diabaikan', () => {
+    const { actions, press } = setup()
+    const e = press(document.body, 'n', { altKey: true })
+    expect(actions).toEqual([])
+    expect(e.defaultPrevented).toBe(false)
+  })
+
+  it('event repeat dan composing diabaikan', () => {
+    const { actions, press } = setup()
+    press(document.body, 'n', { repeat: true })
+    press(document.body, 'n', { isComposing: true })
+    expect(actions).toEqual([])
+  })
 })

@@ -28,7 +28,7 @@ Menambah komponen shadcn-vue: jalankan dari `ui/` → `CI=true pnpm dlx shadcn-v
 
 Binding TS `ui/src/ipc/bindings.ts` di-generate oleh tauri-specta — otomatis saat `pnpm dev` (debug build) atau lewat `cargo test -p nabungo-desktop export_bindings`. Jangan diedit manual; hasil generate **wajib di-commit** (CI memeriksa tidak ada diff).
 
-Folder data (DB `nabungo.db` + `logs/`): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/`.
+Folder data (DB `nabungo.db` + `logs/`): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
 
 Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
 

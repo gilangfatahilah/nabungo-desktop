@@ -7,6 +7,8 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { withErrorToast } from '@/lib/notify'
+import { shouldIgnoreAction } from '@/lib/overlay'
 import { createShortcutHandler, type ShortcutAction } from '@/lib/shortcuts'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
@@ -16,15 +18,18 @@ const ui = useUiStore()
 const router = useRouter()
 
 function onAction(a: ShortcutAction) {
-  if (a.kind === 'navigate') void router.push({ name: a.route })
-  else if (a.kind === 'newTxn') ui.newTxnOpen = true
+  if (shouldIgnoreAction(a, ui.newTxnOpen)) return
+  if (a.kind === 'navigate') {
+    ui.paletteOpen = false
+    void router.push({ name: a.route })
+  } else if (a.kind === 'newTxn') ui.newTxnOpen = true
   else ui.paletteOpen = !ui.paletteOpen
 }
 
 const onKeydown = createShortcutHandler({ onAction })
 
 onMounted(() => {
-  void settings.load()
+  void withErrorToast(() => settings.load())
   window.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
@@ -34,9 +39,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   <SidebarProvider>
     <AppSidebar />
     <SidebarInset class="h-screen overflow-auto">
-      <main class="flex-1 p-6">
+      <div class="flex-1 p-6">
         <RouterView />
-      </main>
+      </div>
     </SidebarInset>
     <CommandPalette />
     <NewTxnSheet />

@@ -2040,7 +2040,6 @@ dependencies = [
  "anyhow",
  "directories",
  "nabungo-app",
- "nabungo-core",
  "serde",
  "serde_json",
  "specta",

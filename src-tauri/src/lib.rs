@@ -27,7 +27,7 @@ fn bindings_exporter() -> specta_typescript::Typescript {
     specta_typescript::Typescript::default()
 }
 
-const BINDINGS_PATH: &str = "../ui/src/ipc/bindings.ts";
+const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/ipc/bindings.ts");
 
 fn init(app: &tauri::App) -> anyhow::Result<()> {
     use tauri::Manager;
@@ -60,9 +60,10 @@ pub fn run() {
     let builder = specta_builder();
 
     #[cfg(debug_assertions)]
-    builder
-        .export(bindings_exporter(), BINDINGS_PATH)
-        .expect("gagal ekspor bindings TypeScript");
+    if let Err(e) = builder.export(bindings_exporter(), BINDINGS_PATH) {
+        // Logging belum diinisialisasi di titik ini.
+        eprintln!("gagal ekspor bindings TypeScript: {e}");
+    }
 
     tauri::Builder::default()
         .setup(|app| init(app).map_err(Into::into))

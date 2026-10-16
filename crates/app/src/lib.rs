@@ -10,4 +10,5 @@ mod ledger;
 mod settings;
 
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
+pub use nabungo_core::{AmountParseError, TxnError, parse_amount};
 pub use settings::{Locale, Theme, UiSettings};

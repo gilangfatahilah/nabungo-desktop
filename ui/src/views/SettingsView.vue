@@ -2,6 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { LocaleDto, ThemeDto } from '@/ipc'
+import { withErrorToast } from '@/lib/notify'
 import { useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
@@ -11,10 +12,10 @@ const themes: ThemeDto[] = ['light', 'dark', 'system']
 const locales: LocaleDto[] = ['id', 'en']
 
 function onTheme(v: unknown) {
-  if (typeof v === 'string' && (themes as string[]).includes(v)) void settings.setTheme(v as ThemeDto)
+  if (typeof v === 'string' && (themes as string[]).includes(v)) void withErrorToast(() => settings.setTheme(v as ThemeDto))
 }
 function onLocale(v: unknown) {
-  if (typeof v === 'string' && (locales as string[]).includes(v)) void settings.setLocale(v as LocaleDto)
+  if (typeof v === 'string' && (locales as string[]).includes(v)) void withErrorToast(() => settings.setLocale(v as LocaleDto))
 }
 </script>
 

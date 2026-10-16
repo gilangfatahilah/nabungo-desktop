@@ -50,5 +50,5 @@ pub fn set_locale(state: State<'_, AppState>, locale: LocaleDto) -> Result<(), I
 #[tauri::command]
 #[specta::specta]
 pub fn parse_amount(input: String) -> Result<i64, IpcError> {
-    Ok(nabungo_core::parse_amount(&input)?)
+    Ok(nabungo_app::parse_amount(&input)?)
 }

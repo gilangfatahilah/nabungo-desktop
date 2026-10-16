@@ -1,7 +1,7 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
 use nabungo_app::AppError;
-use nabungo_core::{AmountParseError, TxnError};
+use nabungo_app::{AmountParseError, TxnError};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.

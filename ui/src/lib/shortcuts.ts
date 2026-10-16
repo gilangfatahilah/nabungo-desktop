@@ -38,6 +38,7 @@ export function createShortcutHandler(opts: Options): (e: KeyboardEvent) => void
   }
 
   return (e) => {
+    if (e.repeat || e.isComposing) return
     const key = e.key.toLowerCase()
     const mod = e.ctrlKey || e.metaKey
 

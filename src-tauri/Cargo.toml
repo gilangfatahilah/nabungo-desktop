@@ -19,7 +19,6 @@ tauri-build = { version = "2.7.2", features = [] }
 anyhow = "1.0.104"
 directories = "6.0.0"
 nabungo-app = { version = "0.1.0", path = "../crates/app" }
-nabungo-core = { version = "0.1.0", path = "../crates/core" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 specta = "=2.0.0-rc.25"
