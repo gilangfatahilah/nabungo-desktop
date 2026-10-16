@@ -1,5 +1,30 @@
+import type { ErrorCode } from '@/ipc'
+
 export default {
   app: { name: 'Nabungo' },
   nav: { dashboard: 'Dasbor' },
   dashboard: { netWorth: 'Kekayaan bersih' },
+  errors: {
+    not_found: '{entity} tidak ditemukan',
+    archived: '{entity} sudah diarsipkan',
+    opening_not_allowed: 'Saldo awal tidak dapat diubah dengan cara ini',
+    txn_no_postings: 'Transaksi harus memiliki minimal satu posting',
+    txn_zero_amount: 'Nominal tidak boleh nol',
+    txn_amount_too_large: 'Nominal terlalu besar',
+    txn_missing_category: 'Kategori wajib diisi',
+    txn_wrong_category_kind: 'Jenis kategori tidak sesuai dengan transaksi',
+    txn_unexpected_category: 'Transaksi ini tidak boleh memakai kategori',
+    txn_transfer_leg_count: 'Transfer harus terdiri dari tepat dua sisi',
+    txn_transfer_same_account: 'Akun asal dan tujuan transfer harus berbeda',
+    txn_currency_mismatch: 'Mata uang transaksi tidak sesuai dengan akun',
+    txn_unbalanced: 'Total posting transaksi tidak seimbang',
+    txn_overflow: 'Total nominal melebihi batas',
+    txn_valuation_non_investment: 'Penilaian ulang hanya untuk akun investasi',
+    txn_opening_posting_count: 'Saldo awal harus memiliki tepat satu posting',
+    amount_empty: 'Nominal belum diisi',
+    amount_invalid: 'Format nominal tidak valid',
+    amount_fractional: 'Nominal tidak boleh berpecahan',
+    amount_too_large: 'Nominal melebihi batas maksimum',
+    internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
+  } satisfies Record<ErrorCode, string>,
 }

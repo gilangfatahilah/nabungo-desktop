@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
+import { onMounted } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
+
+const settings = useSettingsStore()
+onMounted(() => {
+  void settings.load()
+})
 </script>
 
 <template>
