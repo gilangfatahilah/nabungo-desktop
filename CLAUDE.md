@@ -26,6 +26,12 @@ pnpm --filter @nabungo/ui dev                          # UI saja di browser (tan
 
 Menambah komponen shadcn-vue: jalankan dari `ui/` → `CI=true pnpm dlx shadcn-vue@latest add <komponen> --yes`. Komponen di-copy ke `ui/src/components/ui/` dan boleh diedit.
 
+Binding TS `ui/src/ipc/bindings.ts` di-generate oleh tauri-specta — otomatis saat `pnpm dev` (debug build) atau lewat `cargo test -p nabungo-desktop export_bindings`. Jangan diedit manual; hasil generate **wajib di-commit** (CI memeriksa tidak ada diff).
+
+Folder data (DB `nabungo.db` + `logs/`): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/`.
+
+Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
+
 CI (`.github/workflows/ci.yml`) menjalankan fmt check, clippy `-D warnings`, test di Linux + Windows, serta typecheck/test/build UI.
 
 ## Arsitektur
@@ -35,7 +41,7 @@ Cargo workspace + pnpm workspace. Arah dependensi wajib: `ui → src-tauri → n
 - `crates/core` (`nabungo-core`) — domain murni: Money, Account, Txn/Posting, validasi invariant, `period_of(date)`, kalkulasi budget & alokasi. **Tidak boleh** bergantung pada IO (rusqlite, tauri, fs). `#![deny(clippy::float_arithmetic)]`. Nama paket diberi prefix `nabungo-` karena `core` bentrok dengan crate std `core`.
 - `crates/storage` (`nabungo-storage`) — rusqlite (bundled), PRAGMA saat open, migrasi `rusqlite_migration` di `crates/storage/migrations/` (versi via `user_version`). Repository yang menulis menerima `&rusqlite::Transaction`, bukan `&Connection`; query baca murni (lookup, saldo) boleh `&Connection` agar bisa dipakai koneksi baca. `insert_txn` hanya menerima `ValidTxn` (dibuat lewat `ValidTxn::new`, yang menjalankan validasi core). Test memakai `open_in_memory()` yang menjalankan migrasi penuh.
 - `crates/app` (`nabungo-app`) — use case/service (TransactionService, BudgetService, AllocationService, ReportService, BackupService); satu use case tulis = satu SQLite transaction.
-- `src-tauri` (`nabungo-desktop`) — command Tauri yang tipis + DTO serde; tidak ada logika bisnis. Command baru didaftarkan di `generate_handler!` di `src-tauri/src/lib.rs`.
+- `src-tauri` (`nabungo-desktop`) — command Tauri yang tipis + DTO serde; tidak ada logika bisnis. Command baru didaftarkan di `collect_commands!` dalam `specta_builder()` di `src-tauri/src/lib.rs` (tauri-specta).
 - `ui/` (`@nabungo/ui`) — Vue 3 `<script setup>` + TS + Vite, shadcn-vue (Reka UI + Tailwind v4), Pinia, vue-router (hash history), vue-i18n (default `id`, fallback `en`; skema pesan diturunkan dari `src/i18n/id.ts`). Semua panggilan backend lewat `ui/src/ipc/` — jangan `invoke()` langsung dari komponen.
 
 ### Model data (wajib dipahami sebelum menyentuh transaksi)
