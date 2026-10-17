@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Nabungo: aplikasi keuangan pribadi desktop, offline-first, data di satu file SQLite milik user. Spesifikasi lengkap ada di `PRD.md` (bahasa Indonesia) — itu sumber kebenaran untuk requirement (ID seperti `TRX-02`, `CAP-03`), keputusan D1–D12, skema, dan acceptance criteria. Roadmap & plan eksekusi ada di `docs/plans/`.
+Nabungo: aplikasi keuangan pribadi desktop, offline-first, data di satu file SQLite milik user. Spesifikasi lengkap ada di `PRD.md` (bahasa Indonesia) — itu sumber kebenaran untuk requirement (ID seperti `TRX-02`, `CAP-03`), keputusan D1–D12, skema, dan acceptance criteria. Roadmap & plan eksekusi ada di `docs/plans/`. Panduan desain UI (token warna/tipografi, layout, komponen, pola layar) ada di `docs/design/ui-guidelines.md` — setiap perubahan UI wajib mengikutinya.
 
 ## Commands
 
