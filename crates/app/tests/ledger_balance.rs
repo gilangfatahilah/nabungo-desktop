@@ -1,4 +1,4 @@
-use nabungo_app::{AccountFields, Ledger, TxnInput};
+use nabungo_app::{AccountFields, CategoryFields, Ledger, TxnInput};
 use nabungo_core::{AccountKind, CategoryKind, TxnKind};
 use proptest::prelude::*;
 use time::macros::date;
@@ -41,8 +41,8 @@ proptest! {
                 ledger.create_account(AccountKind::Bank, &fields).unwrap()
             })
             .collect();
-        let salary = ledger.create_category(CategoryKind::Income, "Gaji").unwrap();
-        let food = ledger.create_category(CategoryKind::Expense, "Makan").unwrap();
+        let salary = ledger.create_category(CategoryKind::Income, &CategoryFields::named("Gaji")).unwrap();
+        let food = ledger.create_category(CategoryKind::Expense, &CategoryFields::named("Makan")).unwrap();
 
         let mut model = openings;
         let mut transfers_only_total = model.iter().sum::<i64>();

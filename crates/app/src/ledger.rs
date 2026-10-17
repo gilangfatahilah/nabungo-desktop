@@ -2,9 +2,7 @@
 
 use std::path::Path;
 
-use nabungo_core::{
-    CatalogError, CategoryKind, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn,
-};
+use nabungo_core::{CatalogError, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn};
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
 use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
@@ -128,13 +126,6 @@ impl Ledger {
         })
     }
 
-    pub fn create_category(&mut self, kind: CategoryKind, name: &str) -> Result<Uuid, AppError> {
-        let tx = self.conn.transaction()?;
-        let id = category::insert_category(&tx, kind, name, None)?;
-        tx.commit()?;
-        Ok(id)
-    }
-
     pub fn record(&mut self, input: &TxnInput) -> Result<Uuid, AppError> {
         if input.kind == TxnKind::Opening {
             return Err(AppError::OpeningNotAllowed);
@@ -214,8 +205,8 @@ pub(crate) fn active<T>(found: Option<Lookup<T>>, what: &'static str) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AccountFields;
-    use nabungo_core::AccountKind;
+    use crate::{AccountFields, CategoryFields};
+    use nabungo_core::{AccountKind, CategoryKind};
     use time::macros::date;
 
     const D: Date = date!(2026 - 10 - 12);
@@ -280,7 +271,7 @@ mod tests {
         let mut ledger = Ledger::open_in_memory().unwrap();
         let acc = bank(&mut ledger, 0);
         let food = ledger
-            .create_category(CategoryKind::Expense, "Makan")
+            .create_category(CategoryKind::Expense, &CategoryFields::named("Makan"))
             .unwrap();
         let id = ledger
             .record(&TxnInput::single(
@@ -331,7 +322,7 @@ mod tests {
         let mut ledger = Ledger::open_in_memory().unwrap();
         let acc = bank(&mut ledger, 0);
         let food = ledger
-            .create_category(CategoryKind::Expense, "Makan")
+            .create_category(CategoryKind::Expense, &CategoryFields::named("Makan"))
             .unwrap();
         ledger
             .conn

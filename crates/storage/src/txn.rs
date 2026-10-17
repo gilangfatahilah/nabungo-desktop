@@ -70,7 +70,7 @@ pub fn account_balance(conn: &Connection, account_id: Uuid) -> Result<i64> {
 mod tests {
     use super::*;
     use crate::account::{NewAccount, get_account_ref, insert_account};
-    use crate::category::{get_category_ref, insert_category};
+    use crate::category::{NewCategory, get_category_ref, insert_category};
     use crate::{now_utc, open_in_memory};
     use nabungo_core::{
         AccountKind, AccountRef, CategoryKind, CategoryRef, CurrencyCode, PostingDraft, TxnDraft,
@@ -116,8 +116,16 @@ mod tests {
     fn category_ref_roundtrip() {
         let mut conn = open_in_memory().unwrap();
         let tx = conn.transaction().unwrap();
-        let parent = insert_category(&tx, CategoryKind::Expense, "Makan & Minum", None).unwrap();
-        let child = insert_category(&tx, CategoryKind::Expense, "Kopi", Some(parent)).unwrap();
+        let parent = insert_category(
+            &tx,
+            &NewCategory::new(CategoryKind::Expense, "Makan & Minum", None),
+        )
+        .unwrap();
+        let child = insert_category(
+            &tx,
+            &NewCategory::new(CategoryKind::Expense, "Kopi", Some(parent)),
+        )
+        .unwrap();
         let r = get_category_ref(&tx, child).unwrap().unwrap();
         assert_eq!(r.value.kind, CategoryKind::Expense);
         assert!(!r.archived);
@@ -128,7 +136,8 @@ mod tests {
         let mut conn = open_in_memory().unwrap();
         let tx = conn.transaction().unwrap();
         let acc = bank(&tx, "Kartu Lama");
-        let cat = insert_category(&tx, CategoryKind::Expense, "Rokok", None).unwrap();
+        let cat =
+            insert_category(&tx, &NewCategory::new(CategoryKind::Expense, "Rokok", None)).unwrap();
         tx.execute_batch("UPDATE account SET archived_at = '2026-10-16T00:00:00.000Z'; UPDATE category SET archived_at = '2026-10-16T00:00:00.000Z';")
             .unwrap();
         assert!(get_account_ref(&tx, acc.id).unwrap().unwrap().archived);
@@ -139,9 +148,11 @@ mod tests {
     fn root_category_names_unique_per_kind() {
         let mut conn = open_in_memory().unwrap();
         let tx = conn.transaction().unwrap();
-        insert_category(&tx, CategoryKind::Expense, "Makan", None).unwrap();
-        assert!(insert_category(&tx, CategoryKind::Expense, "Makan", None).is_err());
-        insert_category(&tx, CategoryKind::Income, "Makan", None).unwrap();
+        insert_category(&tx, &NewCategory::new(CategoryKind::Expense, "Makan", None)).unwrap();
+        assert!(
+            insert_category(&tx, &NewCategory::new(CategoryKind::Expense, "Makan", None)).is_err()
+        );
+        insert_category(&tx, &NewCategory::new(CategoryKind::Income, "Makan", None)).unwrap();
     }
 
     #[test]

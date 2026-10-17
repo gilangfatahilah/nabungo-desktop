@@ -450,7 +450,10 @@ mod tests {
             .create_account(AccountKind::Bank, &fields("BCA", 0))
             .unwrap();
         let food = ledger
-            .create_category(CategoryKind::Expense, "Makan")
+            .create_category(
+                CategoryKind::Expense,
+                &crate::CategoryFields::named("Makan"),
+            )
             .unwrap();
         let txn = ledger
             .record(&TxnInput::single(
