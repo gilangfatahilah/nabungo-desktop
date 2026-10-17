@@ -6,6 +6,7 @@
 #![deny(clippy::float_arithmetic)]
 
 pub mod amount;
+pub mod budget;
 pub mod catalog;
 pub mod date;
 pub mod form;
@@ -16,6 +17,10 @@ pub mod period;
 pub mod txn;
 
 pub use amount::{AmountParseError, parse_amount};
+pub use budget::{
+    BudgetCategory, BudgetError, BudgetLine, BudgetTotals, budget_totals, rollup_spent,
+    validate_budget_amount,
+};
 pub use catalog::{
     CatalogError, MAX_NAME_LEN, MergeSide, ParentInfo, check_merge, check_parent, normalize_name,
     validate_credit_limit, validate_statement_day,
