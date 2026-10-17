@@ -31,6 +31,8 @@ pub enum ErrorCode {
     TxnOverflow,
     TxnValuationNonInvestment,
     TxnOpeningPostingCount,
+    TxnSplitMismatch,
+    TxnNotPositive,
     AmountEmpty,
     AmountInvalid,
     AmountFractional,
@@ -62,7 +64,7 @@ impl IpcError {
         Self::code(ErrorCode::InvalidDate)
     }
 
-    fn code(code: ErrorCode) -> Self {
+    pub fn code(code: ErrorCode) -> Self {
         Self { code, entity: None }
     }
 
@@ -91,6 +93,8 @@ impl From<TxnError> for ErrorCode {
             TxnError::Overflow => ErrorCode::TxnOverflow,
             TxnError::ValuationNonInvestment => ErrorCode::TxnValuationNonInvestment,
             TxnError::OpeningPostingCount(_) => ErrorCode::TxnOpeningPostingCount,
+            TxnError::SplitMismatch(_) => ErrorCode::TxnSplitMismatch,
+            TxnError::NotPositive => ErrorCode::TxnNotPositive,
         }
     }
 }
@@ -182,6 +186,14 @@ mod tests {
         let e = IpcError::from(AppError::Duplicate("category"));
         assert_eq!(e.code, ErrorCode::Duplicate);
         assert_eq!(e.entity.as_deref(), Some("category"));
+    }
+
+    #[test]
+    fn split_mismatch_maps() {
+        let e = IpcError::from(AppError::Txn(TxnError::SplitMismatch(1)));
+        assert_eq!(e.code, ErrorCode::TxnSplitMismatch);
+        let e = IpcError::from(AppError::Txn(TxnError::NotPositive));
+        assert_eq!(e.code, ErrorCode::TxnNotPositive);
     }
 
     #[test]

@@ -12,8 +12,8 @@ describe('ipc facade (browser fallback)', () => {
     expect((await getUiSettings()).theme).toBe('dark')
   })
 
-  it('parseAmount rejects non-integer with IpcFailure amount_invalid', async () => {
-    const err = await parseAmount('1,5jt').catch((e: unknown) => e)
+  it('parseAmount rejects malformed input with IpcFailure amount_invalid', async () => {
+    const err = await parseAmount('25.00').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(IpcFailure)
     expect((err as IpcFailure).error.code).toBe('amount_invalid')
   })

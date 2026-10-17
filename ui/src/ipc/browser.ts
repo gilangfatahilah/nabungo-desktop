@@ -1,5 +1,6 @@
 // Implementasi pengganti saat UI dijalankan di browser biasa (tanpa backend Tauri).
 import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
+import { parseAmountBrowser } from './browser-amount'
 import { browserLedger } from './browser-ledger'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -22,9 +23,7 @@ export const browserCommands = {
   },
   // Hanya integer polos; ekspresi (rb/jt, desimal) butuh parser Rust.
   parseAmount: async (input: string): Promise<Result<number>> => {
-    const trimmed = input.trim()
-    const n = Number(trimmed)
-    if (trimmed !== '' && Number.isSafeInteger(n)) return ok(n)
-    return { status: 'error', error: { code: 'amount_invalid', entity: null } }
+    const r = parseAmountBrowser(input)
+    return 'ok' in r ? ok(r.ok) : { status: 'error', error: { code: r.err, entity: null } }
   },
 }

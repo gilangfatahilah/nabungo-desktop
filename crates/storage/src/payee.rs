@@ -1,7 +1,7 @@
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
-use crate::{Result, map_unique, parse_uuid};
+use crate::{Result, like_contains, map_unique, parse_uuid};
 
 /// Cari payee berdasarkan nama, tanpa membedakan huruf besar/kecil.
 pub fn find_payee(conn: &Connection, name: &str) -> Result<Option<Uuid>> {
@@ -67,10 +67,59 @@ pub fn last_postings_for_payee(
         .collect()
 }
 
+/// Nama payee yang mengandung `query` (tanpa membedakan huruf, literal), urut transaksi
+/// aktif terbaru lalu nama.
+pub fn search_payees(conn: &Connection, query: &str, limit: u32) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT p.name FROM payee p
+         LEFT JOIN txn t ON t.payee_id = p.id AND t.deleted_at IS NULL
+         WHERE p.name LIKE ?1 ESCAPE '\\'
+         GROUP BY p.id
+         ORDER BY MAX(t.date) IS NULL, MAX(t.date) DESC, p.name COLLATE NOCASE
+         LIMIT ?2",
+    )?;
+    let names = stmt
+        .query_map(params![like_contains(query), limit], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(names)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::open_in_memory;
+
+    fn txn_on(tx: &Transaction, payee: Uuid, date: &str) {
+        tx.execute(
+            "INSERT INTO txn (id, kind, date, payee_id, created_at, updated_at)
+             VALUES (?1, 'adjustment', ?2, ?3, 'x', 'x')",
+            rusqlite::params![Uuid::now_v7().to_string(), date, payee.to_string()],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn search_payees_contains_nocase_recent_first() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let indo = insert_payee(&tx, "Indomaret").unwrap();
+        let alfa = insert_payee(&tx, "Alfamart Indo").unwrap();
+        insert_payee(&tx, "Indo Tanpa Transaksi").unwrap();
+        insert_payee(&tx, "Shopee").unwrap();
+        insert_payee(&tx, "Diskon 50%").unwrap();
+        txn_on(&tx, indo, "2026-10-10");
+        txn_on(&tx, alfa, "2026-10-12");
+        assert_eq!(
+            search_payees(&tx, "indo", 8).unwrap(),
+            vec!["Alfamart Indo", "Indomaret", "Indo Tanpa Transaksi"]
+        );
+        assert_eq!(
+            search_payees(&tx, "indo", 1).unwrap(),
+            vec!["Alfamart Indo"]
+        );
+        assert_eq!(search_payees(&tx, "50%", 8).unwrap(), vec!["Diskon 50%"]);
+        assert!(search_payees(&tx, "n_", 8).unwrap().is_empty());
+    }
 
     #[test]
     fn find_is_case_insensitive_and_unique() {

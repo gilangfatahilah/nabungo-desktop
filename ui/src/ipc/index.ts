@@ -13,6 +13,12 @@ import {
   type LocaleDto,
   type OnboardingDto,
   type ThemeDto,
+  type TxnDetailDto,
+  type TxnFormDefaultsDto,
+  type TxnFormDto,
+  type TxnPageDto,
+  type TxnQueryDto,
+  type PayeeSuggestionDto,
   type UiSettingsDto,
 } from './bindings'
 import { browserCommands } from './browser'
@@ -32,7 +38,19 @@ export type {
   LocaleDto,
   NetWorthDto,
   OnboardingDto,
+  PayeeSuggestionDto,
+  PostingDto,
+  SplitDto,
+  FeeDto,
   ThemeDto,
+  TxnDetailDto,
+  TxnFormDefaultsDto,
+  TxnFormDto,
+  TxnFormKindDto,
+  TxnKindDto,
+  TxnPageDto,
+  TxnQueryDto,
+  TxnRowDto,
   UiSettingsDto,
 } from './bindings'
 
@@ -172,4 +190,46 @@ export async function deleteCategory(id: string): Promise<void> {
 
 export async function mergeCategory(source: string, target: string): Promise<void> {
   await unwrap(api().mergeCategory(source, target))
+}
+
+// --- Transaksi ---
+
+export function createTxn(form: TxnFormDto): Promise<string> {
+  return unwrap(api().createTxn(form))
+}
+
+export async function updateTxn(id: string, form: TxnFormDto): Promise<void> {
+  await unwrap(api().updateTxn(id, form))
+}
+
+export function getTxn(id: string): Promise<TxnDetailDto> {
+  return unwrap(api().getTxn(id))
+}
+
+export function listTxns(query: TxnQueryDto): Promise<TxnPageDto> {
+  return unwrap(api().listTxns(query))
+}
+
+export async function deleteTxn(id: string): Promise<void> {
+  await unwrap(api().deleteTxn(id))
+}
+
+export async function undoDeleteTxn(id: string): Promise<void> {
+  await unwrap(api().undoDeleteTxn(id))
+}
+
+export function payeeSuggestion(name: string): Promise<PayeeSuggestionDto | null> {
+  return unwrap(api().payeeSuggestion(name))
+}
+
+export function searchPayees(query: string): Promise<string[]> {
+  return unwrap(api().searchPayees(query))
+}
+
+export function listTags(): Promise<string[]> {
+  return unwrap(api().listTags())
+}
+
+export function txnFormDefaults(): Promise<TxnFormDefaultsDto> {
+  return unwrap(api().txnFormDefaults())
 }

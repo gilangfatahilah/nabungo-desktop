@@ -7,7 +7,8 @@ use tauri::State;
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AppInfo, CategoryDto, CategoryFieldsDto,
-    CategoryKindDto, LocaleDto, OnboardingDto, ThemeDto, UiSettingsDto, parse_id,
+    CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ThemeDto, TxnDetailDto,
+    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, parse_id,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -262,4 +263,84 @@ pub fn merge_category(
     let source = parse_id(&source, "category")?;
     let target = parse_id(&target, "category")?;
     Ok(ledger(&state)?.merge_category(source, target)?)
+}
+
+// --- Transaksi ---
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_txn(state: State<'_, AppState>, form: TxnFormDto) -> Result<String, IpcError> {
+    let form = form.try_into()?;
+    Ok(ledger(&state)?.create_txn(&form)?.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_txn(
+    state: State<'_, AppState>,
+    id: String,
+    form: TxnFormDto,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "transaction")?;
+    let form = form.try_into()?;
+    Ok(ledger(&state)?.update_txn(id, &form)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_txn(state: State<'_, AppState>, id: String) -> Result<TxnDetailDto, IpcError> {
+    let id = parse_id(&id, "transaction")?;
+    Ok(ledger(&state)?.get_txn(id)?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_txns(state: State<'_, AppState>, query: TxnQueryDto) -> Result<TxnPageDto, IpcError> {
+    let query = query.try_into()?;
+    Ok(ledger(&state)?.list_txns(&query)?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_txn(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "transaction")?;
+    Ok(ledger(&state)?.delete_txn(id)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn undo_delete_txn(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "transaction")?;
+    Ok(ledger(&state)?.undo_delete_txn(id)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn payee_suggestion(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<Option<PayeeSuggestionDto>, IpcError> {
+    Ok(ledger(&state)?.payee_suggestion(&name)?.map(Into::into))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn search_payees(state: State<'_, AppState>, query: String) -> Result<Vec<String>, IpcError> {
+    Ok(ledger(&state)?.search_payees(&query)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<String>, IpcError> {
+    Ok(ledger(&state)?.list_tags()?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn txn_form_defaults(state: State<'_, AppState>) -> Result<TxnFormDefaultsDto, IpcError> {
+    let ledger = ledger(&state)?;
+    Ok(TxnFormDefaultsDto {
+        last_account_id: ledger.last_used_account()?.map(|a| a.to_string()),
+        fee_category_id: ledger.default_fee_category()?.map(|c| c.to_string()),
+    })
 }

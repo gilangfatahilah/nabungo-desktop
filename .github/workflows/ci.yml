@@ -45,3 +45,5 @@ jobs:
       - run: pnpm --filter @nabungo/ui typecheck
       - run: pnpm --filter @nabungo/ui test
       - run: pnpm --filter @nabungo/ui build
+      - run: pnpm --filter @nabungo/ui exec playwright install --with-deps chromium
+      - run: pnpm --filter @nabungo/ui e2e

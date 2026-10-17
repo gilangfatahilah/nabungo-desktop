@@ -34,7 +34,7 @@ function go(name: RouteName) {
 
 function newTxn() {
   ui.paletteOpen = false
-  ui.newTxnOpen = true
+  ui.openNewTxn()
 }
 </script>
 

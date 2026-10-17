@@ -5,6 +5,8 @@ src-tauri/gen/schemas/
 # Node
 node_modules/
 ui/dist/
+ui/test-results/
+ui/playwright-report/
 *.tsbuildinfo
 
 # Data lokal / DB dev

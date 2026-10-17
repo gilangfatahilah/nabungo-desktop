@@ -39,7 +39,7 @@ function onAction(a: ShortcutAction) {
   if (a.kind === 'navigate') {
     ui.paletteOpen = false
     void router.push({ name: a.route })
-  } else if (a.kind === 'newTxn') ui.newTxnOpen = true
+  } else if (a.kind === 'newTxn') ui.openNewTxn()
   else ui.paletteOpen = !ui.paletteOpen
 }
 

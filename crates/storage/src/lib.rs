@@ -10,7 +10,9 @@ pub mod account_group;
 pub mod category;
 pub mod payee;
 pub mod setting;
+pub mod tag;
 pub mod txn;
+pub mod txn_list;
 
 pub use rusqlite;
 
@@ -36,6 +38,20 @@ pub(crate) fn map_unique(e: rusqlite::Error) -> StorageError {
         }
         _ => StorageError::Sqlite(e),
     }
+}
+
+/// Pola `LIKE ... ESCAPE '\\'` untuk substring literal: `%`, `_`, `\\` di-escape.
+pub(crate) fn like_contains(query: &str) -> String {
+    let mut out = String::with_capacity(query.len() + 2);
+    out.push('%');
+    for c in query.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('%');
+    out
 }
 
 fn parse_uuid(table: &str, s: &str) -> Result<uuid::Uuid> {
@@ -78,6 +94,7 @@ pub fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/0001_init.sql")),
         M::up(include_str!("../migrations/0002_unique_root_category.sql")),
         M::up(include_str!("../migrations/0003_catalog_indexes.sql")),
+        M::up(include_str!("../migrations/0004_txn_indexes.sql")),
     ])
 }
 
