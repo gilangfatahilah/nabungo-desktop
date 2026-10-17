@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from 'vue'
+import { ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AmountInput from '@/components/AmountInput.vue'
@@ -25,17 +25,24 @@ const kind = ref<AccountKindDto>('bank')
 const name = ref('')
 const balance = ref(0)
 const amountError = ref<string | null>(null)
+const nameError = ref<string | null>(null)
 const busy = ref(false)
 const balanceInput = useTemplateRef<{ commit(): Promise<boolean> }>('balanceInput')
 
-const canSubmit = computed(() => name.value.trim() !== '' && !amountError.value && !busy.value)
+// Tombol tetap aktif; validasi tampil di field (docs/design/ui-guidelines.md §9.7).
+watch(name, () => (nameError.value = null))
 
 function onLocale(v: unknown) {
   if (typeof v === 'string' && (locales as string[]).includes(v)) void withErrorToast(() => settings.setLocale(v as LocaleDto))
 }
 
 async function submit() {
-  if (!canSubmit.value) return
+  if (busy.value) return
+  if (name.value.trim() === '') {
+    nameError.value = t('errors.name_empty')
+    document.getElementById('ob-name')?.focus()
+    return
+  }
   if (balanceInput.value && !(await balanceInput.value.commit())) return
   busy.value = true
   await withErrorToast(async () => {
@@ -63,15 +70,16 @@ async function submit() {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-8 p-6">
+  <!-- Satu kolom 440px, rata kiri, di tengah layar (docs/design/ui-guidelines.md §9.7). -->
+  <main class="mx-auto flex min-h-screen w-full max-w-[440px] flex-col justify-center gap-8 px-4 py-10">
     <header>
-      <h1 class="text-2xl font-semibold">{{ t('onboarding.title') }}</h1>
-      <p class="mt-1 text-sm text-muted-foreground">{{ t('onboarding.subtitle') }}</p>
+      <h1 class="text-title font-semibold tracking-tight">{{ t('onboarding.title') }}</h1>
+      <p class="mt-1 text-meta text-muted-foreground">{{ t('onboarding.subtitle') }}</p>
     </header>
 
-    <form class="flex flex-col gap-8" @submit.prevent="submit">
+    <form class="flex flex-col gap-8" novalidate @submit.prevent="submit">
       <section class="flex flex-col gap-2">
-        <h2 id="ob-locale" class="text-sm font-medium">1. {{ t('onboarding.language') }}</h2>
+        <h2 id="ob-locale" class="font-medium">1. {{ t('onboarding.language') }}</h2>
         <Select :model-value="settings.locale" @update:model-value="onLocale">
           <SelectTrigger aria-labelledby="ob-locale" class="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -81,21 +89,27 @@ async function submit() {
       </section>
 
       <section class="flex flex-col gap-2">
-        <h2 id="ob-period" class="text-sm font-medium">2. {{ t('onboarding.period') }}</h2>
+        <h2 id="ob-period" class="font-medium">2. {{ t('onboarding.period') }}</h2>
         <Select v-model="day">
-          <SelectTrigger aria-labelledby="ob-period" aria-describedby="ob-period-hint" class="w-full"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="d in days" :key="d" :value="String(d)">{{ d }}</SelectItem>
+          <SelectTrigger aria-labelledby="ob-period" aria-describedby="ob-period-hint" class="w-full" data-testid="ob-period">
+            <SelectValue>{{ t('onboarding.periodDay', { day }) }}</SelectValue>
+          </SelectTrigger>
+          <SelectContent class="max-h-72">
+            <SelectItem v-for="d in days" :key="d" :value="String(d)">{{ t('onboarding.periodDay', { day: d }) }}</SelectItem>
           </SelectContent>
         </Select>
-        <p id="ob-period-hint" class="text-xs text-muted-foreground">{{ t('settings.periodStartDayHint') }}</p>
+        <p id="ob-period-hint" class="text-meta text-muted-foreground">{{ t('settings.periodStartDayHint') }}</p>
       </section>
 
-      <section class="flex flex-col gap-3">
-        <h2 class="text-sm font-medium">3. {{ t('onboarding.firstAccount') }}</h2>
+      <section class="flex flex-col gap-4">
+        <h2 class="font-medium">3. {{ t('onboarding.firstAccount') }}</h2>
         <div class="flex flex-col gap-2">
           <Label for="ob-name">{{ t('onboarding.accountName') }}</Label>
-          <Input id="ob-name" v-model="name" :placeholder="t('onboarding.accountNamePlaceholder')" autofocus maxlength="80" />
+          <Input
+            id="ob-name" v-model="name" :placeholder="t('onboarding.accountNamePlaceholder')" autofocus maxlength="80"
+            :aria-invalid="nameError ? 'true' : undefined" :aria-describedby="nameError ? 'ob-name-error' : undefined"
+          />
+          <p v-if="nameError" id="ob-name-error" class="text-meta text-destructive" role="alert">{{ nameError }}</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="flex flex-col gap-2">
@@ -109,13 +123,13 @@ async function submit() {
           </div>
           <div class="flex flex-col gap-2">
             <Label for="ob-balance">{{ isLiability(kind) ? t('accounts.openingDebt') : t('onboarding.openingBalance') }}</Label>
-            <AmountInput id="ob-balance" ref="balanceInput" v-model="balance" @error="amountError = $event" />
+            <AmountInput id="ob-balance" ref="balanceInput" v-model="balance" class="num text-right" @error="amountError = $event" />
           </div>
         </div>
-        <p v-if="amountError" class="text-sm text-destructive" role="alert">{{ amountError }}</p>
+        <p v-if="amountError" class="text-meta text-destructive" role="alert">{{ amountError }}</p>
       </section>
 
-      <Button type="submit" :disabled="!canSubmit">{{ t('onboarding.submit') }}</Button>
+      <Button type="submit" size="lg" :disabled="busy">{{ t('onboarding.submit') }}</Button>
     </form>
   </main>
 </template>
