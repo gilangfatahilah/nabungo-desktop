@@ -1,14 +1,14 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// Rp diformat Intl id-ID dengan spasi tak-putus; \s mencakupnya.
-const rp = (n: string) => new RegExp(`Rp\\s${n.replace('.', '\\.')}`)
+// Sidebar menampilkan angka tanpa prefiks Rp (docs/design/ui-guidelines.md §7.4).
+const amount = (n: string) => new RegExp(`(^|[^\\d.])${n.replaceAll('.', '\\.')}$`)
 
 async function onboard(page: Page) {
   await page.goto('/')
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(rp('1.000.000'))
+  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('1.000.000'))
 }
 
 const sidebarAccount = (page: Page, name: string) =>
@@ -39,7 +39,7 @@ test('expense via keyboard', async ({ page }) => {
   const row = page.locator('[data-txn-id]').filter({ hasText: 'Kopi' })
   await expect(row).toBeVisible()
   await expect(row.locator('[data-testid="txn-amount"]')).toHaveText(/[−-]Rp\s25\.000/)
-  await expect(sidebarAccount(page, 'BCA')).toContainText(rp('975.000'))
+  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('975.000'))
 })
 
 test('transfer with fee', async ({ page }) => {
@@ -63,8 +63,8 @@ test('transfer with fee', async ({ page }) => {
   await page.locator('#txn-amount').press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()
 
-  await expect(sidebarAccount(page, 'BCA')).toContainText(rp('793.500'))
-  await expect(sidebarAccount(page, 'Dompet')).toContainText(rp('200.000'))
+  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('793.500'))
+  await expect(sidebarAccount(page, 'Dompet')).toHaveText(amount('200.000'))
 })
 
 test('delete and undo', async ({ page }) => {
@@ -75,8 +75,8 @@ test('delete and undo', async ({ page }) => {
   await row.focus()
   await page.keyboard.press('Delete')
   await expect(row).toHaveCount(0)
-  await expect(sidebarAccount(page, 'BCA')).toContainText(rp('1.000.000'))
+  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('1.000.000'))
   await page.getByRole('button', { name: 'Urungkan' }).click()
   await expect(row).toBeVisible()
-  await expect(sidebarAccount(page, 'BCA')).toContainText(rp('975.000'))
+  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('975.000'))
 })

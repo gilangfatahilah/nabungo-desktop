@@ -24,7 +24,7 @@ export default {
     periodStartDay: 'Tanggal awal periode budget',
     periodStartDayHint: 'Budget bulanan dihitung mulai tanggal ini (mis. tanggal gajian).',
   },
-  sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi' },
+  sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi baru' },
   txn: {
     new: 'Transaksi baru',
     title: { create: 'Transaksi baru', edit: 'Ubah transaksi', duplicate: 'Duplikat transaksi' },

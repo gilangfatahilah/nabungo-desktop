@@ -43,3 +43,9 @@ describe('router', () => {
     expect(await run(g, 'accounts')).toBe(true)
   })
 })
+
+describe('route meta', () => {
+  it('hanya Transaksi yang melebar penuh (tanpa max-width konten)', () => {
+    expect(routes.filter((r) => r.meta?.wide).map((r) => r.name)).toEqual(['transactions'])
+  })
+})

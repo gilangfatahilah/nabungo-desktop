@@ -61,7 +61,7 @@ Migrasi yang sudah dirilis tidak boleh diubah — tambahkan file baru dan daftar
 
 ## Batasan produk yang memengaruhi kode
 
-- Offline total: tidak ada network call runtime. CSP di `src-tauri/tauri.conf.json` memblokir origin eksternal — jangan tambah aset remote (font, CDN, analytics). Font Inter dibundel via `@fontsource-variable/inter` (shadcn init default menambahkan import Google Fonts; sudah dihapus, jangan dikembalikan).
+- Offline total: tidak ada network call runtime. CSP di `src-tauri/tauri.conf.json` memblokir origin eksternal — jangan tambah aset remote (font, CDN, analytics). Font Plus Jakarta Sans dibundel via `@fontsource-variable/plus-jakarta-sans` (shadcn init default menambahkan import Google Fonts; sudah dihapus, jangan dikembalikan).
 - Tidak ada telemetry; log hanya lokal.
 - Hapus transaksi = soft delete + undo; akun/kategori yang terpakai di-arsip/merge, tidak dihapus.
 

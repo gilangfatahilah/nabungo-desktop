@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import EmptyState from '@/components/EmptyState.vue'
+import PageHeader from '@/components/PageHeader.vue'
+
 defineProps<{ title: string }>()
 </script>
 
 <template>
-  <section>
-    <h1 class="text-2xl font-semibold">{{ title }}</h1>
-    <p class="mt-2 text-sm text-muted-foreground">{{ $t('common.comingSoon') }}</p>
-  </section>
+  <PageHeader :title="title" />
+  <EmptyState :title="$t('common.comingSoon')" class="py-0" />
 </template>

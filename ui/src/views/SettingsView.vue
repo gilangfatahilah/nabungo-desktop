@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { LocaleDto, ThemeDto } from '@/ipc'
@@ -25,9 +26,9 @@ function onDay(v: unknown) {
 </script>
 
 <template>
+  <PageHeader :title="t('nav.settings')" />
   <section class="max-w-md">
-    <h1 class="text-2xl font-semibold">{{ t('nav.settings') }}</h1>
-    <div class="mt-6 flex flex-col gap-5">
+    <div class="flex flex-col gap-5">
       <div class="flex flex-col gap-2">
         <label id="theme-label" class="text-sm font-medium">{{ t('settings.theme') }}</label>
         <Select :model-value="settings.theme" @update:model-value="onTheme">

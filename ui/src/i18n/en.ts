@@ -24,7 +24,7 @@ export default {
     periodStartDay: 'Budget period start day',
     periodStartDayHint: 'Monthly budgets start on this day (e.g. your payday).',
   },
-  sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'Transaction' },
+  sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'New transaction' },
   txn: {
     new: 'New transaction',
     title: { create: 'New transaction', edit: 'Edit transaction', duplicate: 'Duplicate transaction' },

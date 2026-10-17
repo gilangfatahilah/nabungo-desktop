@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { ChevronDown, EllipsisVertical, Plus } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -166,19 +167,14 @@ async function saveGroup() {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-3xl flex-col gap-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-semibold">{{ t('nav.accounts') }}</h1>
-        <p class="text-sm text-muted-foreground">
-          {{ t('accounts.netWorth') }}: <MoneyText :amount="store.overview.netWorth.net" class="font-medium text-foreground" />
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Button variant="outline" @click="openGroup(null)">{{ t('accounts.newGroup') }}</Button>
-        <Button @click="newAccount()"><Plus /> {{ t('accounts.new') }}</Button>
-      </div>
-    </header>
+  <PageHeader :title="t('nav.accounts')">
+    {{ t('accounts.netWorth') }} <MoneyText :amount="store.overview.netWorth.net" class="font-medium text-foreground" />
+    <template #actions>
+      <Button variant="outline" @click="openGroup(null)">{{ t('accounts.newGroup') }}</Button>
+      <Button @click="newAccount()"><Plus /> {{ t('accounts.new') }}</Button>
+    </template>
+  </PageHeader>
+  <div class="flex flex-col gap-6">
 
     <section v-for="(s, si) in sections" :key="s.group?.id ?? 'none'" class="rounded-lg border p-3">
       <div class="mb-1 flex items-center gap-2 px-1">

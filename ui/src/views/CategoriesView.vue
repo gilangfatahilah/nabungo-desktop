@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { ChevronDown, EllipsisVertical, Plus } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -128,11 +129,12 @@ function restore(c: CategoryDto) {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-3xl flex-col gap-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold">{{ t('nav.categories') }}</h1>
+  <PageHeader :title="t('nav.categories')">
+    <template #actions>
       <Button @click="create()"><Plus /> {{ t('categories.new') }}</Button>
-    </header>
+    </template>
+  </PageHeader>
+  <div class="flex flex-col gap-6">
 
     <Tabs v-model="tab">
       <TabsList>
