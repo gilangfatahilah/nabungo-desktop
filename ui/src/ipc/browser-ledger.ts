@@ -1,14 +1,17 @@
-// Ledger in-memory untuk mode browser (tanpa Tauri). Tanpa validasi domain: hanya cukup
-// agar layar bisa dicoba. Aturan bisnis yang sebenarnya ada di Rust.
+// Ledger in-memory untuk mode browser (tanpa Tauri): cukup agar layar bisa dicoba.
+// Aturan bisnis yang sebenarnya ada di Rust; aturan transaksi di sini (validasi form, saldo,
+// saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, CategoryDto,
-  CategoryFieldsDto, CategoryKindDto, IpcError, OnboardingDto,
+  CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
+  TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
 } from './bindings'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
 const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })
-const notFound = (entity: string): Result<never> => ({ status: 'error', error: { code: 'not_found', entity } })
+const fail = (code: ErrorCode, entity: string | null = null): Result<never> => ({ status: 'error', error: { code, entity } })
+const notFound = (entity: string): Result<never> => fail('not_found', entity)
 
 const LIABILITIES: AccountKindDto[] = ['credit_card', 'loan']
 
@@ -18,7 +21,27 @@ const state = {
   groups: [] as AccountGroupDto[],
   accounts: [] as AccountDto[],
   categories: [] as CategoryDto[],
+  txns: [] as Txn[],
+  payees: [] as { id: string; name: string }[],
+  lastFeeCategoryId: null as string | null,
 }
+
+type Txn = {
+  id: string
+  seq: number
+  kind: TxnKindDto
+  date: string
+  payeeId: string | null
+  note: string | null
+  tags: string[]
+  postings: PostingDto[]
+  deleted: boolean
+}
+
+// Batas nominal per posting, sama dengan `MAX_AMOUNT` di core.
+const MAX_AMOUNT = 1_000_000_000_000
+const SEED_FEE_NAMES = ['biaya admin', 'fees']
+let seq = 0
 
 const id = () => crypto.randomUUID()
 
@@ -38,16 +61,35 @@ function toAccount(kind: AccountKindDto, f: AccountFieldsDto, base: Pick<Account
     statementDay: credit ? f.statementDay : null,
     icon: f.icon,
     color: f.color,
-    // Mode browser tidak punya transaksi: saldo = saldo awal.
-    balance: f.openingBalance,
+    // Diisi ulang dari posting di `overview()`.
+    balance: 0,
     openingBalance: f.openingBalance,
     openingDate: f.openingBalance !== 0 ? f.openingDate : null,
   }
 }
 
+const activeTxns = () => state.txns.filter((t) => !t.deleted)
+
+function balanceOf(accountId: string): number {
+  let sum = 0
+  for (const t of activeTxns()) for (const p of t.postings) if (p.accountId === accountId) sum += p.amount
+  return sum
+}
+
+/** Seperti Rust: saldo awal ≠ 0 disimpan sebagai transaksi `opening`. */
+function syncOpening(a: AccountDto) {
+  state.txns = state.txns.filter((t) => !(t.kind === 'opening' && t.postings[0]?.accountId === a.id))
+  if (a.openingBalance === 0 || !a.openingDate) return
+  state.txns.push({
+    id: id(), seq: ++seq, kind: 'opening', date: a.openingDate, payeeId: null, note: null, tags: [],
+    postings: [{ accountId: a.id, categoryId: null, amount: a.openingBalance, memo: null }], deleted: false,
+  })
+}
+
 function overview(): AccountsOverviewDto {
   let assets = 0
   let liabilities = 0
+  for (const a of state.accounts) a.balance = balanceOf(a.id)
   for (const a of state.accounts) {
     // Seperti Rust: akun diarsip tetap dihitung; hanya `includeInNetWorth` yang menyaring.
     if (!a.includeInNetWorth) continue
@@ -78,6 +120,7 @@ function seedCategories() {
   insertCategory('expense', { name: 'Kopi & jajan', parentId: food, icon: 'utensils', color: null })
   insertCategory('expense', { name: 'Transportasi', parentId: null, icon: 'car', color: null })
   insertCategory('expense', { name: 'Tagihan', parentId: null, icon: 'receipt', color: null })
+  insertCategory('expense', { name: 'Biaya admin', parentId: null, icon: 'landmark', color: null })
   insertCategory('income', { name: 'Gaji', parentId: null, icon: 'wallet', color: null })
   insertCategory('income', { name: 'Bonus', parentId: null, icon: 'gift', color: null })
 }
@@ -94,6 +137,176 @@ function setArchived<T extends { id: string; archived: boolean }>(items: T[], i:
   if (!it) return notFound(entity)
   it.archived = archived
   return ok(null)
+}
+
+// --- Transaksi (cermin `form_postings` + `validate` di core) ---
+
+function formPostings(f: TxnFormDto): Result<PostingDto[]> {
+  if (f.kind === 'transfer') {
+    if (!f.toAccountId) return fail('invalid_id', 'account')
+    if (f.amount <= 0) return fail('txn_not_positive')
+    const ps: PostingDto[] = [
+      { accountId: f.accountId, categoryId: null, amount: -f.amount, memo: null },
+      { accountId: f.toAccountId, categoryId: null, amount: f.amount, memo: null },
+    ]
+    if (f.fee) {
+      if (f.fee.amount <= 0) return fail('txn_not_positive')
+      ps.push({ accountId: f.accountId, categoryId: f.fee.categoryId, amount: -f.fee.amount, memo: null })
+    }
+    return ok(ps)
+  }
+  if (f.amount === 0) return fail('txn_zero_amount')
+  if (!f.splits.length) return fail('txn_missing_category')
+  if (f.splits.some((s) => s.amount === 0)) return fail('txn_zero_amount')
+  if (f.splits.reduce((m, s) => m + s.amount, 0) !== f.amount) return fail('txn_split_mismatch')
+  const sign = f.kind === 'income' ? 1 : -1
+  return ok(f.splits.map((s) => ({ accountId: f.accountId, categoryId: s.categoryId, amount: s.amount * sign, memo: s.memo })))
+}
+
+/** `archivedOk`: ref milik versi lama transaksi yang boleh tetap dipakai saat diubah. */
+function validatePostings(kind: TxnKindDto, ps: PostingDto[], archivedOk: Set<string>): Result<null> {
+  for (const p of ps) {
+    const a = state.accounts.find((x) => x.id === p.accountId)
+    if (!a) return notFound('account')
+    if (a.archived && !archivedOk.has(a.id)) return fail('archived', 'account')
+    if (Math.abs(p.amount) > MAX_AMOUNT) return fail('txn_amount_too_large')
+    if (p.categoryId === null) continue
+    const c = state.categories.find((x) => x.id === p.categoryId)
+    if (!c) return notFound('category')
+    if (c.archived && !archivedOk.has(c.id)) return fail('archived', 'category')
+    const want = kind === 'income' ? 'income' : 'expense'
+    if (c.kind !== want) return fail('txn_wrong_category_kind')
+  }
+  if (kind === 'transfer' && ps[0]!.accountId === ps[1]!.accountId) return fail('txn_transfer_same_account')
+  return ok(null)
+}
+
+const clean = (s: string | null) => (s?.trim() ? s.trim() : null)
+
+function resolvePayee(name: string | null): string | null {
+  const n = clean(name)
+  if (!n) return null
+  const found = state.payees.find((p) => p.name.toLowerCase() === n.toLowerCase())
+  if (found) return found.id
+  const p = { id: id(), name: n }
+  state.payees.push(p)
+  return p.id
+}
+
+function normalizeTags(tags: string[]): string[] {
+  const out: string[] = []
+  for (const raw of tags) {
+    const t = raw.trim().replace(/^#/, '').trim()
+    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t)
+  }
+  return out.sort((a, b) => a.localeCompare(b))
+}
+
+function writeTxn(existing: Txn | null, f: TxnFormDto): Result<string> {
+  const built = formPostings(f)
+  if (built.status === 'error') return built
+  const archivedOk = new Set(existing?.postings.flatMap((p) => [p.accountId, p.categoryId ?? '']) ?? [])
+  const valid = validatePostings(f.kind, built.data, archivedOk)
+  if (valid.status === 'error') return valid
+  const fields = {
+    kind: f.kind, date: f.date, payeeId: resolvePayee(f.payee), note: clean(f.note),
+    tags: normalizeTags(f.tags), postings: built.data.map((p) => ({ ...p, memo: clean(p.memo) })),
+  }
+  if (f.kind === 'transfer' && f.fee) state.lastFeeCategoryId = f.fee.categoryId
+  if (existing) {
+    Object.assign(existing, fields)
+    return ok(existing.id)
+  }
+  const t: Txn = { id: id(), seq: ++seq, deleted: false, ...fields }
+  state.txns.push(t)
+  return ok(t.id)
+}
+
+const byNewest = (a: Txn, b: Txn) => b.date.localeCompare(a.date) || b.seq - a.seq
+const payeeName = (t: Txn) => state.payees.find((p) => p.id === t.payeeId)?.name ?? null
+
+function matches(t: Txn, q: TxnQueryDto): boolean {
+  if (q.dateFrom && t.date < q.dateFrom) return false
+  if (q.dateTo && t.date > q.dateTo) return false
+  if (q.accountId && !t.postings.some((p) => p.accountId === q.accountId)) return false
+  if (q.categoryId) {
+    const hit = t.postings.some((p) => {
+      const c = state.categories.find((x) => x.id === p.categoryId)
+      return c && (c.id === q.categoryId || c.parentId === q.categoryId)
+    })
+    if (!hit) return false
+  }
+  if (q.tag && !t.tags.some((g) => g.toLowerCase() === q.tag!.toLowerCase())) return false
+  if (q.payeeId && t.payeeId !== q.payeeId) return false
+  const amount = Math.abs(rowAmount(t))
+  if (q.amountMin !== null && amount < q.amountMin) return false
+  if (q.amountMax !== null && amount > q.amountMax) return false
+  const needle = q.search?.trim().toLowerCase()
+  if (needle) {
+    const hay = [payeeName(t), t.note, ...t.postings.map((p) => p.memo)]
+    if (!hay.some((h) => h?.toLowerCase().includes(needle))) return false
+  }
+  return true
+}
+
+function rowAmount(t: Txn): number {
+  if (t.kind === 'transfer') return Math.max(...t.postings.filter((p) => !p.categoryId).map((p) => p.amount))
+  return t.postings.reduce((m, p) => m + p.amount, 0)
+}
+
+function shapeRow(t: Txn, running: Map<string, number> | null, accountId: string | null): TxnRowDto {
+  const row: TxnRowDto = {
+    id: t.id, kind: t.kind, date: t.date, payee: payeeName(t), note: t.note, amount: 0,
+    accountId: t.postings[0]!.accountId, toAccountId: null, categoryId: null, splitCount: 0, fee: 0,
+    tags: [...t.tags], accountDelta: null, runningBalance: null,
+  }
+  if (t.kind === 'transfer') {
+    for (const p of t.postings) {
+      if (p.categoryId) row.fee -= p.amount
+      else if (p.amount < 0) row.accountId = p.accountId
+      else {
+        row.toAccountId = p.accountId
+        row.amount = p.amount
+      }
+    }
+  } else {
+    const cats = t.postings.filter((p) => p.categoryId).map((p) => p.categoryId!)
+    row.amount = rowAmount(t)
+    row.splitCount = cats.length
+    if (cats.length === 1) row.categoryId = cats[0]!
+  }
+  if (accountId && running) {
+    row.accountDelta = t.postings.filter((p) => p.accountId === accountId).reduce((m, p) => m + p.amount, 0)
+    row.runningBalance = running.get(t.id) ?? null
+  }
+  return row
+}
+
+/** Saldo berjalan atas seluruh riwayat aktif akun, tidak terpengaruh filter lain. */
+function runningBalances(accountId: string): Map<string, number> {
+  const out = new Map<string, number>()
+  let sum = 0
+  const history = activeTxns().filter((t) => t.postings.some((p) => p.accountId === accountId))
+  for (const t of history.sort(byNewest).reverse()) {
+    for (const p of t.postings) if (p.accountId === accountId) sum += p.amount
+    out.set(t.id, sum)
+  }
+  return out
+}
+
+function listPage(q: TxnQueryDto): TxnPageDto {
+  const hits = activeTxns().filter((t) => matches(t, q)).sort(byNewest)
+  const running = q.accountId ? runningBalances(q.accountId) : null
+  return {
+    rows: hits.slice(q.offset, q.offset + q.limit).map((t) => shapeRow(t, running, q.accountId)),
+    total: hits.length,
+  }
+}
+
+function defaultFeeCategory(): string | null {
+  const active = state.categories.filter((c) => c.kind === 'expense' && !c.archived)
+  if (state.lastFeeCategoryId && active.some((c) => c.id === state.lastFeeCategoryId)) return state.lastFeeCategoryId
+  return active.find((c) => SEED_FEE_NAMES.includes(c.name.toLowerCase()))?.id ?? null
 }
 
 export const browserLedger = {
@@ -117,6 +330,7 @@ export const browserLedger = {
     const siblings = state.accounts.filter((a) => a.groupId === fields.groupId)
     const a = toAccount(kind, fields, { id: id(), sortOrder: nextSort(siblings), archived: false })
     state.accounts.push(a)
+    syncOpening(a)
     return ok(a.id)
   },
   updateAccount: async (i: string, fields: AccountFieldsDto): Promise<Result<null>> => {
@@ -124,6 +338,7 @@ export const browserLedger = {
     const cur = state.accounts[n]
     if (!cur) return notFound('account')
     state.accounts[n] = toAccount(cur.kind, fields, cur)
+    syncOpening(state.accounts[n]!)
     return ok(null)
   },
   archiveAccount: async (i: string) => setArchived(state.accounts, i, true, 'account'),
@@ -178,5 +393,50 @@ export const browserLedger = {
   mergeCategory: async (source: string, _target: string) => {
     state.categories = state.categories.filter((c) => c.id !== source)
     return ok(null)
+  },
+  createTxn: async (form: TxnFormDto) => writeTxn(null, form),
+  updateTxn: async (i: string, form: TxnFormDto): Promise<Result<null>> => {
+    const t = activeTxns().find((x) => x.id === i)
+    if (!t) return notFound('transaction')
+    if (t.kind === 'opening') return fail('opening_not_allowed')
+    const r = writeTxn(t, form)
+    return r.status === 'ok' ? ok(null) : r
+  },
+  getTxn: async (i: string): Promise<Result<TxnDetailDto>> => {
+    const t = activeTxns().find((x) => x.id === i)
+    if (!t) return notFound('transaction')
+    return ok({
+      id: t.id, kind: t.kind, date: t.date, payee: payeeName(t), note: t.note, tags: [...t.tags],
+      postings: t.postings.map((p) => ({ ...p })),
+    })
+  },
+  listTxns: async (query: TxnQueryDto) => ok(listPage(query)),
+  deleteTxn: async (i: string): Promise<Result<null>> => {
+    const t = activeTxns().find((x) => x.id === i)
+    if (!t) return notFound('transaction')
+    t.deleted = true
+    return ok(null)
+  },
+  undoDeleteTxn: async (i: string): Promise<Result<null>> => {
+    const t = state.txns.find((x) => x.id === i && x.deleted)
+    if (!t) return notFound('transaction')
+    t.deleted = false
+    return ok(null)
+  },
+  payeeSuggestion: async (name: string): Promise<Result<PayeeSuggestionDto | null>> => {
+    const p = state.payees.find((x) => x.name.toLowerCase() === name.trim().toLowerCase())
+    const last = p && activeTxns().filter((t) => t.payeeId === p.id).sort(byNewest)[0]
+    if (!last) return ok(null)
+    const row = shapeRow(last, null, null)
+    return ok({ accountId: row.accountId, categoryId: row.categoryId })
+  },
+  searchPayees: async (query: string) => {
+    const q = query.trim().toLowerCase()
+    return ok(state.payees.filter((p) => p.name.toLowerCase().includes(q)).map((p) => p.name).slice(0, 8))
+  },
+  listTags: async () => ok(normalizeTags(activeTxns().flatMap((t) => t.tags))),
+  txnFormDefaults: async (): Promise<Result<TxnFormDefaultsDto>> => {
+    const last = activeTxns().filter((t) => t.kind !== 'opening').sort((a, b) => b.seq - a.seq)[0]
+    return ok({ lastAccountId: last ? shapeRow(last, null, null).accountId : null, feeCategoryId: defaultFeeCategory() })
   },
 }

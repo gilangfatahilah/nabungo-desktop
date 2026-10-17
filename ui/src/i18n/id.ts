@@ -24,7 +24,7 @@ export default {
     periodStartDayHint: 'Budget bulanan dihitung mulai tanggal ini (mis. tanggal gajian).',
   },
   sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi' },
-  txn: { new: 'Transaksi baru', formComingSoon: 'Formulir transaksi hadir di Fase 4.' },
+  txn: { new: 'Transaksi baru', formComingSoon: 'Formulir transaksi hadir di Fase 4.', deleted: 'Transaksi dihapus' },
   palette: {
     title: 'Palet perintah',
     description: 'Cari layar atau aksi lalu tekan Enter.',
@@ -113,6 +113,7 @@ export default {
     more: 'Aksi lain',
     noIcon: 'Tanpa ikon',
     noColor: 'Tanpa warna',
+    undo: 'Urungkan',
   },
   accountKinds: {
     cash: 'Tunai',

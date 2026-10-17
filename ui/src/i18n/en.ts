@@ -24,7 +24,7 @@ export default {
     periodStartDayHint: 'Monthly budgets start on this day (e.g. your payday).',
   },
   sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'Transaction' },
-  txn: { new: 'New transaction', formComingSoon: 'The transaction form arrives in Phase 4.' },
+  txn: { new: 'New transaction', formComingSoon: 'The transaction form arrives in Phase 4.', deleted: 'Transaction deleted' },
   palette: {
     title: 'Command palette',
     description: 'Search for a screen or action, then press Enter.',
@@ -113,6 +113,7 @@ export default {
     more: 'More actions',
     noIcon: 'No icon',
     noColor: 'No color',
+    undo: 'Undo',
   },
   accountKinds: {
     cash: 'Cash',
