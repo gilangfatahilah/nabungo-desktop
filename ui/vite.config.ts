@@ -3,6 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 
 const host = process.env.TAURI_DEV_HOST
 
@@ -31,5 +32,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Spec Playwright dijalankan lewat `pnpm e2e`, bukan vitest.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 })

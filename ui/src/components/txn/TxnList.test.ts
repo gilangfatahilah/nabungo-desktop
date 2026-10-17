@@ -116,6 +116,8 @@ describe('TxnList', () => {
     const trigger = rowEl(opening.id).querySelector<HTMLElement>('[data-testid="txn-menu"]')!
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
     await settle()
+    expect(rowEl(opening.id).querySelector('svg')!.getAttribute('aria-label')).toBe(i18n.global.t('txn.kinds.opening'))
+    expect(i18n.global.te('txn.kinds.opening', 'id') && i18n.global.te('txn.kinds.adjustment', 'en') && i18n.global.te('txn.kinds.valuation', 'id')).toBe(true)
     const edit = document.body.querySelector('[data-testid="txn-menu-edit"]')!
     expect(edit.hasAttribute('data-disabled')).toBe(true)
     expect(document.body.querySelector('[data-testid="txn-menu-delete"]')!.hasAttribute('data-disabled')).toBe(false)

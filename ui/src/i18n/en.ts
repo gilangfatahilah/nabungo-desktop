@@ -27,7 +27,7 @@ export default {
   txn: {
     new: 'New transaction',
     title: { create: 'New transaction', edit: 'Edit transaction', duplicate: 'Duplicate transaction' },
-    kinds: { expense: 'Expense', income: 'Income', transfer: 'Transfer' },
+    kinds: { expense: 'Expense', income: 'Income', transfer: 'Transfer', adjustment: 'Adjustment', valuation: 'Valuation', opening: 'Opening balance' },
     amount: 'Amount',
     refundHint: 'A negative amount is recorded as a refund.',
     category: 'Category',

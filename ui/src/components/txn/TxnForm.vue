@@ -116,14 +116,13 @@ async function submit() {
     </div>
 
     <div v-if="!transfer" class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <Label :for="s.split ? undefined : 'txn-category'">{{ t('txn.category') }}</Label>
-        <Button type="button" variant="link" size="sm" class="h-auto p-0" data-testid="split-toggle" @click="toggleSplit">
-          {{ s.split ? t('txn.unsplit') : t('txn.split') }}
-        </Button>
-      </div>
+      <Label :for="s.split ? undefined : 'txn-category'">{{ t('txn.category') }}</Label>
+      <!-- Tombol split sesudah field kategori agar Tab dari nominal langsung ke kategori. -->
       <SplitEditor v-if="s.split" ref="splitEditor" v-model="s.splits" :kind="s.kind as 'income' | 'expense'" :total="s.amount" @error="error = $event" />
       <CategoryCombobox v-else id="txn-category" v-model="s.categoryId" :kind="s.kind as 'income' | 'expense'" @picked="touched.category = true" />
+      <Button type="button" variant="link" size="sm" class="h-auto self-start p-0" data-testid="split-toggle" @click="toggleSplit">
+        {{ s.split ? t('txn.unsplit') : t('txn.split') }}
+      </Button>
     </div>
 
     <div class="grid grid-cols-2 gap-3">

@@ -174,4 +174,13 @@ describe('TxnForm', () => {
     expect(page.total).toBe(before + 1)
     expect(page.rows.some((r) => r.id !== txnId && r.note === 'asli' && r.date === todayIso())).toBe(true)
   })
+
+  it('Tab dari nominal langsung ke kategori (urutan field sesuai brief)', async () => {
+    await openSheet((u) => u.openNewTxn())
+    const focusable = [...document.body.querySelectorAll<HTMLElement>('form input, form button, form textarea, form [tabindex]')]
+      .filter((el) => !el.hasAttribute('disabled') && el.tabIndex >= 0 && !el.closest('[role="tablist"]'))
+    const i = focusable.indexOf($('#txn-amount'))
+    expect(i).toBeGreaterThanOrEqual(0)
+    expect(focusable[i + 1]?.id).toBe('txn-category')
+  })
 })

@@ -27,7 +27,7 @@ export default {
   txn: {
     new: 'Transaksi baru',
     title: { create: 'Transaksi baru', edit: 'Ubah transaksi', duplicate: 'Duplikat transaksi' },
-    kinds: { expense: 'Pengeluaran', income: 'Pemasukan', transfer: 'Transfer' },
+    kinds: { expense: 'Pengeluaran', income: 'Pemasukan', transfer: 'Transfer', adjustment: 'Penyesuaian', valuation: 'Valuasi', opening: 'Saldo awal' },
     amount: 'Nominal',
     refundHint: 'Nominal negatif dicatat sebagai refund.',
     category: 'Kategori',
