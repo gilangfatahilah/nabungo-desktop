@@ -8,7 +8,7 @@ use nabungo_app::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::error::IpcError;
+use crate::error::{ErrorCode, IpcError};
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -413,7 +413,8 @@ pub struct SplitDto {
 #[serde(rename_all = "camelCase")]
 pub struct FeeDto {
     pub amount: i64,
-    pub category_id: String,
+    /// `None` saat user menyalakan biaya tanpa memilih kategori → `txn_missing_category`.
+    pub category_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -479,7 +480,11 @@ impl TryFrom<TxnFormDto> for TxnForm {
                     .map(|f| {
                         Ok::<_, IpcError>(Fee {
                             amount: f.amount,
-                            category_id: parse_id(&f.category_id, "category")?,
+                            category_id: f
+                                .category_id
+                                .as_deref()
+                                .ok_or(IpcError::code(ErrorCode::TxnMissingCategory))
+                                .and_then(|c| parse_id(c, "category"))?,
                         })
                     })
                     .transpose()?,
@@ -661,7 +666,6 @@ pub struct TxnFormDefaultsDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::ErrorCode;
 
     fn fields() -> AccountFieldsDto {
         AccountFieldsDto {
@@ -717,7 +721,7 @@ mod tests {
             splits: vec![],
             fee: Some(FeeDto {
                 amount: 6_500,
-                category_id: Uuid::now_v7().to_string(),
+                category_id: Some(Uuid::now_v7().to_string()),
             }),
             payee: None,
             note: Some("pindah".into()),
@@ -729,7 +733,7 @@ mod tests {
     fn txn_form_dto_maps_transfer_with_fee() {
         let d = transfer_dto();
         let (from, to) = (d.account_id.clone(), d.to_account_id.clone().unwrap());
-        let fee_cat = d.fee.as_ref().unwrap().category_id.clone();
+        let fee_cat = d.fee.as_ref().unwrap().category_id.clone().unwrap();
         let f = TxnForm::try_from(d).unwrap();
         assert_eq!(
             f.body,
@@ -762,6 +766,14 @@ mod tests {
             TxnForm::try_from(d).unwrap_err().code,
             ErrorCode::InvalidDate
         );
+    }
+
+    #[test]
+    fn txn_form_dto_fee_without_category_is_missing_category() {
+        let mut d = transfer_dto();
+        d.fee.as_mut().unwrap().category_id = None;
+        let e = TxnForm::try_from(d).unwrap_err();
+        assert_eq!(e.code, ErrorCode::TxnMissingCategory);
     }
 
     #[test]

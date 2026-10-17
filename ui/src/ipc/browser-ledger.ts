@@ -151,6 +151,7 @@ function formPostings(f: TxnFormDto): Result<PostingDto[]> {
     ]
     if (f.fee) {
       if (f.fee.amount <= 0) return fail('txn_not_positive')
+      if (!f.fee.categoryId) return fail('txn_missing_category')
       ps.push({ accountId: f.accountId, categoryId: f.fee.categoryId, amount: -f.fee.amount, memo: null })
     }
     return ok(ps)

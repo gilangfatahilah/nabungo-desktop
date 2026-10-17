@@ -64,7 +64,7 @@ impl IpcError {
         Self::code(ErrorCode::InvalidDate)
     }
 
-    fn code(code: ErrorCode) -> Self {
+    pub fn code(code: ErrorCode) -> Self {
         Self { code, entity: None }
     }
 

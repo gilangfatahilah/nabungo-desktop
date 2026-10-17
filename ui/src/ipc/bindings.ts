@@ -124,7 +124,8 @@ export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_
 
 export type FeeDto = {
 	amount: number,
-	categoryId: string,
+	/**  `None` saat user menyalakan biaya tanpa memilih kategori → `txn_missing_category`. */
+	categoryId: string | null,
 };
 
 /**  Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`. */

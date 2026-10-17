@@ -52,6 +52,15 @@ describe('browser ledger transaksi (paritas Rust)', () => {
     expect((await data(L.listTxns({ ...q, accountId: a }))).total).toBe(0)
   })
 
+  it('biaya transfer tanpa kategori → txn_missing_category, tidak tersimpan', async () => {
+    const a = await account('F1')
+    const b = await account('F2')
+    const before = (await data(L.listTxns({ ...q, accountId: a }))).total
+    const r = await L.createTxn(form({ kind: 'transfer', accountId: a, toAccountId: b, amount: 200_000, fee: { amount: 6_500, categoryId: null } }))
+    expect(r).toEqual({ status: 'error', error: { code: 'txn_missing_category', entity: null } })
+    expect((await data(L.listTxns({ ...q, accountId: a }))).total).toBe(before)
+  })
+
   it('transfer nominal ≤ 0 → txn_not_positive', async () => {
     const a = await account('P1')
     const b = await account('P2')

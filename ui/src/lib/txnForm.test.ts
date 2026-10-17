@@ -40,6 +40,7 @@ describe('txnForm', () => {
     const s = { ...emptyForm('transfer', base), toAccountId: 'acc-b', amount: 200_000, feeEnabled: true, fee: 6_500 }
     expect(toDto(s)).toMatchObject({ kind: 'transfer', toAccountId: 'acc-b', splits: [], fee: { amount: 6_500, categoryId: 'cat-fee' } })
     expect(toDto({ ...s, feeEnabled: false }).fee).toBeNull()
+    expect(toDto({ ...s, feeCategoryId: null }).fee).toEqual({ amount: 6_500, categoryId: null })
   })
 
   it('fromDetail transfer dengan biaya', () => {

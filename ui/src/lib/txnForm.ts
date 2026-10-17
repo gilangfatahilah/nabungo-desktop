@@ -58,7 +58,7 @@ export function toDto(s: TxnFormState): TxnFormDto {
     toAccountId: transfer ? s.toAccountId : null,
     amount: s.amount,
     splits,
-    fee: transfer && s.feeEnabled && s.feeCategoryId ? { amount: s.fee, categoryId: s.feeCategoryId } : null,
+    fee: transfer && s.feeEnabled ? { amount: s.fee, categoryId: s.feeCategoryId } : null,
     payee: text(s.payee),
     note: text(s.note),
     tags: s.tags,
