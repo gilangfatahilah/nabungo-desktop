@@ -178,3 +178,39 @@ describe('browser ledger budget (paritas Rust)', () => {
     await data(L.setBudget(c, '2026-10', null))
   })
 })
+
+describe('browser ledger valuation (paritas Rust)', () => {
+  async function investment(name: string, opening: number): Promise<string> {
+    return data(L.createAccount('investment', {
+      name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01',
+    }))
+  }
+
+  it('valuation mencatat selisih terhadap saldo per tanggal', async () => {
+    const rdn = await investment('RDN V', 10_000_000)
+    const bank = await account('Bank V', 5_000_000)
+    await data(L.createTxn(form({ kind: 'transfer', date: '2026-10-20', accountId: bank, toAccountId: rdn, amount: 1_000_000 })))
+    await data(L.recordValuation(rdn, '2026-10-10', 9_500_000))
+    expect(await balance(rdn)).toBe(10_500_000)
+    await data(L.recordValuation(rdn, '2026-10-31', 10_750_000))
+    expect(await balance(rdn)).toBe(10_750_000)
+    const h = await data(L.valuationHistory(rdn))
+    expect(h.map((p) => [p.date, p.change, p.value])).toEqual([
+      ['2026-10-31', 250_000, 10_750_000],
+      ['2026-10-10', -500_000, 9_500_000],
+    ])
+  })
+
+  it('aturan valuation', async () => {
+    const rdn = await investment('RDN R', 1_000)
+    const bank = await account('Bank R', 1_000)
+    expect(await L.recordValuation(bank, '2026-10-02', 2_000)).toMatchObject({ status: 'error', error: { code: 'txn_valuation_non_investment' } })
+    expect(await L.recordValuation(rdn, '2026-10-02', 1_000)).toMatchObject({ status: 'error', error: { code: 'valuation_unchanged' } })
+    expect(await L.recordValuation('x', '2026-10-02', 1)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'account' } })
+    const v = await data(L.recordValuation(rdn, '2026-10-02', 1_500))
+    expect(await L.updateTxn(v, form({ accountId: rdn, amount: 1 }))).toMatchObject({ status: 'error', error: { code: 'txn_not_editable' } })
+    await data(L.archiveAccount(rdn))
+    expect(await L.recordValuation(rdn, '2026-10-03', 2_000)).toMatchObject({ status: 'error', error: { code: 'archived', entity: 'account' } })
+  })
+})

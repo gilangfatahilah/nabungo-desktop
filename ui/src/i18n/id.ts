@@ -101,6 +101,14 @@ export default {
     empty: 'Belum ada kategori pengeluaran.',
     emptyHint: 'Buat kategori pengeluaran dulu, lalu atur budget per bulan di sini.',
   },
+  valuation: {
+    title: 'Perbarui nilai {name}',
+    hint: "Masukkan nilai pasar akun per tanggal; selisihnya dicatat sebagai perubahan nilai.",
+    value: 'Nilai saat ini',
+    date: 'Tanggal',
+    history: 'Riwayat nilai',
+    empty: 'Belum ada riwayat nilai.',
+  },
   dashboard: { netWorth: 'Kekayaan bersih' },
   onboarding: {
     title: 'Selamat datang di Nabungo',
@@ -142,6 +150,7 @@ export default {
     inUseBody: 'Akun yang punya transaksi tidak bisa dihapus. Arsipkan saja?',
     archiveTitle: 'Arsipkan akun?',
     archiveBalanceBody: 'Saldo {amount} tetap dihitung di kekayaan bersih selama akun diarsip.',
+    updateValue: 'Perbarui nilai…',
     netWorth: 'Kekayaan bersih',
     assets: 'Aset',
     liabilities: 'Liabilitas',
@@ -170,6 +179,7 @@ export default {
     archiveParentBody: 'Sub-kategori "{name}" ikut diarsip.',
   },
   actions: {
+    close: 'Tutup',
     save: 'Simpan',
     cancel: 'Batal',
     create: 'Buat',

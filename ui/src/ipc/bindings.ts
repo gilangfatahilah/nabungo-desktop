@@ -52,6 +52,10 @@ export const commands = {
 	setBudget: (categoryId: string, period: string, amount: number | null) => typedError<null, IpcError>(__TAURI_INVOKE("set_budget", { categoryId, period, amount })),
 	/**  Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris. */
 	copyBudgets: (period: string) => typedError<number, IpcError>(__TAURI_INVOKE("copy_budgets", { period })),
+	/**  Catat nilai akun investasi per akhir `date`; yang disimpan adalah selisih terhadap saldo. */
+	recordValuation: (accountId: string, date: string, value: number) => typedError<string, IpcError>(__TAURI_INVOKE("record_valuation", { accountId, date, value })),
+	/**  Riwayat valuation, terbaru dulu. */
+	valuationHistory: (accountId: string) => typedError<ValuationPointDto[], IpcError>(__TAURI_INVOKE("valuation_history", { accountId })),
 };
 
 /* Types */
@@ -283,6 +287,14 @@ export type TxnRowDto = {
 export type UiSettingsDto = {
 	theme: ThemeDto,
 	locale: LocaleDto,
+};
+
+/**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */
+export type ValuationPointDto = {
+	txnId: string,
+	date: string,
+	change: number,
+	value: number,
 };
 
 /* Tauri Specta runtime */

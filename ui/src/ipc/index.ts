@@ -21,6 +21,7 @@ import {
   type TxnQueryDto,
   type PayeeSuggestionDto,
   type UiSettingsDto,
+  type ValuationPointDto,
 } from './bindings'
 import { browserCommands } from './browser'
 
@@ -32,6 +33,7 @@ export type {
   AccountsOverviewDto,
   AppInfo,
   BudgetOverviewDto,
+  ValuationPointDto,
   BudgetRowDto,
   BudgetTotalDto,
   CategoryDto,
@@ -257,4 +259,14 @@ export async function setBudget(categoryId: string, period: string, amount: numb
 /** Mengembalikan jumlah budget yang disalin dari periode sebelumnya. */
 export function copyBudgets(period: string): Promise<number> {
   return unwrap(api().copyBudgets(period))
+}
+
+// --- Valuation ---
+
+export function recordValuation(accountId: string, date: string, value: number): Promise<string> {
+  return unwrap(api().recordValuation(accountId, date, value))
+}
+
+export function valuationHistory(accountId: string): Promise<ValuationPointDto[]> {
+  return unwrap(api().valuationHistory(accountId))
 }

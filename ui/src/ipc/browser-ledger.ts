@@ -6,6 +6,7 @@ import type {
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
+  ValuationPointDto,
 } from './bindings'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -72,9 +73,13 @@ function toAccount(kind: AccountKindDto, f: AccountFieldsDto, base: Pick<Account
 
 const activeTxns = () => state.txns.filter((t) => !t.deleted)
 
-function balanceOf(accountId: string): number {
+/** Saldo dari postings; dengan `asOf`, hanya transaksi bertanggal ≤ `asOf` (inklusif). */
+function balanceOf(accountId: string, asOf: string | null = null): number {
   let sum = 0
-  for (const t of activeTxns()) for (const p of t.postings) if (p.accountId === accountId) sum += p.amount
+  for (const t of activeTxns()) {
+    if (asOf !== null && t.date > asOf) continue
+    for (const p of t.postings) if (p.accountId === accountId) sum += p.amount
+  }
   return sum
 }
 
@@ -473,6 +478,7 @@ export const browserLedger = {
     const t = activeTxns().find((x) => x.id === i)
     if (!t) return notFound('transaction')
     if (t.kind === 'opening') return fail('opening_not_allowed')
+    if (t.kind === 'valuation' || t.kind === 'adjustment') return fail('txn_not_editable')
     const r = writeTxn(t, form)
     return r.status === 'ok' ? ok(null) : r
   },
@@ -544,5 +550,28 @@ export const browserLedger = {
       copied++
     }
     return ok(copied)
+  },
+  // Seperti `Ledger::record_valuation`: yang disimpan selisih terhadap saldo per akhir `date`.
+  recordValuation: async (accountId: string, date: string, value: number): Promise<Result<string>> => {
+    if (Math.abs(value) > MAX_AMOUNT) return fail('txn_amount_too_large')
+    const a = state.accounts.find((x) => x.id === accountId)
+    if (!a) return notFound('account')
+    if (a.archived) return fail('archived', 'account')
+    const change = value - balanceOf(accountId, date)
+    if (change === 0) return fail('valuation_unchanged')
+    if (Math.abs(change) > MAX_AMOUNT) return fail('txn_amount_too_large')
+    if (a.kind !== 'investment') return fail('txn_valuation_non_investment')
+    const t: Txn = {
+      id: id(), seq: ++seq, kind: 'valuation', date, payeeId: null, note: null, tags: [], deleted: false,
+      postings: [{ accountId, categoryId: null, amount: change, memo: null }],
+    }
+    state.txns.push(t)
+    return ok(t.id)
+  },
+  valuationHistory: async (accountId: string): Promise<Result<ValuationPointDto[]>> => {
+    return ok(activeTxns()
+      .filter((t) => t.kind === 'valuation' && t.postings[0]?.accountId === accountId)
+      .sort(byNewest)
+      .map((t) => ({ txnId: t.id, date: t.date, change: t.postings[0]!.amount, value: balanceOf(accountId, t.date) })))
   },
 }

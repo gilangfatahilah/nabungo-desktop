@@ -9,7 +9,7 @@ use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AppInfo, BudgetOverviewDto, CategoryDto,
     CategoryFieldsDto, CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ThemeDto,
     TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
-    parse_day, parse_id, parse_period,
+    ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -386,4 +386,37 @@ pub fn set_budget(
 pub fn copy_budgets(state: State<'_, AppState>, period: String) -> Result<u32, IpcError> {
     let period = parse_period(&period)?;
     Ok(ledger(&state)?.copy_budgets(period)?)
+}
+
+// --- Valuation ---
+
+/// Catat nilai akun investasi per akhir `date`; yang disimpan adalah selisih terhadap saldo.
+#[tauri::command]
+#[specta::specta]
+pub fn record_valuation(
+    state: State<'_, AppState>,
+    account_id: String,
+    date: String,
+    value: i64,
+) -> Result<String, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?
+        .record_valuation(account_id, date, value)?
+        .to_string())
+}
+
+/// Riwayat valuation, terbaru dulu.
+#[tauri::command]
+#[specta::specta]
+pub fn valuation_history(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<Vec<ValuationPointDto>, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    Ok(ledger(&state)?
+        .valuation_history(account_id)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }

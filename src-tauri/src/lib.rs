@@ -54,6 +54,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::budget_overview,
             commands::set_budget,
             commands::copy_budgets,
+            commands::record_valuation,
+            commands::valuation_history,
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()

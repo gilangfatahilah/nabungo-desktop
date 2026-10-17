@@ -101,6 +101,14 @@ export default {
     empty: 'No expense categories yet.',
     emptyHint: 'Create an expense category first, then set monthly budgets here.',
   },
+  valuation: {
+    title: 'Update value of {name}',
+    hint: "Enter the account's market value on a date; the difference is recorded as a value change.",
+    value: 'Current value',
+    date: 'Date',
+    history: 'Value history',
+    empty: 'No value history yet.',
+  },
   dashboard: { netWorth: 'Net worth' },
   onboarding: {
     title: 'Welcome to Nabungo',
@@ -142,6 +150,7 @@ export default {
     inUseBody: 'Accounts with transactions cannot be deleted. Archive it instead?',
     archiveTitle: 'Archive account?',
     archiveBalanceBody: 'The balance of {amount} still counts toward net worth while archived.',
+    updateValue: 'Update value…',
     netWorth: 'Net worth',
     assets: 'Assets',
     liabilities: 'Liabilities',
@@ -170,6 +179,7 @@ export default {
     archiveParentBody: 'Subcategories of "{name}" are archived too.',
   },
   actions: {
+    close: 'Close',
     save: 'Save',
     cancel: 'Cancel',
     create: 'Create',

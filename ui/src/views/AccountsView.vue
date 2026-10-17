@@ -7,6 +7,7 @@ import AccountFormDialog from '@/components/AccountFormDialog.vue'
 import AccountList from '@/components/AccountList.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MoneyText from '@/components/MoneyText.vue'
+import ValuationDialog from '@/components/ValuationDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -49,6 +50,14 @@ function edit(a: AccountDto) {
 }
 
 // --- urutan ---
+const valuationOpen = ref(false)
+const valuating = ref<AccountDto | null>(null)
+
+function valuate(a: AccountDto) {
+  valuating.value = a
+  valuationOpen.value = true
+}
+
 function move(accountId: string, groupId: string | null, index: number) {
   void withErrorToast(() => store.reorderAccounts(groupId, moveAccount(sections.value, accountId, groupId, index)))
 }
@@ -208,6 +217,7 @@ async function saveGroup() {
         :accounts="s.accounts"
         @move="move"
         @edit="edit"
+        @valuate="valuate"
         @archive="archive"
         @delete="remove"
       />
@@ -226,6 +236,7 @@ async function saveGroup() {
     </Collapsible>
 
     <AccountFormDialog v-model:open="formOpen" :account="editing" :group-id="formGroup" />
+    <ValuationDialog v-if="valuating" v-model:open="valuationOpen" :account="valuating" />
 
     <ConfirmDialog
       v-if="pending"

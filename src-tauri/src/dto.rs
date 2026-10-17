@@ -5,7 +5,7 @@ use nabungo_app::{
     BudgetPeriod, BudgetRow, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
     Locale, NetWorth, OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine,
     Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid,
-    format_date, parse_date,
+    ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -734,6 +734,29 @@ impl From<BudgetOverview> for BudgetOverviewDto {
     }
 }
 
+// --- Valuation ---
+
+/// `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ValuationPointDto {
+    pub txn_id: String,
+    pub date: String,
+    pub change: i64,
+    pub value: i64,
+}
+
+impl From<ValuationPoint> for ValuationPointDto {
+    fn from(p: ValuationPoint) -> Self {
+        Self {
+            txn_id: p.txn_id.to_string(),
+            date: format_date(p.date),
+            change: p.change,
+            value: p.value,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -750,6 +773,22 @@ mod tests {
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
         }
+    }
+
+    #[test]
+    fn valuation_point_dto_serializes_camel_case() {
+        let id = Uuid::now_v7();
+        let dto = ValuationPointDto::from(ValuationPoint {
+            txn_id: id,
+            date: nabungo_app::parse_date("2026-10-31").unwrap(),
+            change: -500,
+            value: 9_500,
+        });
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "txnId": id.to_string(), "date": "2026-10-31", "change": -500, "value": 9_500 })
+        );
     }
 
     #[test]
