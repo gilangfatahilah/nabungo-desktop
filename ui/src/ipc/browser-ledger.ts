@@ -49,7 +49,8 @@ function overview(): AccountsOverviewDto {
   let assets = 0
   let liabilities = 0
   for (const a of state.accounts) {
-    if (a.archived || !a.includeInNetWorth) continue
+    // Seperti Rust: akun diarsip tetap dihitung; hanya `includeInNetWorth` yang menyaring.
+    if (!a.includeInNetWorth) continue
     if (LIABILITIES.includes(a.kind)) liabilities += -a.balance
     else assets += a.balance
   }

@@ -3,7 +3,7 @@ import type { TabsListProps } from 'reka-ui'
 import type { HTMLAttributes } from 'vue'
 import type { TabsListVariants } from '.'
 import { reactiveOmit } from '@vueuse/core'
-import { cn } from 'cn'
+import { cn } from '@/lib/utils'
 import { TabsList } from 'reka-ui'
 import { tabsListVariants } from '.'
 

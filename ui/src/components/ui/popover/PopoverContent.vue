@@ -2,7 +2,7 @@
 import type { PopoverContentEmits, PopoverContentProps } from 'reka-ui'
 import type { HTMLAttributes } from 'vue'
 import { reactiveOmit } from '@vueuse/core'
-import { cn } from 'cn'
+import { cn } from '@/lib/utils'
 import {
   PopoverContent,
   PopoverPortal,

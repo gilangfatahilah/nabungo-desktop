@@ -40,3 +40,16 @@ export function groupAccounts(o: AccountsOverviewDto, opts: { archived: boolean 
   if (ungrouped.length) sections.push(section(null, ungrouped))
   return sections
 }
+
+/** Urutan ID baru untuk group tujuan setelah `accountId` dipindah ke `index` (seret atau tombol atas/bawah). */
+export function moveAccount(sections: GroupSection[], accountId: string, targetGroupId: string | null, index: number): string[] {
+  const target = sections.find((s) => (s.group?.id ?? null) === targetGroupId)
+  const ids = (target?.accounts ?? []).map((a) => a.id).filter((id) => id !== accountId)
+  ids.splice(Math.max(0, Math.min(index, ids.length)), 0, accountId)
+  return ids
+}
+
+/** Warna saldo: negatif (utang kartu kredit, overdraft) tampil sebagai expense. */
+export function balanceTone(a: AccountDto): 'neutral' | 'expense' {
+  return a.balance < 0 ? 'expense' : 'neutral'
+}

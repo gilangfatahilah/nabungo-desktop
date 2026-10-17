@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountDto, AccountsOverviewDto } from '@/ipc'
-import { groupAccounts } from './accounts'
+import { balanceTone, groupAccounts, moveAccount } from './accounts'
 
 function acc(id: string, groupId: string | null, balance: number, extra: Partial<AccountDto> = {}): AccountDto {
   return {
@@ -47,5 +47,24 @@ describe('groupAccounts', () => {
     expect(s[0]!.group).toBeNull()
     expect(s[0]!.accounts.map((a) => a.id)).toEqual(['lama'])
     expect(s[0]!.subtotal).toBe(5_000)
+  })
+})
+
+describe('moveAccount & balanceTone', () => {
+  const sections = groupAccounts(overview, { archived: false })
+
+  it('pindah dalam group yang sama', () => {
+    expect(moveAccount(sections, 'cc', 'g1', 0)).toEqual(['cc', 'bca'])
+  })
+
+  it('pindah lintas group menyisipkan di indeks tujuan', () => {
+    expect(moveAccount(sections, 'bca', 'g2', 0)).toEqual(['bca', 'dana'])
+    expect(moveAccount(sections, 'dana', null, 1)).toEqual(['dompet', 'dana'])
+    expect(moveAccount(sections, 'dana', 'g3', 5)).toEqual(['dana'])
+  })
+
+  it('saldo negatif → expense, lainnya neutral', () => {
+    expect(balanceTone(acc('x', null, -1, { kind: 'credit_card' }))).toBe('expense')
+    expect(balanceTone(acc('x', null, 0))).toBe('neutral')
   })
 })
