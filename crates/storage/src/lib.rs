@@ -6,6 +6,7 @@ use rusqlite::Connection;
 use rusqlite_migration::{M, Migrations};
 
 pub mod account;
+pub mod account_group;
 pub mod category;
 pub mod setting;
 pub mod txn;
@@ -20,6 +21,24 @@ pub enum StorageError {
     Migration(#[from] rusqlite_migration::Error),
     #[error("corrupt data: {0}")]
     Corrupt(String),
+    #[error("duplicate name")]
+    Duplicate,
+}
+
+/// Pelanggaran indeks UNIQUE → [`StorageError::Duplicate`]; error lain apa adanya.
+pub(crate) fn map_unique(e: rusqlite::Error) -> StorageError {
+    match &e {
+        rusqlite::Error::SqliteFailure(f, _)
+            if f.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE =>
+        {
+            StorageError::Duplicate
+        }
+        _ => StorageError::Sqlite(e),
+    }
+}
+
+fn parse_uuid(table: &str, s: &str) -> Result<uuid::Uuid> {
+    uuid::Uuid::parse_str(s).map_err(|e| StorageError::Corrupt(format!("{table} id {s:?}: {e}")))
 }
 
 pub type Result<T> = std::result::Result<T, StorageError>;
@@ -57,6 +76,7 @@ pub fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(include_str!("../migrations/0001_init.sql")),
         M::up(include_str!("../migrations/0002_unique_root_category.sql")),
+        M::up(include_str!("../migrations/0003_catalog_indexes.sql")),
     ])
 }
 
@@ -138,6 +158,26 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(n, 1, "missing table {table}");
+        }
+    }
+
+    #[test]
+    fn migration_0003_indexes_exist() {
+        let conn = open_in_memory().unwrap();
+        for index in [
+            "account_group_name_nocase",
+            "payee_name_nocase",
+            "category_child_name_nocase",
+            "category_root_name_nocase",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "missing index {index}");
         }
     }
 

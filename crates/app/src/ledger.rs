@@ -229,11 +229,7 @@ mod tests {
     const D: Date = date!(2026 - 10 - 12);
 
     fn bank(ledger: &mut Ledger, opening: i64) -> Uuid {
-        let new = NewAccount {
-            name: "BCA".into(),
-            kind: AccountKind::Bank,
-            currency: CurrencyCode::IDR,
-        };
+        let new = NewAccount::new("BCA", AccountKind::Bank, CurrencyCode::IDR);
         ledger.create_account(new, opening, D).unwrap()
     }
 

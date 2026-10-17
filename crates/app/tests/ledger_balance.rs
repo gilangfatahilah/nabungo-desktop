@@ -38,7 +38,7 @@ proptest! {
             .iter()
             .enumerate()
             .map(|(i, &o)| {
-                let new = NewAccount { name: format!("A{i}"), kind: AccountKind::Bank, currency: CurrencyCode::IDR };
+                let new = NewAccount::new(format!("A{i}"), AccountKind::Bank, CurrencyCode::IDR);
                 ledger.create_account(new, o, d).unwrap()
             })
             .collect();

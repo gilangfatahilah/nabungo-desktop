@@ -79,11 +79,7 @@ mod tests {
     use time::macros::date;
 
     fn bank(tx: &Transaction, name: &str) -> AccountRef {
-        let new = NewAccount {
-            name: name.into(),
-            kind: AccountKind::Bank,
-            currency: CurrencyCode::IDR,
-        };
+        let new = NewAccount::new(name, AccountKind::Bank, CurrencyCode::IDR);
         let id = insert_account(tx, &new, &now_utc()).unwrap();
         get_account_ref(tx, id).unwrap().unwrap().value
     }
