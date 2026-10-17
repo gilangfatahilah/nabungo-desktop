@@ -98,19 +98,19 @@ Basis 14px karena ini aplikasi desktop yang padat. Skala mengikuti rasio ~1.2:
 **Aturan**
 
 - **Angka uang selalu `tabular-nums`** dan rata kanan di kolom. Buat utilitas `.num` (`font-variant-numeric: tabular-nums; font-feature-settings: "tnum"`), dipakai `MoneyText`.
-- Prefiks `Rp` diset di berat 400 dan Tinta pudar; angkanya di berat 500/600. Contoh: `Rp` kecil-pudar, `4.343.000` tegas. Hierarki ini adalah satu-satunya "gaya" angka.
+- Prefiks `Rp` diset di berat 400 dengan opasitas 65% dari warna angkanya; angkanya di berat 500/600. Contoh: `Rp` pudar, `4.343.000` tegas. Komponen: `MoneyText`. Hierarki ini adalah satu-satunya "gaya" angka.
 - Tidak ada huruf kapital semua, tidak ada eyebrow di atas judul, tidak ada letter-spacing lebar.
 - Huruf tebal maksimal 600. Teks paragraf (deskripsi, empty state) maksimal ~65 karakter per baris.
 
 ## 6. Ruang, ukuran, sudut, bayangan
 
 - **Grid 4px.** Jarak yang dipakai: 4, 8, 12, 16, 24, 32, 48. Tidak ada nilai lain (hindari `gap-5`, `p-7`, nilai arbitrer).
-- **Tinggi kontrol:** 36px (input, select, tombol default), 32px (tombol kecil di toolbar/baris), 28px (chip, kbd).
+- **Tinggi kontrol:** 32px (input, select, tombol default, mengikuti kit reka-nova), 28px (tombol kecil di toolbar/baris, chip), 40px (field nominal di form transaksi), 20px (kbd).
 - **Tinggi baris daftar:** 48px (dua baris teks: utama + meta). Baris header tanggal 32px.
 - **Sudut, berhierarki:**
-  - 6px untuk kontrol (input, tombol, kbd)
-  - 10px untuk panel, popover, dialog
-  - 12px hanya untuk sheet (sisi dalam)
+  - 6px untuk kontrol (input, tombol) dan menu melayang (popover, dropdown, select): token `rounded-lg`
+  - 10px untuk panel, kartu, dialog: token `rounded-xl`
+  - 12px hanya untuk sheet (sisi dalam): token `rounded-2xl`
   - penuh (pill) untuk chip/tag dan badge
 
   Jangan satu radius untuk semuanya.
@@ -198,7 +198,7 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
 
 ### 8.2 Kbd (komponen baru)
 
-Satu komponen untuk semua petunjuk shortcut: tinggi 20px, padding 0 6px, radius 6, border Garis, `text-meta` 500, font yang sama dengan UI. Kombinasi ditulis per tombol: `Ctrl` `Enter`. `G D` ditulis sebagai dua `Kbd` berurutan.
+Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6px, radius 4, border Garis, `text-meta` 500, font yang sama dengan UI. Kombinasi ditulis per tombol: `Ctrl` `Enter`. `G D` ditulis sebagai dua `Kbd` berurutan.
 
 ### 8.3 Input & form
 

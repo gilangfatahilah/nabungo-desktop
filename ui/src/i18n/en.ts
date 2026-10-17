@@ -15,6 +15,7 @@ export default {
     onboarding: 'Get started',
   },
   common: { comingSoon: 'Coming soon' },
+  dateInput: { openCalendar: 'Open calendar' },
   settings: {
     theme: 'Theme',
     language: 'Language',

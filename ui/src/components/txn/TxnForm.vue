@@ -2,8 +2,9 @@
 import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AmountInput from '@/components/AmountInput.vue'
+import DateInput from '@/components/DateInput.vue'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
@@ -39,10 +40,11 @@ function focusAmount() {
 
 const touched = reactive({ category: s.categoryId !== null || s.split, account: props.id !== null })
 
-type Committable = { commit(): Promise<boolean> }
+type Committable = { commit(): boolean | Promise<boolean> }
 const amountInput = useTemplateRef<Committable>('amountInput')
 const feeInput = useTemplateRef<Committable>('feeInput')
 const splitEditor = useTemplateRef<Committable>('splitEditor')
+const dateInput = useTemplateRef<Committable>('dateInput')
 
 const KINDS: FormKind[] = ['expense', 'income', 'transfer']
 const transfer = computed(() => s.kind === 'transfer')
@@ -85,7 +87,7 @@ async function onPayee(name: string) {
 
 async function submit() {
   if (busy.value) return
-  const refs = [amountInput.value, transfer.value && s.feeEnabled ? feeInput.value : null, s.split && !transfer.value ? splitEditor.value : null]
+  const refs = [dateInput.value, amountInput.value, transfer.value && s.feeEnabled ? feeInput.value : null, s.split && !transfer.value ? splitEditor.value : null]
   const ok = await Promise.all(refs.map((r) => r?.commit() ?? true))
   if (!ok.every(Boolean)) return
   busy.value = true
@@ -160,7 +162,7 @@ async function submit() {
     <div class="grid grid-cols-2 gap-3">
       <div class="flex flex-col gap-2">
         <Label for="txn-date">{{ t('txn.date') }}</Label>
-        <Input id="txn-date" v-model="s.date" type="date" />
+        <DateInput id="txn-date" ref="dateInput" v-model="s.date" />
       </div>
       <div class="flex flex-col gap-2">
         <Label for="txn-payee">{{ t('txn.payee') }}</Label>
@@ -183,7 +185,8 @@ async function submit() {
     <div class="flex justify-end gap-2">
       <Button type="button" variant="ghost" @click="emit('cancel')">{{ t('actions.cancel') }}</Button>
       <Button type="submit" :disabled="busy">
-        {{ t('actions.save') }} <kbd class="ml-1 text-xs opacity-70">Ctrl+Enter</kbd>
+        {{ t('actions.save') }}
+        <KbdGroup class="ml-1"><Kbd>Ctrl</Kbd><Kbd>Enter</Kbd></KbdGroup>
       </Button>
     </div>
   </form>

@@ -2,6 +2,7 @@
 import { RotateCcwIcon, SearchIcon } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import DateInput from '@/components/DateInput.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -82,13 +83,13 @@ function reset() {
       <SearchIcon class="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input v-model="search" type="search" class="pl-8" data-testid="filter-search" :placeholder="t('txn.filters.search')" :aria-label="t('txn.filters.search')" />
     </div>
-    <Input
-      type="date" class="w-36" data-testid="filter-from" :aria-label="t('txn.filters.from')" :model-value="store.query.dateFrom ?? ''"
-      @change="apply({ dateFrom: ($event.target as HTMLInputElement).value || null })"
+    <DateInput
+      nullable class="w-40" data-testid="filter-from" :aria-label="t('txn.filters.from')" :placeholder="t('txn.filters.from')" :model-value="store.query.dateFrom"
+      @update:model-value="apply({ dateFrom: $event })"
     />
-    <Input
-      type="date" class="w-36" data-testid="filter-to" :aria-label="t('txn.filters.to')" :model-value="store.query.dateTo ?? ''"
-      @change="apply({ dateTo: ($event.target as HTMLInputElement).value || null })"
+    <DateInput
+      nullable class="w-40" data-testid="filter-to" :aria-label="t('txn.filters.to')" :placeholder="t('txn.filters.to')" :model-value="store.query.dateTo"
+      @update:model-value="apply({ dateTo: $event })"
     />
     <Select :model-value="store.query.accountId ?? ALL" @update:model-value="apply({ accountId: select($event) })">
       <SelectTrigger class="w-40" data-testid="filter-account" :aria-label="t('txn.account')"><SelectValue /></SelectTrigger>

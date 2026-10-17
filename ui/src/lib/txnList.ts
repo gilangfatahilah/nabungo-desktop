@@ -1,4 +1,5 @@
-import type { TxnRowDto } from '@/ipc'
+import type { LocaleDto, TxnRowDto } from '@/ipc'
+import { formatDateInput } from '@/lib/date'
 
 export type ListItem = { type: 'date'; date: string; key: string } | { type: 'row'; row: TxnRowDto; key: string }
 
@@ -17,8 +18,6 @@ export function groupByDate(rows: TxnRowDto[]): ListItem[] {
 }
 
 /** `YYYY-MM-DD` → "12 Okt 2026" sesuai locale, tanpa geser zona waktu. */
-export function formatDateHeader(iso: string, locale: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Intl.DateTimeFormat(locale === 'id' ? 'id-ID' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' })
-    .format(new Date(y!, m! - 1, d!))
+export function formatDateHeader(iso: string, locale: LocaleDto): string {
+  return formatDateInput(iso, locale)
 }

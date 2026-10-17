@@ -55,7 +55,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <template v-if="route.meta.bare">
     <RouterView />
-    <Toaster />
+    <Toaster :visible-toasts="1" />
   </template>
   <SidebarProvider v-else>
     <AppSidebar />
@@ -66,6 +66,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </SidebarInset>
     <CommandPalette />
     <NewTxnSheet />
-    <Toaster />
+    <Toaster :visible-toasts="1" />
   </SidebarProvider>
 </template>

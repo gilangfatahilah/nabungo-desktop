@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown } from '@lucide/vue'
 import MoneyText from '@/components/MoneyText.vue'
@@ -56,7 +57,7 @@ const sections = computed(() => groupAccounts(accounts.overview, { archived: fal
       <p class="px-1 text-lg font-semibold">{{ $t('app.name') }}</p>
       <Button class="w-full justify-between" data-testid="new-txn" @click="ui.openNewTxn()">
         <span>+ {{ $t('sidebar.newTransaction') }}</span>
-        <kbd class="rounded border border-primary-foreground/40 px-1.5 text-xs font-sans">N</kbd>
+        <Kbd>N</Kbd>
       </Button>
     </SidebarHeader>
     <SidebarContent>
@@ -68,7 +69,7 @@ const sections = computed(() => groupAccounts(accounts.overview, { archived: fal
               <SidebarMenuButton as-child :is-active="current === item.name">
                 <RouterLink :to="item.to">
                   <span>{{ $t(`nav.${item.name}`) }}</span>
-                  <kbd class="ml-auto text-xs font-sans text-muted-foreground">{{ item.keys }}</kbd>
+                  <KbdGroup class="ml-auto"><Kbd v-for="key in item.keys.split(/[ +]/)" :key="key">{{ key }}</Kbd></KbdGroup>
                 </RouterLink>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -121,7 +122,7 @@ const sections = computed(() => groupAccounts(accounts.overview, { archived: fal
           <SidebarMenuButton as-child :is-active="current === settings.name">
             <RouterLink :to="settings.to">
               <span>{{ $t(`nav.${settings.name}`) }}</span>
-              <kbd class="ml-auto text-xs font-sans text-muted-foreground">{{ settings.keys }}</kbd>
+              <KbdGroup class="ml-auto"><Kbd v-for="key in settings.keys.split(/[ +]/)" :key="key">{{ key }}</Kbd></KbdGroup>
             </RouterLink>
           </SidebarMenuButton>
         </SidebarMenuItem>
