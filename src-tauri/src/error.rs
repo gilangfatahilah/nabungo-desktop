@@ -1,7 +1,7 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
 use nabungo_app::AppError;
-use nabungo_app::{AmountParseError, CatalogError, PeriodError, TxnError};
+use nabungo_app::{AmountParseError, BudgetError, CatalogError, PeriodError, TxnError};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
@@ -51,6 +51,10 @@ pub enum ErrorCode {
     CategoryKindMismatch,
     CategoryHasChildren,
     MergeIntoSelf,
+    InvalidPeriod,
+    BudgetNegative,
+    BudgetTooLarge,
+    BudgetIncomeCategory,
     Internal,
 }
 
@@ -114,9 +118,28 @@ impl From<CatalogError> for ErrorCode {
     }
 }
 
+impl From<PeriodError> for ErrorCode {
+    fn from(e: PeriodError) -> Self {
+        match e {
+            PeriodError::InvalidStartDay(_) => ErrorCode::InvalidStartDay,
+            PeriodError::InvalidMonth(_) | PeriodError::InvalidKey => ErrorCode::InvalidPeriod,
+        }
+    }
+}
+
 impl From<PeriodError> for IpcError {
-    fn from(_: PeriodError) -> Self {
-        Self::code(ErrorCode::InvalidStartDay)
+    fn from(e: PeriodError) -> Self {
+        Self::code(e.into())
+    }
+}
+
+impl From<BudgetError> for ErrorCode {
+    fn from(e: BudgetError) -> Self {
+        match e {
+            BudgetError::Negative => ErrorCode::BudgetNegative,
+            BudgetError::TooLarge => ErrorCode::BudgetTooLarge,
+            BudgetError::IncomeCategory => ErrorCode::BudgetIncomeCategory,
+        }
     }
 }
 
@@ -143,6 +166,8 @@ impl From<AppError> for IpcError {
             AppError::InUse(entity) => Self::with_entity(ErrorCode::InUse, entity),
             AppError::Duplicate(entity) => Self::with_entity(ErrorCode::Duplicate, entity),
             AppError::AlreadyOnboarded => Self::code(ErrorCode::AlreadyOnboarded),
+            AppError::Budget(err) => Self::code(err.into()),
+            AppError::Period(err) => Self::code(err.into()),
         }
     }
 }
@@ -194,6 +219,16 @@ mod tests {
         assert_eq!(e.code, ErrorCode::TxnSplitMismatch);
         let e = IpcError::from(AppError::Txn(TxnError::NotPositive));
         assert_eq!(e.code, ErrorCode::TxnNotPositive);
+    }
+
+    #[test]
+    fn budget_and_period_errors_map() {
+        let e = IpcError::from(AppError::Budget(BudgetError::IncomeCategory));
+        assert_eq!(e.code, ErrorCode::BudgetIncomeCategory);
+        let e = IpcError::from(AppError::Period(PeriodError::InvalidKey));
+        assert_eq!(e.code, ErrorCode::InvalidPeriod);
+        let e = IpcError::from(PeriodError::InvalidStartDay(29));
+        assert_eq!(e.code, ErrorCode::InvalidStartDay);
     }
 
     #[test]

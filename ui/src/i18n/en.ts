@@ -218,6 +218,10 @@ export default {
     category_kind_mismatch: 'Category type must match its parent',
     category_has_children: 'A category with subcategories cannot be merged',
     merge_into_self: 'A category cannot be merged into itself',
+    invalid_period: 'Invalid period',
+    budget_negative: 'Budget cannot be negative',
+    budget_too_large: 'Budget is too large',
+    budget_income_category: 'Budgets are for expense categories only',
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema

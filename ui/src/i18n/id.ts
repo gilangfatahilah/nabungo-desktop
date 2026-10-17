@@ -218,6 +218,10 @@ export default {
     category_kind_mismatch: 'Jenis kategori harus sama dengan induknya',
     category_has_children: 'Kategori yang punya subkategori tidak bisa digabung',
     merge_into_self: 'Kategori tidak bisa digabung dengan dirinya sendiri',
+    invalid_period: 'Periode tidak valid',
+    budget_negative: 'Budget tidak boleh negatif',
+    budget_too_large: 'Budget terlalu besar',
+    budget_income_category: 'Budget hanya untuk kategori pengeluaran',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }

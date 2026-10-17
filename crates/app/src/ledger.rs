@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use nabungo_core::{CatalogError, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind};
+use nabungo_core::{
+    BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft, TxnError, TxnKind,
+};
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
 use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
@@ -36,6 +38,10 @@ pub enum AppError {
     Duplicate(&'static str),
     #[error("onboarding already completed")]
     AlreadyOnboarded,
+    #[error(transparent)]
+    Budget(#[from] BudgetError),
+    #[error(transparent)]
+    Period(#[from] PeriodError),
 }
 
 impl AppError {
