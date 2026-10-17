@@ -140,6 +140,8 @@ export default {
     txn_overflow: 'Total amount exceeds the limit',
     txn_valuation_non_investment: 'Revaluation is only for investment accounts',
     txn_opening_posting_count: 'Opening balance must have exactly one posting',
+    txn_split_mismatch: 'Split total must equal the amount',
+    txn_not_positive: 'Amount must be greater than 0',
     amount_empty: 'Amount is empty',
     amount_invalid: 'Invalid amount format',
     amount_fractional: 'Amount must be a whole number',

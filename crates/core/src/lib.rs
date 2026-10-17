@@ -8,6 +8,7 @@
 pub mod amount;
 pub mod catalog;
 pub mod date;
+pub mod form;
 pub mod kinds;
 pub mod money;
 pub mod networth;
@@ -19,6 +20,7 @@ pub use catalog::{
     CatalogError, MAX_NAME_LEN, MergeSide, ParentInfo, check_merge, check_parent, normalize_name,
     validate_credit_limit, validate_statement_day,
 };
+pub use form::{Fee, FormBody, PostingSpec, SplitLine, form_postings};
 pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
 pub use networth::{NetWorth, net_worth};

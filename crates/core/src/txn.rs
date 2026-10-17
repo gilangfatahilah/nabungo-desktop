@@ -67,6 +67,11 @@ pub enum TxnError {
     ValuationNonInvestment,
     #[error("opening balance needs exactly 1 posting, got {0}")]
     OpeningPostingCount(usize),
+    /// Selisih nominal − Σ baris split.
+    #[error("split total differs from the amount by {0}")]
+    SplitMismatch(i64),
+    #[error("amount must be positive")]
+    NotPositive,
 }
 
 /// Draft yang sudah lolos [`validate`]. Field privat: satu-satunya cara membuatnya adalah

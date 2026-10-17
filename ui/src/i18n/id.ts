@@ -140,6 +140,8 @@ export default {
     txn_overflow: 'Total nominal melebihi batas',
     txn_valuation_non_investment: 'Penilaian ulang hanya untuk akun investasi',
     txn_opening_posting_count: 'Saldo awal harus memiliki tepat satu posting',
+    txn_split_mismatch: 'Total split harus sama dengan nominal',
+    txn_not_positive: 'Nominal harus lebih dari 0',
     amount_empty: 'Nominal belum diisi',
     amount_invalid: 'Format nominal tidak valid',
     amount_fractional: 'Nominal tidak boleh berpecahan',
