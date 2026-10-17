@@ -46,4 +46,34 @@ describe('CategoriesView', () => {
     expect(archive).toHaveBeenCalledWith('makan')
     w.unmount()
   })
+
+  it('segmented control mengganti jenis; anak menjorok; arsip terlipat', async () => {
+    const store = useCategoriesStore()
+    store.list = [
+      makan,
+      { ...makan, id: 'resto', parentId: 'makan', name: 'Restoran' },
+      { ...makan, id: 'gaji', kind: 'income', name: 'Gaji' },
+      { ...makan, id: 'lama', name: 'Rokok', archived: true },
+    ]
+    store.loaded = true
+    vi.spyOn(store, 'load').mockResolvedValue()
+    const w = mount(CategoriesView, { global: { plugins: [i18n] }, attachTo: document.body })
+    await flushPromises()
+
+    const rows = w.findAll('[data-testid="category-row"]')
+    expect(rows.map((r) => [r.get('[data-part="name"]').text(), r.attributes('data-depth')])).toEqual([['Makan', '0'], ['Restoran', '1']])
+    expect(w.text()).not.toContain('Gaji')
+
+    const income = w.findAll('[role="tab"]').find((t) => t.text() === id.categories.income)!
+    await income.trigger('mousedown', { button: 0 })
+    await flushPromises()
+    expect(w.findAll('[data-testid="category-row"]').map((r) => r.get('[data-part="name"]').text())).toEqual(['Gaji'])
+
+    const toggle = w.get('[data-testid="archived-toggle"]')
+    expect(toggle.text()).toContain(`${id.categories.archived} (1)`)
+    expect(w.text()).not.toContain('Rokok')
+    await toggle.trigger('click')
+    expect(w.text()).toContain('Rokok')
+    w.unmount()
+  })
 })

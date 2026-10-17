@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ChevronDown, EllipsisVertical, Plus } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { ChevronRight, EllipsisVertical, Plus } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CategoryFormDialog from '@/components/CategoryFormDialog.vue'
@@ -8,7 +9,7 @@ import MergeCategoryDialog from '@/components/MergeCategoryDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { IpcFailure, type CategoryDto, type CategoryKindDto } from '@/ipc'
 import { buildTree } from '@/lib/categories'
 import { colorClass } from '@/lib/colors'
@@ -28,6 +29,8 @@ const trees = computed(() => ({
   income: buildTree(store.list, 'income', { archived: false }),
 }))
 const archived = computed(() => store.list.filter((c) => c.archived).sort((a, b) => a.name.localeCompare(b.name)))
+// Aksi baris tampil saat hover/fokus (§9.4); tetap terlihat selama menunya terbuka.
+const reveal = 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-[state=open]:opacity-100'
 const hasChildren = (c: CategoryDto) => store.list.some((x) => x.parentId === c.id && !x.archived)
 
 onMounted(() => {
@@ -128,65 +131,70 @@ function restore(c: CategoryDto) {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-3xl flex-col gap-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold">{{ t('nav.categories') }}</h1>
+  <PageHeader :title="t('nav.categories')">
+    <template #actions>
+      <!-- Segmented control jenis kategori di header (docs/design/ui-guidelines.md §9.4). -->
+      <Tabs v-model="tab">
+        <TabsList>
+          <TabsTrigger v-for="k in KINDS" :key="k" :value="k" class="px-3">{{ t(`categories.${k}`) }}</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <Button @click="create()"><Plus /> {{ t('categories.new') }}</Button>
-    </header>
-
-    <Tabs v-model="tab">
-      <TabsList>
-        <TabsTrigger v-for="k in KINDS" :key="k" :value="k">{{ t(`categories.${k}`) }}</TabsTrigger>
-      </TabsList>
-      <TabsContent v-for="k in KINDS" :key="k" :value="k" class="rounded-lg border p-3">
-        <ul class="flex flex-col">
-          <template v-for="node in trees[k]" :key="node.category.id">
-            <li v-for="(c, ci) in [node.category, ...node.children]" :key="c.id"
-              :class="cn('flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/60', ci > 0 && 'ml-8')">
-              <span :class="cn('flex size-7 shrink-0 items-center justify-center rounded-md', colorClass(c.color))">
-                <component :is="iconFor(c.icon)" class="size-4" />
-              </span>
-              <span class="min-w-0 flex-1 truncate" :class="ci === 0 && 'font-medium'">{{ c.name }}</span>
-              <Button v-if="ci === 0" variant="ghost" size="icon-sm" :aria-label="t('categories.newSub')"
-                :title="t('categories.newSub')" @click="create(c.id)">
-                <Plus />
+    </template>
+  </PageHeader>
+  <div class="-mx-2 flex flex-col gap-6">
+    <ul class="flex flex-col">
+      <template v-for="node in trees[tab]" :key="node.category.id">
+        <li
+          v-for="(c, ci) in [node.category, ...node.children]" :key="c.id"
+          data-testid="category-row" :data-depth="ci === 0 ? 0 : 1"
+          :class="cn('group/row flex items-center gap-3 rounded-lg px-2 hover:bg-muted', ci === 0 ? 'h-12' : 'ml-6 h-10')"
+        >
+          <span :class="cn('flex size-7 shrink-0 items-center justify-center rounded-md', colorClass(c.color))">
+            <component :is="iconFor(c.icon)" class="size-4" />
+          </span>
+          <span data-part="name" class="min-w-0 flex-1 truncate" :class="ci === 0 && 'font-medium'">{{ c.name }}</span>
+          <Button
+            v-if="ci === 0" variant="ghost" size="xs" :class="reveal" :title="t('categories.newSub')" @click="create(c.id)"
+          >
+            <Plus /> {{ t('categories.sub') }}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button variant="ghost" size="icon" :class="cn('size-8', reveal)" :aria-label="t('actions.more')" :data-testid="`category-menu-${c.id}`">
+                <EllipsisVertical />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="icon-sm" :aria-label="t('actions.more')" :data-testid="`category-menu-${c.id}`">
-                    <EllipsisVertical />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem @select="edit(c)">{{ t('actions.edit') }}</DropdownMenuItem>
-                  <DropdownMenuItem @select="merge(c)">{{ t('categories.merge') }}…</DropdownMenuItem>
-                  <DropdownMenuItem @select="archive(c)">{{ t('actions.archive') }}</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" @select="remove(c)">{{ t('actions.delete') }}</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </li>
-          </template>
-          <li v-if="!trees[k].length" class="px-2 py-2 text-sm text-muted-foreground">{{ t('categories.empty') }}</li>
-        </ul>
-      </TabsContent>
-    </Tabs>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem @select="edit(c)">{{ t('actions.edit') }}</DropdownMenuItem>
+              <DropdownMenuItem @select="merge(c)">{{ t('categories.merge') }}…</DropdownMenuItem>
+              <DropdownMenuItem @select="archive(c)">{{ t('actions.archive') }}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" @select="remove(c)">{{ t('actions.delete') }}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </li>
+      </template>
+      <li v-if="!trees[tab].length" class="flex h-12 items-center px-2 text-meta text-muted-foreground">{{ t('categories.empty') }}</li>
+    </ul>
 
-    <Collapsible v-if="archived.length" class="rounded-lg border p-3">
+    <Collapsible v-if="archived.length" v-slot="{ open }">
       <CollapsibleTrigger as-child>
-        <Button variant="ghost" class="w-full justify-between">
+        <Button variant="ghost" size="sm" data-testid="archived-toggle" class="text-muted-foreground">
+          <ChevronRight class="transition-transform" :class="open && 'rotate-90'" />
           {{ t('categories.archived') }} ({{ archived.length }})
-          <ChevronDown />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <ul class="flex flex-col">
-          <li v-for="c in archived" :key="c.id" class="flex items-center gap-2 px-1 py-1.5">
-            <component :is="iconFor(c.icon)" class="size-4 text-muted-foreground" />
-            <span class="flex-1 truncate">{{ c.name }}</span>
-            <span class="text-xs text-muted-foreground">{{ t(`categories.${c.kind}`) }}</span>
-            <Button variant="ghost" size="sm" @click="restore(c)">{{ t('actions.restore') }}</Button>
-            <Button variant="ghost" size="sm" class="text-destructive" @click="remove(c)">{{ t('actions.delete') }}</Button>
+          <li v-for="c in archived" :key="c.id" class="group/row flex h-10 items-center gap-3 rounded-lg px-2 hover:bg-muted">
+            <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+              <component :is="iconFor(c.icon)" class="size-4" />
+            </span>
+            <span class="min-w-0 flex-1 truncate text-muted-foreground">{{ c.name }}</span>
+            <span class="text-meta text-muted-foreground">{{ t(`categories.${c.kind}`) }}</span>
+            <Button variant="ghost" size="xs" @click="restore(c)">{{ t('actions.restore') }}</Button>
+            <Button variant="ghost" size="xs" class="text-destructive" @click="remove(c)">{{ t('actions.delete') }}</Button>
           </li>
         </ul>
       </CollapsibleContent>

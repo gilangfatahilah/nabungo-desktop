@@ -1,4 +1,4 @@
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/plus-jakarta-sans";
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -24,6 +24,7 @@
   --color-income: var(--income);
   --color-expense: var(--expense);
   --color-transfer: var(--transfer);
+  --color-warning: var(--warning);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -42,87 +43,119 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Radius berhierarki (docs/design/ui-guidelines.md §6). Komponen reka-nova memakai
+     rounded-lg untuk kontrol & menu, rounded-xl untuk kartu/dialog. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: var(--radius);
+  --radius-2xl: 12px;
+  /* Skala teks (§5); body = text-sm (14/20). */
+  --text-display: 2rem;
+  --text-display--line-height: 2.375rem;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.75rem;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.5rem;
+  --text-meta: 0.78125rem;
+  --text-meta--line-height: 1rem;
 }
 
+/* Palet "Nila" — docs/design/ui-guidelines.md §4. Kanvas = sidebar/hover, Lembar = konten.
+   Kontras teks (light, vs Lembar/Kanvas): tinta 16.5/15.2, pudar 6.0/5.5, nila 8.0/7.4,
+   masuk 5.3/4.9, keluar 5.9/5.5, waspada 5.4/5.0. */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  /* Kontras vs background >= 4.5:1: income 5.6, expense 6.7, transfer 4.7 */
-  --income: oklch(0.5 0.14 150);
-  --expense: oklch(0.5 0.2 27);
+  --radius: 10px;
+  --background: #ffffff;
+  --foreground: #17202a;
+  --card: #ffffff;
+  --card-foreground: #17202a;
+  --popover: #ffffff;
+  --popover-foreground: #17202a;
+  --primary: #24508f;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f6f8;
+  --secondary-foreground: #17202a;
+  --muted: #f4f6f8;
+  --muted-foreground: #5b6472;
+  --accent: #f4f6f8;
+  --accent-foreground: #17202a;
+  --destructive: #b4382f;
+  --border: #e1e5ea;
+  --input: #cfd5dc;
+  --ring: #24508f;
+  --income: #1e7a4f;
+  --expense: #b4382f;
   --transfer: var(--muted-foreground);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --warning: #9a5b00;
+  --chart-1: #24508f;
+  --chart-2: #1e7a4f;
+  --chart-3: #b4382f;
+  --chart-4: #9a5b00;
+  --chart-5: #5b6472;
+  --sidebar: #f4f6f8;
+  --sidebar-foreground: #17202a;
+  --sidebar-primary: #24508f;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #17202a;
+  --sidebar-border: #e1e5ea;
+  --sidebar-ring: #24508f;
 }
 
+/* Kontras teks (dark, vs Lembar/Kanvas): tinta 13.6/14.9, pudar 6.3/7.0, nila 7.5/8.3,
+   masuk 7.6/8.3, keluar 6.8/7.5, waspada 7.9/8.7. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  /* Kontras vs background gelap: income 9.5, expense 7.4, transfer 7.6 */
-  --income: oklch(0.75 0.17 150);
-  --expense: oklch(0.72 0.17 22);
+  --background: #1a1f27;
+  --foreground: #e6e9ee;
+  --card: #1a1f27;
+  --card-foreground: #e6e9ee;
+  --popover: #1f252e;
+  --popover-foreground: #e6e9ee;
+  --primary: #8fb0e8;
+  --primary-foreground: #0e1a2e;
+  --secondary: #12161c;
+  --secondary-foreground: #e6e9ee;
+  --muted: #12161c;
+  --muted-foreground: #98a1ae;
+  --accent: #232a34;
+  --accent-foreground: #e6e9ee;
+  --destructive: #f08a80;
+  --border: #2a313b;
+  --input: #3a434f;
+  --ring: #8fb0e8;
+  --income: #5cc38e;
+  --expense: #f08a80;
   --transfer: var(--muted-foreground);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --warning: #e5a84b;
+  --chart-1: #8fb0e8;
+  --chart-2: #5cc38e;
+  --chart-3: #f08a80;
+  --chart-4: #e5a84b;
+  --chart-5: #98a1ae;
+  --sidebar: #12161c;
+  --sidebar-foreground: #e6e9ee;
+  --sidebar-primary: #8fb0e8;
+  --sidebar-primary-foreground: #0e1a2e;
+  --sidebar-accent: #1a1f27;
+  --sidebar-accent-foreground: #e6e9ee;
+  --sidebar-border: #2a313b;
+  --sidebar-ring: #8fb0e8;
+}
+
+/* Angka uang: figur tabular agar kolom sejajar (§5). */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @layer base {

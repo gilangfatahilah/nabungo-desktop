@@ -55,17 +55,22 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 <template>
   <template v-if="route.meta.bare">
     <RouterView />
-    <Toaster />
+    <Toaster :visible-toasts="1" />
   </template>
   <SidebarProvider v-else>
     <AppSidebar />
-    <SidebarInset class="h-screen overflow-auto">
-      <div class="flex-1 p-6">
+    <!-- Konten rata kiri, max-width 1120 + padding 32 (docs/design/ui-guidelines.md §7.1). -->
+    <SidebarInset class="h-screen overflow-auto bg-background">
+      <div
+        class="flex min-h-0 w-full flex-1 flex-col px-8 pt-6 pb-8"
+        :class="!route.meta.wide && 'max-w-[calc(1120px+4rem)]'"
+      >
         <RouterView />
       </div>
     </SidebarInset>
     <CommandPalette />
     <NewTxnSheet />
-    <Toaster />
+    <!-- Saat sheet transaksi (440px) terbuka, toast bergeser ke kiri agar tidak menutup tombol Simpan. -->
+    <Toaster :visible-toasts="1" :offset="ui.txnEditor ? { right: 464, bottom: 24 } : undefined" />
   </SidebarProvider>
 </template>

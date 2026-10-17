@@ -7,7 +7,7 @@ import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
 import type { TxnFormDto } from '@/ipc'
-import { todayIso } from '@/lib/date'
+import { formatDateInput, todayIso } from '@/lib/date'
 import { useUiStore } from '@/stores/ui'
 
 // Sheet di-teleport ke body: query lewat document.
@@ -167,7 +167,7 @@ describe('TxnForm', () => {
     const txnId = await ipc.createTxn(expense({ date: '2026-10-02', note: 'asli' }))
     const before = (await txns()).total
     await openSheet((u) => u.openDuplicateTxn(txnId))
-    expect($('#txn-date').value).toBe(todayIso())
+    expect($('#txn-date').value).toBe(formatDateInput(todayIso(), 'id'))
     expect($<HTMLTextAreaElement>('#txn-note').value).toBe('asli')
     await key('#txn-amount', 'Enter', { ctrlKey: true })
     const page = await txns()
@@ -182,5 +182,21 @@ describe('TxnForm', () => {
     const i = focusable.indexOf($('#txn-amount'))
     expect(i).toBeGreaterThanOrEqual(0)
     expect(focusable[i + 1]?.id).toBe('txn-category')
+  })
+
+  it('tag & catatan terlipat di transaksi baru dan terbuka lewat tombol', async () => {
+    await openSheet((u) => u.openNewTxn())
+    expect($('#txn-note')).toBeNull()
+    await click('[data-testid="txn-more"]')
+    expect($('#txn-note')).not.toBeNull()
+    expect($('#txn-tags')).not.toBeNull()
+  })
+
+  it('nominal punya addon Rp dan tombol simpan di footer yang tidak ikut scroll', async () => {
+    await openSheet((u) => u.openNewTxn())
+    expect($<HTMLElement>('[data-testid="txn-amount-prefix"]').textContent).toBe('Rp')
+    const footer = $<HTMLElement>('[data-testid="txn-form-footer"]')
+    expect(footer.querySelector('button[type="submit"]')).not.toBeNull()
+    expect(footer.closest('[data-testid="txn-form-body"]')).toBeNull()
   })
 })

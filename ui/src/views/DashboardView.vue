@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { onMounted } from 'vue'
 import MoneyText from '@/components/MoneyText.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,12 +14,13 @@ onMounted(() => {
 </script>
 
 <template>
+  <PageHeader :title="$t('nav.dashboard')" />
   <Card class="max-w-sm" data-testid="net-worth-card">
     <CardHeader>
       <CardTitle>{{ $t('dashboard.netWorth') }}</CardTitle>
     </CardHeader>
     <CardContent class="flex flex-col gap-2">
-      <MoneyText :amount="accounts.overview.netWorth.net" class="text-3xl font-semibold" />
+      <MoneyText :amount="accounts.overview.netWorth.net" size="display" />
       <dl class="grid grid-cols-2 gap-1 text-sm">
         <dt class="text-muted-foreground">{{ $t('accounts.assets') }}</dt>
         <dd class="text-right"><MoneyText :amount="accounts.overview.netWorth.assets" /></dd>

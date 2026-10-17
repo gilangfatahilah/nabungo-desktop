@@ -20,3 +20,11 @@ describe('groupByDate', () => {
     expect(groupByDate([])).toEqual([])
   })
 })
+
+describe('formatDateHeader', () => {
+  it('tanggal diikuti nama hari sesuai locale', async () => {
+    const { formatDateHeader } = await import('./txnList')
+    expect(formatDateHeader('2026-10-16', 'id')).toBe('16 Okt 2026, Jumat')
+    expect(formatDateHeader('2026-10-16', 'en')).toBe('Oct 16, 2026, Friday')
+  })
+})

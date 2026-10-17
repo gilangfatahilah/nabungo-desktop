@@ -2,6 +2,7 @@
 import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AmountInput from '@/components/AmountInput.vue'
+import DateInput from '@/components/DateInput.vue'
 import IconColorPicker from '@/components/IconColorPicker.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -40,6 +41,7 @@ const error = ref<string | null>(null)
 const amountError = ref<string | null>(null)
 const busy = ref(false)
 
+const dateInput = useTemplateRef<{ commit(): boolean }>('dateInput')
 const amountInputs = [useTemplateRef<{ commit(): Promise<boolean> }>('openingInput'), useTemplateRef<{ commit(): Promise<boolean> }>('limitInput')]
 
 const editing = computed(() => props.account !== undefined)
@@ -79,7 +81,7 @@ function fields(): AccountFieldsDto {
 
 async function submit() {
   if (busy.value) return
-  const ok = await Promise.all(amountInputs.map((r) => r.value?.commit() ?? true))
+  const ok = await Promise.all([dateInput.value?.commit() ?? true, ...amountInputs.map((r) => r.value?.commit() ?? true)])
   if (!ok.every(Boolean) || amountError.value) return
   // Cek cepat di UI; validasi sebenarnya tetap di Rust.
   if (name.value.trim() === '') {
@@ -142,7 +144,7 @@ async function submit() {
           </div>
           <div class="flex flex-col gap-2">
             <Label for="acc-opening-date">{{ t('accounts.openingDate') }}</Label>
-            <Input id="acc-opening-date" v-model="openingDate" type="date" />
+            <DateInput id="acc-opening-date" ref="dateInput" v-model="openingDate" />
           </div>
           <template v-if="isCredit">
             <div class="flex flex-col gap-2" data-testid="credit-limit">

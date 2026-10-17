@@ -42,14 +42,19 @@ if (!props.archived) {
 </script>
 
 <template>
-  <ul ref="list" :data-group="groupId ?? ''" class="flex min-h-10 flex-col">
+  <ul ref="list" :data-group="groupId ?? ''" class="flex min-h-12 flex-col">
     <li
       v-for="(a, i) in accounts"
       :key="a.id"
       :data-id="a.id"
-      class="group/row flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/60"
+      data-testid="account-row"
+      class="group/row relative flex h-12 items-center gap-3 rounded-lg px-2 hover:bg-muted"
     >
-      <span v-if="!archived" data-drag class="cursor-grab text-muted-foreground opacity-0 group-hover/row:opacity-100" aria-hidden="true">
+      <!-- Pegangan seret di gutter kiri agar kolom ikon tetap sejajar dengan header grup. -->
+      <span
+        v-if="!archived" data-drag aria-hidden="true"
+        class="absolute -left-4 cursor-grab text-muted-foreground opacity-0 group-hover/row:opacity-100"
+      >
         <GripVertical class="size-4" />
       </span>
       <span :class="cn('flex size-7 shrink-0 items-center justify-center rounded-md', colorClass(a.color))">
@@ -57,14 +62,19 @@ if (!props.archived) {
       </span>
       <span class="min-w-0 flex-1">
         <span class="block truncate">{{ a.name }}</span>
-        <span class="block text-xs text-muted-foreground">
+        <span class="block text-meta text-muted-foreground">
           {{ $t(`accountKinds.${a.kind}`) }}<template v-if="!a.includeInNetWorth"> · ∉ {{ $t('accounts.netWorth') }}</template>
         </span>
       </span>
       <MoneyText :amount="a.balance" :kind="balanceTone(a)" />
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
-          <Button variant="ghost" size="icon-sm" :aria-label="$t('actions.more')"><EllipsisVertical /></Button>
+          <Button
+            variant="ghost" size="icon" class="size-8 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-[state=open]:opacity-100"
+            :aria-label="$t('actions.more')"
+          >
+            <EllipsisVertical />
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <template v-if="archived">
@@ -85,6 +95,6 @@ if (!props.archived) {
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
-    <li v-if="!accounts.length" class="px-2 py-2 text-sm text-muted-foreground">{{ $t('accounts.empty') }}</li>
+    <li v-if="!accounts.length" class="flex h-12 items-center px-2 text-meta text-muted-foreground">{{ $t('accounts.empty') }}</li>
   </ul>
 </template>

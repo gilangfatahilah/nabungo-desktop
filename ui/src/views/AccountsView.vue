@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ChevronDown, EllipsisVertical, Plus } from '@lucide/vue'
+import PageHeader from '@/components/PageHeader.vue'
+import { ChevronRight, EllipsisVertical, Plus } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AccountFormDialog from '@/components/AccountFormDialog.vue'
@@ -166,39 +167,39 @@ async function saveGroup() {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-3xl flex-col gap-6">
-    <header class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-semibold">{{ t('nav.accounts') }}</h1>
-        <p class="text-sm text-muted-foreground">
-          {{ t('accounts.netWorth') }}: <MoneyText :amount="store.overview.netWorth.net" class="font-medium text-foreground" />
-        </p>
-      </div>
-      <div class="flex gap-2">
-        <Button variant="outline" @click="openGroup(null)">{{ t('accounts.newGroup') }}</Button>
-        <Button @click="newAccount()"><Plus /> {{ t('accounts.new') }}</Button>
-      </div>
-    </header>
-
-    <section v-for="(s, si) in sections" :key="s.group?.id ?? 'none'" class="rounded-lg border p-3">
-      <div class="mb-1 flex items-center gap-2 px-1">
-        <h2 class="flex-1 font-medium">{{ s.group?.name ?? t('accounts.noGroup') }}</h2>
-        <MoneyText :amount="s.subtotal" class="text-sm text-muted-foreground" />
-        <Button variant="ghost" size="icon-sm" :aria-label="t('accounts.new')" @click="newAccount(s.group?.id ?? null)">
-          <Plus />
-        </Button>
-        <DropdownMenu v-if="s.group">
+  <PageHeader :title="t('nav.accounts')">
+    {{ t('accounts.netWorth') }} <MoneyText :amount="store.overview.netWorth.net" class="font-medium text-foreground" />
+    <template #actions>
+      <Button variant="outline" @click="openGroup(null)">{{ t('accounts.newGroup') }}</Button>
+      <Button @click="newAccount()"><Plus /> {{ t('accounts.new') }}</Button>
+    </template>
+  </PageHeader>
+  <!-- Tabel datar per grup, header grup dengan subtotal (docs/design/ui-guidelines.md §9.3). -->
+  <div class="-mx-2 flex flex-col gap-6">
+    <section v-for="(s, si) in sections" :key="s.group?.id ?? 'none'">
+      <div data-testid="account-group" class="group/head flex h-10 items-center gap-3 border-b px-2">
+        <h2 class="flex-1 truncate font-medium">{{ s.group?.name ?? t('accounts.noGroup') }}</h2>
+        <MoneyText data-testid="group-subtotal" :amount="s.subtotal" class="font-medium" />
+        <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon-sm" :aria-label="t('actions.more')"><EllipsisVertical /></Button>
+            <Button
+              variant="ghost" size="icon" class="size-8 opacity-0 group-hover/head:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+              :aria-label="t('actions.more')"
+            >
+              <EllipsisVertical />
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem @select="openGroup(s.group)">{{ t('actions.rename') }}</DropdownMenuItem>
-            <DropdownMenuItem :disabled="si === 0" @select="moveGroup(s.group, -1)">{{ t('actions.moveUp') }}</DropdownMenuItem>
-            <DropdownMenuItem :disabled="si === groups.length - 1" @select="moveGroup(s.group, 1)">
-              {{ t('actions.moveDown') }}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" @select="removeGroup(s.group)">{{ t('accounts.deleteGroup') }}</DropdownMenuItem>
+            <DropdownMenuItem @select="newAccount(s.group?.id ?? null)">{{ t('accounts.new') }}</DropdownMenuItem>
+            <template v-if="s.group">
+              <DropdownMenuItem @select="openGroup(s.group)">{{ t('actions.rename') }}</DropdownMenuItem>
+              <DropdownMenuItem :disabled="si === 0" @select="moveGroup(s.group, -1)">{{ t('actions.moveUp') }}</DropdownMenuItem>
+              <DropdownMenuItem :disabled="si === groups.length - 1" @select="moveGroup(s.group, 1)">
+                {{ t('actions.moveDown') }}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" @select="removeGroup(s.group)">{{ t('accounts.deleteGroup') }}</DropdownMenuItem>
+            </template>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -212,11 +213,11 @@ async function saveGroup() {
       />
     </section>
 
-    <Collapsible v-if="archived.length" class="rounded-lg border p-3">
+    <Collapsible v-if="archived.length" v-slot="{ open }">
       <CollapsibleTrigger as-child>
-        <Button variant="ghost" class="w-full justify-between">
+        <Button variant="ghost" size="sm" data-testid="archived-toggle" class="text-muted-foreground">
+          <ChevronRight class="transition-transform" :class="open && 'rotate-90'" />
           {{ t('accounts.archived') }} ({{ archived.length }})
-          <ChevronDown />
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>

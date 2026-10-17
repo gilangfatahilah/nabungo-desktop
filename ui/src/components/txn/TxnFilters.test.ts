@@ -34,16 +34,39 @@ describe('TxnFilters', () => {
   it('nominal min memakai parser nominal; kosong = tanpa batas', async () => {
     const store = useTransactionsStore()
     const spy = vi.spyOn(store, 'setQuery').mockResolvedValue()
+    const w = mount(TxnFilters, { global: { plugins: [i18n] }, attachTo: document.body })
+    // Nominal ada di popover "+ Filter" (§8.6).
+    await w.find('[data-testid="filter-more"]').trigger('click')
+    await flushPromises()
+    const min = document.body.querySelector<HTMLInputElement>('[data-testid="filter-min"]')!
+    for (const [text, want] of [['25rb', 25_000], ['', null]] as const) {
+      min.value = text
+      min.dispatchEvent(new Event('input', { bubbles: true }))
+      await flushPromises() // Input (useVModel passive) meneruskan nilai di tick berikutnya.
+      min.dispatchEvent(new Event('change', { bubbles: true }))
+      await flushPromises()
+      expect(spy).toHaveBeenLastCalledWith({ amountMin: want })
+    }
+    w.unmount()
+  })
+
+  it('filter tambahan tampil sebagai chip yang bisa dihapus', async () => {
+    const store = useTransactionsStore()
+    store.query.tag = 'kantor'
+    const spy = vi.spyOn(store, 'setQuery').mockResolvedValue()
     const w = mount(TxnFilters, { global: { plugins: [i18n] } })
-    const min = w.find<HTMLInputElement>('[data-testid="filter-min"]')
-    await min.setValue('25rb')
-    await min.trigger('change')
-    await flushPromises()
-    expect(spy).toHaveBeenLastCalledWith({ amountMin: 25_000 })
-    await min.setValue('')
-    await min.trigger('change')
-    await flushPromises()
-    expect(spy).toHaveBeenLastCalledWith({ amountMin: null })
+    const chip = w.find('[data-testid="chip-tag"]')
+    expect(chip.text()).toContain('#kantor')
+    await chip.find('button').trigger('click')
+    expect(spy).toHaveBeenCalledWith({ tag: null })
+  })
+
+  it('jumlah hasil di kanan; hapus semua hanya saat ada filter', async () => {
+    const store = useTransactionsStore()
+    store.total = 12
+    const w = mount(TxnFilters, { global: { plugins: [i18n] } })
+    expect(w.find('[data-testid="filter-count"]').text()).toBe('12 transaksi')
+    expect(w.find('[data-testid="filter-reset"]').exists()).toBe(false)
   })
 
   it('reset mengosongkan semua filter', async () => {
