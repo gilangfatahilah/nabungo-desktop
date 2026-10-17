@@ -1,3 +1,4 @@
+use nabungo_core::PeriodStartDay;
 use nabungo_storage::setting;
 
 use crate::{AppError, Ledger};
@@ -24,7 +25,8 @@ pub struct UiSettings {
 }
 
 const KEY_THEME: &str = "ui.theme";
-const KEY_LOCALE: &str = "ui.locale";
+pub(crate) const KEY_LOCALE: &str = "ui.locale";
+pub(crate) const KEY_PERIOD_START_DAY: &str = "budget.period_start_day";
 
 impl Theme {
     fn as_str(self) -> &'static str {
@@ -46,7 +48,7 @@ impl Theme {
 }
 
 impl Locale {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Locale::Id => "id",
             Locale::En => "en",
@@ -77,6 +79,21 @@ impl Ledger {
     pub fn set_theme(&mut self, theme: Theme) -> Result<(), AppError> {
         let tx = self.conn.transaction()?;
         setting::set_setting(&tx, KEY_THEME, theme.as_str())?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Hilang/tak valid → tanggal 1.
+    pub fn period_start_day(&self) -> Result<PeriodStartDay, AppError> {
+        Ok(setting::get_setting(&self.conn, KEY_PERIOD_START_DAY)?
+            .and_then(|v| v.parse::<u8>().ok())
+            .and_then(|d| PeriodStartDay::new(d).ok())
+            .unwrap_or(PeriodStartDay::FIRST))
+    }
+
+    pub fn set_period_start_day(&mut self, day: PeriodStartDay) -> Result<(), AppError> {
+        let tx = self.conn.transaction()?;
+        setting::set_setting(&tx, KEY_PERIOD_START_DAY, &day.day().to_string())?;
         tx.commit()?;
         Ok(())
     }
@@ -117,6 +134,24 @@ mod tests {
                 locale: Locale::En
             }
         );
+    }
+
+    #[test]
+    fn period_start_day_default_and_roundtrip() {
+        let mut l = Ledger::open_in_memory().unwrap();
+        assert_eq!(l.period_start_day().unwrap(), PeriodStartDay::FIRST);
+        l.set_period_start_day(PeriodStartDay::new(25).unwrap())
+            .unwrap();
+        assert_eq!(l.period_start_day().unwrap().day(), 25);
+        for bad in ["99", "abc"] {
+            l.conn
+                .execute(
+                    "UPDATE setting SET value = ?1 WHERE key = 'budget.period_start_day'",
+                    [bad],
+                )
+                .unwrap();
+            assert_eq!(l.period_start_day().unwrap(), PeriodStartDay::FIRST);
+        }
     }
 
     #[test]
