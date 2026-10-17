@@ -87,6 +87,12 @@ impl From<AppError> for IpcError {
             AppError::NotFound(entity) => Self::with_entity(ErrorCode::NotFound, entity),
             AppError::Archived(entity) => Self::with_entity(ErrorCode::Archived, entity),
             AppError::OpeningNotAllowed => Self::code(ErrorCode::OpeningNotAllowed),
+            // Sementara; kode spesifik ditambahkan bersama command akun/kategori.
+            AppError::Catalog(_)
+            | AppError::Money(_)
+            | AppError::InUse(_)
+            | AppError::Duplicate(_)
+            | AppError::AlreadyOnboarded => Self::code(ErrorCode::Internal),
         }
     }
 }

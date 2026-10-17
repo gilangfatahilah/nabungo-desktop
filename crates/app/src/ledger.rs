@@ -2,8 +2,10 @@
 
 use std::path::Path;
 
-use nabungo_core::{AccountRef, CategoryKind, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn};
-use nabungo_storage::account::{self, NewAccount};
+use nabungo_core::{
+    CatalogError, CategoryKind, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn,
+};
+use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
 use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
 use time::Date;
@@ -21,9 +23,30 @@ pub enum AppError {
     NotFound(&'static str),
     #[error("{0} is archived")]
     Archived(&'static str),
-    /// Saldo awal hanya dibuat oleh `create_account`, tidak lewat `record`.
-    #[error("opening balance can only be set when creating an account")]
+    /// Saldo awal hanya diatur lewat form akun, tidak lewat `record`.
+    #[error("opening balance can only be set from the account form")]
     OpeningNotAllowed,
+    #[error(transparent)]
+    Catalog(#[from] CatalogError),
+    #[error(transparent)]
+    Money(#[from] MoneyError),
+    /// Akun/kategori masih dipakai; tawarkan arsip/merge.
+    #[error("{0} is in use")]
+    InUse(&'static str),
+    #[error("{0} name already exists")]
+    Duplicate(&'static str),
+    #[error("onboarding already completed")]
+    AlreadyOnboarded,
+}
+
+impl AppError {
+    /// `StorageError::Duplicate` → `AppError::Duplicate(entity)`; selain itu apa adanya.
+    pub(crate) fn duplicate_as(entity: &'static str) -> impl Fn(StorageError) -> AppError {
+        move |e| match e {
+            StorageError::Duplicate => AppError::Duplicate(entity),
+            e => AppError::Storage(e),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,38 +128,6 @@ impl Ledger {
         })
     }
 
-    /// Buat akun; saldo awal ≠ 0 dicatat sebagai transaksi `opening`.
-    pub fn create_account(
-        &mut self,
-        new: NewAccount,
-        opening_balance: i64,
-        opening_date: Date,
-    ) -> Result<Uuid, AppError> {
-        let now = now_utc();
-        let tx = self.conn.transaction()?;
-        let id = account::insert_account(&tx, &new, &now)?;
-        if opening_balance != 0 {
-            let draft = TxnDraft {
-                kind: TxnKind::Opening,
-                date: opening_date,
-                note: None,
-                postings: vec![PostingDraft {
-                    account: AccountRef {
-                        id,
-                        kind: new.kind,
-                        currency: new.currency,
-                    },
-                    category: None,
-                    amount: opening_balance,
-                    memo: None,
-                }],
-            };
-            txn::insert_txn(&tx, &ValidTxn::new(draft)?, &now)?;
-        }
-        tx.commit()?;
-        Ok(id)
-    }
-
     pub fn create_category(&mut self, kind: CategoryKind, name: &str) -> Result<Uuid, AppError> {
         let tx = self.conn.transaction()?;
         let id = category::insert_category(&tx, kind, name, None)?;
@@ -212,7 +203,7 @@ fn resolve(conn: &Connection, input: &TxnInput) -> Result<TxnDraft, AppError> {
 }
 
 /// Transaksi baru tidak boleh menyentuh akun/kategori yang sudah diarsip.
-fn active<T>(found: Option<Lookup<T>>, what: &'static str) -> Result<T, AppError> {
+pub(crate) fn active<T>(found: Option<Lookup<T>>, what: &'static str) -> Result<T, AppError> {
     match found {
         None => Err(AppError::NotFound(what)),
         Some(l) if l.archived => Err(AppError::Archived(what)),
@@ -223,14 +214,16 @@ fn active<T>(found: Option<Lookup<T>>, what: &'static str) -> Result<T, AppError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nabungo_core::{AccountKind, CurrencyCode};
+    use crate::AccountFields;
+    use nabungo_core::AccountKind;
     use time::macros::date;
 
     const D: Date = date!(2026 - 10 - 12);
 
     fn bank(ledger: &mut Ledger, opening: i64) -> Uuid {
-        let new = NewAccount::new("BCA", AccountKind::Bank, CurrencyCode::IDR);
-        ledger.create_account(new, opening, D).unwrap()
+        ledger
+            .create_account(AccountKind::Bank, &AccountFields::new("BCA", opening, D))
+            .unwrap()
     }
 
     fn txn_count(ledger: &Ledger) -> i64 {

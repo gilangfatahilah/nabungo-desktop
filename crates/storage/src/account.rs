@@ -296,15 +296,22 @@ pub fn has_non_opening_postings(conn: &Connection, id: Uuid) -> Result<bool> {
     )?)
 }
 
+/// Hard-delete transaksi saldo awal akun (postings ikut via CASCADE). Saldo awal bukan
+/// transaksi user, jadi tidak lewat soft delete/undo.
+pub fn delete_opening(tx: &Transaction, id: Uuid) -> Result<()> {
+    tx.execute(
+        "DELETE FROM txn WHERE kind = 'opening'
+           AND id IN (SELECT txn_id FROM posting WHERE account_id = ?1)",
+        [id.to_string()],
+    )?;
+    Ok(())
+}
+
 /// Hapus akun beserta transaksi saldo awal (postings ikut via CASCADE) dan
 /// `allocation_mapping`-nya. Pemanggil wajib cek [`has_non_opening_postings`] dulu.
 pub fn delete_account(tx: &Transaction, id: Uuid) -> Result<bool> {
     let key = id.to_string();
-    tx.execute(
-        "DELETE FROM txn WHERE kind = 'opening'
-           AND id IN (SELECT txn_id FROM posting WHERE account_id = ?1)",
-        [&key],
-    )?;
+    delete_opening(tx, id)?;
     tx.execute(
         "DELETE FROM allocation_mapping WHERE account_id = ?1",
         [&key],

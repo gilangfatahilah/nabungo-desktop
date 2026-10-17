@@ -1,6 +1,5 @@
-use nabungo_app::{Ledger, TxnInput};
-use nabungo_core::{AccountKind, CategoryKind, CurrencyCode, TxnKind};
-use nabungo_storage::account::NewAccount;
+use nabungo_app::{AccountFields, Ledger, TxnInput};
+use nabungo_core::{AccountKind, CategoryKind, TxnKind};
 use proptest::prelude::*;
 use time::macros::date;
 
@@ -38,8 +37,8 @@ proptest! {
             .iter()
             .enumerate()
             .map(|(i, &o)| {
-                let new = NewAccount::new(format!("A{i}"), AccountKind::Bank, CurrencyCode::IDR);
-                ledger.create_account(new, o, d).unwrap()
+                let fields = AccountFields::new(format!("A{i}"), o, d);
+                ledger.create_account(AccountKind::Bank, &fields).unwrap()
             })
             .collect();
         let salary = ledger.create_category(CategoryKind::Income, "Gaji").unwrap();
