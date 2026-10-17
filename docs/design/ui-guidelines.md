@@ -51,9 +51,9 @@ Token didefinisikan sebagai CSS variable di `ui/src/style.css` (`:root` dan `.da
 |---|---|---|---|---|
 | **Tinta** | teks utama | `#17202A` | `#E6E9EE` | `--foreground` |
 | **Tinta pudar** | teks sekunder, meta | `#5B6472` | `#98A1AE` | `--muted-foreground` |
-| **Kanvas** | latar aplikasi & sidebar | `#F4F6F8` | `#12161C` | `--background`, `--sidebar` |
-| **Lembar** | permukaan konten, sheet, dialog | `#FFFFFF` | `#1A1F27` | `--card`, `--popover` |
-| **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border`, `--input` |
+| **Kanvas** | sidebar, hover, latar muted | `#F4F6F8` | `#12161C` | `--sidebar`, `--muted`, `--secondary`, `--accent` (light) |
+| **Lembar** | area konten, sheet, dialog | `#FFFFFF` | `#1A1F27` | `--background`, `--card`, `--popover` |
+| **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border` (border input sedikit lebih gelap: `--input` `#CFD5DC` / `#3A434F`) |
 | **Nila** | aksi utama, fokus, seleksi | `#24508F` | `#8FB0E8` | `--primary`, `--ring` |
 
 Teks di atas Nila memakai `#FFFFFF` (light) / `#0E1A2E` (dark).
