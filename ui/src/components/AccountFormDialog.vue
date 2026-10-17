@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AmountInput from '@/components/AmountInput.vue'
 import IconColorPicker from '@/components/IconColorPicker.vue'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import type { AccountDto, AccountFieldsDto, AccountKindDto } from '@/ipc'
-import { ACCOUNT_KINDS, KIND_ICONS } from '@/lib/accounts'
+import { ACCOUNT_KINDS, isLiability, KIND_ICONS, openingSign } from '@/lib/accounts'
 import { todayIso } from '@/lib/date'
 import { errorMessage, type Translate } from '@/lib/errors'
 import { useAccountsStore } from '@/stores/accounts'
@@ -40,6 +40,8 @@ const error = ref<string | null>(null)
 const amountError = ref<string | null>(null)
 const busy = ref(false)
 
+const amountInputs = [useTemplateRef<{ commit(): Promise<boolean> }>('openingInput'), useTemplateRef<{ commit(): Promise<boolean> }>('limitInput')]
+
 const editing = computed(() => props.account !== undefined)
 const isCredit = computed(() => kind.value === 'credit_card')
 
@@ -48,7 +50,7 @@ function reset() {
   kind.value = a?.kind ?? 'bank'
   name.value = a?.name ?? ''
   group.value = (a ? a.groupId : props.groupId) ?? NO_GROUP
-  opening.value = a?.openingBalance ?? 0
+  opening.value = a ? a.openingBalance * openingSign(a.kind) : 0
   openingDate.value = a?.openingDate ?? todayIso()
   includeInNetWorth.value = a?.includeInNetWorth ?? true
   creditLimit.value = a?.creditLimit ?? 0
@@ -70,13 +72,15 @@ function fields(): AccountFieldsDto {
     statementDay: isCredit.value && statementDay.value !== '' ? Number(statementDay.value) : null,
     icon: icon.value,
     color: color.value,
-    openingBalance: opening.value,
+    openingBalance: opening.value * openingSign(kind.value),
     openingDate: openingDate.value,
   }
 }
 
 async function submit() {
-  if (busy.value || amountError.value) return
+  if (busy.value) return
+  const ok = await Promise.all(amountInputs.map((r) => r.value?.commit() ?? true))
+  if (!ok.every(Boolean) || amountError.value) return
   // Cek cepat di UI; validasi sebenarnya tetap di Rust.
   if (name.value.trim() === '') {
     error.value = t('errors.name_empty')
@@ -133,8 +137,8 @@ async function submit() {
             </Select>
           </div>
           <div class="flex flex-col gap-2">
-            <Label for="acc-opening">{{ t('accounts.openingBalance') }}</Label>
-            <AmountInput id="acc-opening" v-model="opening" @error="amountError = $event" />
+            <Label for="acc-opening">{{ isLiability(kind) ? t('accounts.openingDebt') : t('accounts.openingBalance') }}</Label>
+            <AmountInput id="acc-opening" ref="openingInput" v-model="opening" @error="amountError = $event" />
           </div>
           <div class="flex flex-col gap-2">
             <Label for="acc-opening-date">{{ t('accounts.openingDate') }}</Label>
@@ -143,7 +147,7 @@ async function submit() {
           <template v-if="isCredit">
             <div class="flex flex-col gap-2" data-testid="credit-limit">
               <Label for="acc-limit">{{ t('accounts.creditLimit') }}</Label>
-              <AmountInput id="acc-limit" v-model="creditLimit" @error="amountError = $event" />
+              <AmountInput id="acc-limit" ref="limitInput" v-model="creditLimit" @error="amountError = $event" />
             </div>
             <div class="flex flex-col gap-2" data-testid="statement-day">
               <Label for="acc-statement">{{ t('accounts.statementDay') }}</Label>

@@ -18,17 +18,22 @@ watch(model, (v) => {
   if (!invalid.value) text.value = String(v)
 })
 
-async function commit() {
+/** Parse teks sekarang. Form wajib `await commit()` sebelum membaca model: Enter/klik submit bisa mendahului blur. */
+async function commit(): Promise<boolean> {
   try {
     model.value = await parseAmount(text.value)
     text.value = String(model.value)
     invalid.value = false
     emit('error', null)
+    return true
   } catch (e) {
     invalid.value = true
     emit('error', errorMessage(e, t as unknown as Translate))
+    return false
   }
 }
+
+defineExpose({ commit })
 </script>
 
 <template>

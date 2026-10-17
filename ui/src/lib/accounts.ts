@@ -20,6 +20,14 @@ export const KIND_ICONS: Record<AccountKindDto, string> = {
   loan: 'building-2',
 }
 
+/** Sama dengan `AccountKind::is_liability` di Rust: saldonya negatif saat berutang. */
+export function isLiability(kind: AccountKindDto): boolean {
+  return kind === 'credit_card' || kind === 'loan'
+}
+
+/** Form meminta utang sebagai angka positif; saldo awal liabilitas disimpan negatif. */
+export const openingSign = (kind: AccountKindDto) => (isLiability(kind) ? -1 : 1)
+
 const bySort = <T extends { sortOrder: number }>(a: T, b: T) => a.sortOrder - b.sortOrder
 
 function section(group: AccountGroupDto | null, accounts: AccountDto[]): GroupSection {

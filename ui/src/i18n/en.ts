@@ -55,6 +55,7 @@ export default {
     group: 'Group',
     noGroup: 'No group',
     openingBalance: 'Opening balance',
+    openingDebt: 'Current debt',
     openingDate: 'Opening balance date',
     includeInNetWorth: 'Include in net worth',
     creditLimit: 'Credit limit',

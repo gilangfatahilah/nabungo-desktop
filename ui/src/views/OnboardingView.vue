@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AmountInput from '@/components/AmountInput.vue'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { completeOnboarding, type AccountKindDto, type LocaleDto } from '@/ipc'
-import { ACCOUNT_KINDS } from '@/lib/accounts'
+import { ACCOUNT_KINDS, isLiability, openingSign } from '@/lib/accounts'
 import { todayIso } from '@/lib/date'
 import { withErrorToast } from '@/lib/notify'
 import { useSettingsStore } from '@/stores/settings'
@@ -26,6 +26,7 @@ const name = ref('')
 const balance = ref(0)
 const amountError = ref<string | null>(null)
 const busy = ref(false)
+const balanceInput = useTemplateRef<{ commit(): Promise<boolean> }>('balanceInput')
 
 const canSubmit = computed(() => name.value.trim() !== '' && !amountError.value && !busy.value)
 
@@ -35,6 +36,7 @@ function onLocale(v: unknown) {
 
 async function submit() {
   if (!canSubmit.value) return
+  if (balanceInput.value && !(await balanceInput.value.commit())) return
   busy.value = true
   await withErrorToast(async () => {
     await completeOnboarding({
@@ -49,7 +51,7 @@ async function submit() {
         statementDay: null,
         icon: null,
         color: null,
-        openingBalance: balance.value,
+        openingBalance: balance.value * openingSign(kind.value),
         openingDate: todayIso(),
       },
     })
@@ -106,8 +108,8 @@ async function submit() {
             </Select>
           </div>
           <div class="flex flex-col gap-2">
-            <Label for="ob-balance">{{ t('onboarding.openingBalance') }}</Label>
-            <AmountInput id="ob-balance" v-model="balance" @error="amountError = $event" />
+            <Label for="ob-balance">{{ isLiability(kind) ? t('accounts.openingDebt') : t('onboarding.openingBalance') }}</Label>
+            <AmountInput id="ob-balance" ref="balanceInput" v-model="balance" @error="amountError = $event" />
           </div>
         </div>
         <p v-if="amountError" class="text-sm text-destructive" role="alert">{{ amountError }}</p>

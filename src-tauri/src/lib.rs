@@ -104,4 +104,15 @@ mod tests {
             .export(bindings_exporter(), BINDINGS_PATH)
             .expect("gagal ekspor bindings");
     }
+
+    /// File-drop native Tauri menelan event drag HTML5 di WebView2, sehingga
+    /// reorder akun (SortableJS) mati di Windows.
+    #[test]
+    fn native_file_drop_disabled() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        for w in conf["app"]["windows"].as_array().unwrap() {
+            assert_eq!(w["dragDropEnabled"], serde_json::Value::Bool(false));
+        }
+    }
 }

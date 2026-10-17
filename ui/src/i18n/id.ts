@@ -55,6 +55,7 @@ export default {
     group: 'Grup',
     noGroup: 'Tanpa grup',
     openingBalance: 'Saldo awal',
+    openingDebt: 'Utang saat ini',
     openingDate: 'Tanggal saldo awal',
     includeInNetWorth: 'Hitung di kekayaan bersih',
     creditLimit: 'Limit kartu',
