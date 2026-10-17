@@ -13,20 +13,24 @@ mod ledger;
 mod onboarding;
 mod payee;
 mod settings;
+mod transactions;
 
 pub use accounts::{AccountFields, AccountsOverview};
 pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::date::{format_date, parse_date};
 pub use nabungo_core::{
-    AccountKind, AmountParseError, CatalogError, CategoryKind, MoneyError, NetWorth, PeriodError,
-    PeriodStartDay, TxnError, parse_amount,
+    AccountKind, AmountParseError, CatalogError, CategoryKind, Fee, FormBody, MoneyError, NetWorth,
+    PeriodError, PeriodStartDay, SplitLine, TxnError, TxnKind, parse_amount,
 };
 pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::category::CategoryRow;
+pub use nabungo_storage::txn::PostingRecord;
+pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use settings::{Locale, Theme, UiSettings};
 pub use time::Date;
+pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;

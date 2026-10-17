@@ -1,8 +1,9 @@
 //! Use case pencatatan: resolve input berbasis ID → validasi domain → simpan atomik.
 
+use std::collections::HashSet;
 use std::path::Path;
 
-use nabungo_core::{CatalogError, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind, ValidTxn};
+use nabungo_core::{CatalogError, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind};
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
 use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
@@ -63,6 +64,8 @@ pub struct TxnInput {
     pub payee: Option<String>,
     pub note: Option<String>,
     pub postings: Vec<PostingInput>,
+    /// Nama tag; dinormalisasi (trim, tanpa `#` di depan) dan di-dedupe saat disimpan.
+    pub tags: Vec<String>,
 }
 
 impl TxnInput {
@@ -78,6 +81,7 @@ impl TxnInput {
             date,
             payee: None,
             note: None,
+            tags: vec![],
             postings: vec![PostingInput {
                 account_id,
                 category_id,
@@ -95,6 +99,7 @@ impl TxnInput {
             date,
             payee: None,
             note: None,
+            tags: vec![],
             postings: vec![
                 PostingInput {
                     account_id: from,
@@ -134,11 +139,8 @@ impl Ledger {
         if input.kind == TxnKind::Opening {
             return Err(AppError::OpeningNotAllowed);
         }
-        let now = now_utc();
         let tx = self.conn.transaction()?;
-        let valid = ValidTxn::new(resolve(&tx, input)?)?;
-        let payee = crate::payee::resolve_payee(&tx, input.payee.as_deref())?;
-        let id = txn::insert_txn(&tx, &valid, payee, &now)?;
+        let id = crate::transactions::write_txn(&tx, None, input, &HashSet::new())?;
         tx.commit()?;
         Ok(id)
     }
@@ -172,14 +174,28 @@ impl Ledger {
     }
 }
 
-fn resolve(conn: &Connection, input: &TxnInput) -> Result<TxnDraft, AppError> {
+/// `archived_ok`: ID akun/kategori yang boleh sudah diarsip (dipakai versi lama transaksi
+/// yang sedang diedit).
+pub(crate) fn resolve(
+    conn: &Connection,
+    input: &TxnInput,
+    archived_ok: &HashSet<Uuid>,
+) -> Result<TxnDraft, AppError> {
     let postings = input
         .postings
         .iter()
         .map(|p| {
-            let account = active(account::get_account_ref(conn, p.account_id)?, "account")?;
+            let account = usable(
+                account::get_account_ref(conn, p.account_id)?,
+                archived_ok.contains(&p.account_id),
+                "account",
+            )?;
             let category = match p.category_id {
-                Some(id) => Some(active(category::get_category_ref(conn, id)?, "category")?),
+                Some(id) => Some(usable(
+                    category::get_category_ref(conn, id)?,
+                    archived_ok.contains(&id),
+                    "category",
+                )?),
                 None => None,
             };
             Ok(PostingDraft {
@@ -196,6 +212,17 @@ fn resolve(conn: &Connection, input: &TxnInput) -> Result<TxnDraft, AppError> {
         note: input.note.clone(),
         postings,
     })
+}
+
+fn usable<T>(
+    found: Option<Lookup<T>>,
+    archived_ok: bool,
+    what: &'static str,
+) -> Result<T, AppError> {
+    match found {
+        Some(l) if archived_ok => Ok(l.value),
+        found => active(found, what),
+    }
 }
 
 /// Transaksi baru tidak boleh menyentuh akun/kategori yang sudah diarsip.
