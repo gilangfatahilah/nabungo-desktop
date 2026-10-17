@@ -6,15 +6,22 @@
 #![deny(clippy::float_arithmetic)]
 
 pub mod amount;
+pub mod catalog;
 pub mod date;
 pub mod kinds;
 pub mod money;
+pub mod networth;
 pub mod period;
 pub mod txn;
 
 pub use amount::{AmountParseError, parse_amount};
+pub use catalog::{
+    CatalogError, MAX_NAME_LEN, MergeSide, ParentInfo, check_merge, check_parent, normalize_name,
+    validate_credit_limit, validate_statement_day,
+};
 pub use kinds::{AccountKind, CategoryKind, TxnKind};
 pub use money::{CurrencyCode, Money, MoneyError};
+pub use networth::{NetWorth, net_worth};
 pub use period::{BudgetPeriod, PeriodError, PeriodStartDay, period_of};
 pub use txn::{
     AccountRef, CategoryRef, MAX_AMOUNT, PostingDraft, TxnDraft, TxnError, ValidTxn, validate,
