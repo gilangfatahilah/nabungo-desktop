@@ -12,6 +12,7 @@ pub mod payee;
 pub mod setting;
 pub mod tag;
 pub mod txn;
+pub mod txn_list;
 
 pub use rusqlite;
 
