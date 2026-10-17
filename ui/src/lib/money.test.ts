@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatIdr, moneyParts } from './money'
+import { formatCompact, formatIdr, moneyParts } from './money'
 
 describe('formatIdr', () => {
   it('formats rupiah with dot thousands separator', () => {
@@ -27,5 +27,14 @@ describe('moneyParts', () => {
 
   it('follows the en locale grouping', () => {
     expect(moneyParts(1250000, 'en').number).toBe('1,250,000')
+  })
+})
+
+describe('formatCompact', () => {
+  it('meringkas nominal besar untuk sumbu grafik', () => {
+    expect(formatCompact(11_520_000, 'id')).toBe('11,5\u00a0jt')
+    expect(formatCompact(11_520_000, 'en')).toBe('11.5M')
+    expect(formatCompact(-2_000, 'id')).toBe('−2\u00a0rb')
+    expect(formatCompact(0, 'id')).toBe('0')
   })
 })
