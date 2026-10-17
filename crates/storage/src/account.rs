@@ -351,7 +351,7 @@ mod tests {
                 .collect(),
         })
         .unwrap();
-        insert_txn(tx, &txn, &now_utc()).unwrap()
+        insert_txn(tx, &txn, None, &now_utc()).unwrap()
     }
 
     fn row(conn: &Connection, id: Uuid) -> AccountRow {

@@ -8,6 +8,7 @@ use rusqlite_migration::{M, Migrations};
 pub mod account;
 pub mod account_group;
 pub mod category;
+pub mod payee;
 pub mod setting;
 pub mod txn;
 

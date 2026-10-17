@@ -12,6 +12,7 @@ mod categories;
 #[allow(dead_code)]
 mod defaults;
 mod ledger;
+mod payee;
 mod settings;
 
 pub use accounts::{AccountFields, AccountsOverview};
@@ -24,4 +25,5 @@ pub use nabungo_core::{
 pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::category::CategoryRow;
+pub use payee::PayeeSuggestion;
 pub use settings::{Locale, Theme, UiSettings};

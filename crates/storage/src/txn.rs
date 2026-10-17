@@ -6,16 +6,22 @@ use uuid::Uuid;
 use crate::Result;
 
 /// Simpan header + postings. Hanya menerima [`ValidTxn`], jadi invariant sudah dicek di core.
-pub fn insert_txn(tx: &Transaction, txn: &ValidTxn, now: &str) -> Result<Uuid> {
+pub fn insert_txn(
+    tx: &Transaction,
+    txn: &ValidTxn,
+    payee_id: Option<Uuid>,
+    now: &str,
+) -> Result<Uuid> {
     let draft = txn.draft();
     let id = Uuid::now_v7();
     tx.execute(
-        "INSERT INTO txn (id, kind, date, note, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        "INSERT INTO txn (id, kind, date, payee_id, note, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
         params![
             id.to_string(),
             draft.kind.as_str(),
             format_date(draft.date),
+            payee_id.map(|p| p.to_string()),
             draft.note,
             now
         ],
@@ -164,6 +170,7 @@ mod tests {
         insert_txn(
             &tx,
             &draft(TxnKind::Opening, vec![(a, None, 500_000)]),
+            None,
             &now,
         )
         .unwrap();
@@ -173,6 +180,7 @@ mod tests {
                 TxnKind::Transfer,
                 vec![(a, None, -200_000), (b, None, 200_000)],
             ),
+            None,
             &now,
         )
         .unwrap();
@@ -189,6 +197,7 @@ mod tests {
         let id = insert_txn(
             &tx,
             &draft(TxnKind::Opening, vec![(a, None, 500_000)]),
+            None,
             &now,
         )
         .unwrap();
@@ -229,6 +238,7 @@ mod tests {
             insert_txn(
                 &tx,
                 &draft(TxnKind::Opening, vec![(a, None, 1)]),
+                None,
                 &now_utc(),
             )
             .unwrap();

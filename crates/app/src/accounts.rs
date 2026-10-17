@@ -103,7 +103,7 @@ fn insert_opening(
             memo: None,
         }],
     };
-    txn::insert_txn(tx, &ValidTxn::new(draft)?, now)?;
+    txn::insert_txn(tx, &ValidTxn::new(draft)?, None, now)?;
     Ok(())
 }
 

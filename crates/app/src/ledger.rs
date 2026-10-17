@@ -59,6 +59,8 @@ pub struct PostingInput {
 pub struct TxnInput {
     pub kind: TxnKind,
     pub date: Date,
+    /// Nama payee bebas; kosong = tanpa payee. Dicocokkan tanpa membedakan huruf besar/kecil.
+    pub payee: Option<String>,
     pub note: Option<String>,
     pub postings: Vec<PostingInput>,
 }
@@ -74,6 +76,7 @@ impl TxnInput {
         Self {
             kind,
             date,
+            payee: None,
             note: None,
             postings: vec![PostingInput {
                 account_id,
@@ -90,6 +93,7 @@ impl TxnInput {
         Self {
             kind: TxnKind::Transfer,
             date,
+            payee: None,
             note: None,
             postings: vec![
                 PostingInput {
@@ -133,7 +137,8 @@ impl Ledger {
         let now = now_utc();
         let tx = self.conn.transaction()?;
         let valid = ValidTxn::new(resolve(&tx, input)?)?;
-        let id = txn::insert_txn(&tx, &valid, &now)?;
+        let payee = crate::payee::resolve_payee(&tx, input.payee.as_deref())?;
+        let id = txn::insert_txn(&tx, &valid, payee, &now)?;
         tx.commit()?;
         Ok(id)
     }
