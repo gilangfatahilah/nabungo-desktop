@@ -11,6 +11,7 @@ import { withErrorToast } from '@/lib/notify'
 import { shouldIgnoreAction } from '@/lib/overlay'
 import { createShortcutHandler, type ShortcutAction } from '@/lib/shortcuts'
 import { useAccountsStore } from '@/stores/accounts'
+import { useCategoriesStore } from '@/stores/categories'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
@@ -19,12 +20,14 @@ const ui = useUiStore()
 const router = useRouter()
 const route = useRoute()
 const accounts = useAccountsStore()
+const categories = useCategoriesStore()
 
-// Akun baru dimuat setelah onboarding selesai (layar `bare` tidak menampilkan sidebar).
+// Akun & kategori baru dimuat setelah onboarding selesai (layar `bare` tidak menampilkan sidebar).
 watch(
   () => route.name !== undefined && !route.meta.bare,
   (ready) => {
     if (ready && !accounts.loaded) void withErrorToast(() => accounts.load())
+    if (ready && !categories.loaded) void withErrorToast(() => categories.load())
   },
   { immediate: true },
 )
