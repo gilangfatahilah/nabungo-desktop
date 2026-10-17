@@ -309,3 +309,64 @@ describe('browser ledger alokasi (paritas Rust)', () => {
     expect(await L.allocationHistory('2026-13', 2)).toMatchObject(err('invalid_period'))
   })
 })
+
+describe('browser ledger laporan (paritas Rust)', () => {
+  // Periode 2028 dipakai agar transaksi test lain (2026–2027) tidak ikut terhitung.
+  const create = (kind: 'bank' | 'credit_card' | 'investment', name: string, opening: number, openingDate: string) =>
+    data(L.createAccount(kind, {
+      name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: opening, openingDate,
+    }))
+  const line = (categoryId: string, amount: number) => [{ categoryId, amount, memo: null }]
+
+  it('cashflow excludes transfers and valuation', async () => {
+    await data(L.setPeriodStartDay(1))
+    const bank = await create('bank', 'Bank L', 0, '2028-01-01')
+    const dompet = await create('bank', 'Dompet L', 0, '2028-01-01')
+    const rdn = await create('investment', 'RDN L', 0, '2028-01-01')
+    const [gaji, kopi, fee] = [await category('income', 'Gaji L'), await category('expense', 'Kopi L'), await category('expense', 'Biaya L')]
+    await data(L.createTxn(form({ kind: 'income', accountId: bank, date: '2028-05-01', amount: 8_000_000, splits: line(gaji, 8_000_000) })))
+    await data(L.createTxn(form({ accountId: bank, date: '2028-05-02', amount: 25_000, splits: line(kopi, 25_000) })))
+    await data(L.createTxn(form({ accountId: bank, date: '2028-05-03', amount: -5_000, splits: line(kopi, -5_000) })))
+    await data(L.createTxn(form({ kind: 'transfer', accountId: bank, toAccountId: dompet, date: '2028-05-04', amount: 200_000, fee: { amount: 6_500, categoryId: fee } })))
+    await data(L.recordValuation(rdn, '2028-05-05', 750_000))
+    const r = await data(L.cashflowReport('2028-05', 2))
+    expect(r).toEqual([
+      { period: '2028-04', from: '2028-04-01', to: '2028-04-30', income: 0, expense: 0, net: 0 },
+      { period: '2028-05', from: '2028-05-01', to: '2028-05-31', income: 8_000_000, expense: 26_500, net: 7_973_500 },
+    ])
+    expect(await data(L.cashflowReport('2028-05', 200))).toHaveLength(24)
+    expect(await data(L.cashflowReport('2028-05', 0))).toHaveLength(1)
+    expect(await L.cashflowReport('2028-13', 1)).toMatchObject({ status: 'error', error: { code: 'invalid_period' } })
+  })
+
+  it('breakdown rolls up to root', async () => {
+    const bank = await create('bank', 'Bank B', 0, '2028-01-01')
+    const makan = await category('expense', 'Makan B')
+    const [resto, kopi] = [await category('expense', 'Resto B', makan), await category('expense', 'Kopi B', makan)]
+    const transport = await category('expense', 'Transport B')
+    for (const [c, amount] of [[resto, 50_000], [kopi, 25_000], [transport, 60_000]] as const) {
+      await data(L.createTxn(form({ accountId: bank, date: '2028-06-03', amount, splits: line(c, amount) })))
+    }
+    expect(await data(L.categoryBreakdown('2028-06', 'expense'))).toEqual([
+      { categoryId: makan, amount: 75_000 },
+      { categoryId: transport, amount: 60_000 },
+    ])
+    expect(await data(L.categoryBreakdown('2028-06', 'income'))).toEqual([])
+  })
+
+  it('net worth history per period end', async () => {
+    const before = await data(L.netWorthHistory('2028-09', 3))
+    expect(before.map((p) => [p.period, p.date])).toEqual([['2028-07', '2028-07-31'], ['2028-08', '2028-08-31'], ['2028-09', '2028-09-30']])
+    await create('bank', 'Bank N', 1_000_000, '2028-07-05')
+    const cc = await create('credit_card', 'Kartu N', 0, '2028-07-01')
+    const rdn = await create('investment', 'RDN N', 0, '2028-07-01')
+    const belanja = await category('expense', 'Belanja N')
+    await data(L.createTxn(form({ accountId: cc, date: '2028-08-10', amount: 200_000, splits: line(belanja, 200_000) })))
+    await data(L.recordValuation(rdn, '2028-09-15', 500_000))
+    const after = await data(L.netWorthHistory('2028-09', 3))
+    expect(after.map((p, i) => p.net - before[i]!.net)).toEqual([1_000_000, 800_000, 1_300_000])
+    expect(after[1]!.liabilities - before[1]!.liabilities).toBe(200_000)
+    expect(after.every((p) => p.net === p.assets - p.liabilities)).toBe(true)
+  })
+})

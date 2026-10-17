@@ -3,10 +3,10 @@
 use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
     AllocationPoint, BucketFields, BucketRow, BudgetOverview, BudgetPeriod, BudgetRow,
-    CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth,
-    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail,
-    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
-    parse_date,
+    CashflowPoint, CategoryAmount, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
+    Locale, NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PeriodStartDay,
+    PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery,
+    UiSettings, Uuid, ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -957,6 +957,71 @@ impl From<AllocationPoint> for AllocationPointDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CashflowPointDto {
+    pub period: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub income: i64,
+    /// Positif = keluar.
+    pub expense: i64,
+    pub net: i64,
+}
+
+impl From<CashflowPoint> for CashflowPointDto {
+    fn from(p: CashflowPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            from: format_date(p.from),
+            to: format_date(p.to),
+            income: p.income,
+            expense: p.expense,
+            net: p.net,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryAmountDto {
+    /// Kategori root.
+    pub category_id: String,
+    pub amount: i64,
+}
+
+impl From<CategoryAmount> for CategoryAmountDto {
+    fn from(c: CategoryAmount) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NetWorthPointDto {
+    pub period: String,
+    pub date: String,
+    pub assets: i64,
+    pub liabilities: i64,
+    pub net: i64,
+}
+
+impl From<NetWorthPoint> for NetWorthPointDto {
+    fn from(p: NetWorthPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            date: format_date(p.date),
+            assets: p.assets,
+            liabilities: p.liabilities,
+            net: p.net,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -973,6 +1038,23 @@ mod tests {
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
         }
+    }
+
+    #[test]
+    fn cashflow_point_serializes_camel_case() {
+        let p = CashflowPoint {
+            period: BudgetPeriod::new(2026, 10).unwrap(),
+            from: parse_date("2026-09-25").unwrap(),
+            to: parse_date("2026-10-24").unwrap(),
+            income: 10,
+            expense: 3,
+            net: 7,
+        };
+        assert_eq!(
+            serde_json::to_value(CashflowPointDto::from(p)).unwrap(),
+            serde_json::json!({ "period": "2026-10", "from": "2026-09-25", "to": "2026-10-24",
+                "income": 10, "expense": 3, "net": 7 })
+        );
     }
 
     #[test]

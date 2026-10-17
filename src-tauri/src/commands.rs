@@ -7,10 +7,11 @@ use tauri::State;
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-    AllocationPointDto, AppInfo, BucketFieldsDto, BudgetOverviewDto, CategoryDto,
-    CategoryFieldsDto, CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ShareDto,
-    ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
-    ValuationPointDto, parse_day, parse_id, parse_period,
+    AllocationPointDto, AppInfo, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
+    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, ThemeDto, TxnDetailDto,
+    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -486,6 +487,56 @@ pub fn allocation_history(
     let end = parse_period(&end_period)?;
     Ok(ledger(&state)?
         .allocation_history(end, count)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+// --- Laporan ---
+
+/// Income/expense per periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
+#[tauri::command]
+#[specta::specta]
+pub fn cashflow_report(
+    state: State<'_, AppState>,
+    end_period: String,
+    count: u8,
+) -> Result<Vec<CashflowPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    Ok(ledger(&state)?
+        .cashflow_report(end, count)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Total per kategori root dalam satu periode, nominal terbesar dulu.
+#[tauri::command]
+#[specta::specta]
+pub fn category_breakdown(
+    state: State<'_, AppState>,
+    period: String,
+    kind: CategoryKindDto,
+) -> Result<Vec<CategoryAmountDto>, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?
+        .category_breakdown(period, kind.into())?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
+#[tauri::command]
+#[specta::specta]
+pub fn net_worth_history(
+    state: State<'_, AppState>,
+    end_period: String,
+    count: u8,
+) -> Result<Vec<NetWorthPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    Ok(ledger(&state)?
+        .net_worth_history(end, count)?
         .into_iter()
         .map(Into::into)
         .collect())

@@ -62,6 +62,9 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::delete_bucket,
             commands::set_account_allocation,
             commands::allocation_history,
+            commands::cashflow_report,
+            commands::category_breakdown,
+            commands::net_worth_history,
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()

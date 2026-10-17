@@ -10,11 +10,14 @@ import {
   type AppInfo,
   type BucketFieldsDto,
   type BudgetOverviewDto,
+  type CashflowPointDto,
+  type CategoryAmountDto,
   type CategoryDto,
   type CategoryFieldsDto,
   type CategoryKindDto,
   type IpcError,
   type LocaleDto,
+  type NetWorthPointDto,
   type OnboardingDto,
   type ThemeDto,
   type TxnDetailDto,
@@ -43,7 +46,10 @@ export type {
   BucketDto,
   BucketFieldsDto,
   BudgetOverviewDto,
+  CashflowPointDto,
+  CategoryAmountDto,
   MappingDto,
+  NetWorthPointDto,
   ShareDto,
   UnallocatedDto,
   ValuationPointDto,
@@ -311,4 +317,21 @@ export async function setAccountAllocation(accountId: string, shares: ShareDto[]
 /** `count` periode berakhir di `endPeriod`, terlama dulu. */
 export function allocationHistory(endPeriod: string, count: number): Promise<AllocationPointDto[]> {
   return unwrap(api().allocationHistory(endPeriod, count))
+}
+
+// --- Laporan ---
+
+/** `count` periode (maks. 24) berakhir di `endPeriod`, terlama dulu. */
+export function cashflowReport(endPeriod: string, count: number): Promise<CashflowPointDto[]> {
+  return unwrap(api().cashflowReport(endPeriod, count))
+}
+
+/** Total per kategori root, nominal terbesar dulu; kategori bernilai 0 tidak muncul. */
+export function categoryBreakdown(period: string, kind: CategoryKindDto): Promise<CategoryAmountDto[]> {
+  return unwrap(api().categoryBreakdown(period, kind))
+}
+
+/** Net worth per akhir periode, `count` periode (maks. 24) berakhir di `endPeriod`. */
+export function netWorthHistory(endPeriod: string, count: number): Promise<NetWorthPointDto[]> {
+  return unwrap(api().netWorthHistory(endPeriod, count))
 }

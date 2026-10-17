@@ -3,7 +3,7 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, BucketActualDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
@@ -483,6 +483,66 @@ function allocationOverview(): AllocationOverviewDto {
   return { buckets: buckets.map((b) => ({ ...b })), mappings: state.mappings.map((m) => ({ ...m })), ...report }
 }
 
+// --- Laporan (cermin app `reports.rs`) ---
+
+const MAX_PERIODS = 24
+
+/** `count` periode berakhir di `end`, terlama dulu; `count` di-clamp ke `1..=24` seperti Rust. */
+function periodsEnding(end: Period, count: number): Period[] {
+  const n = Math.min(Math.max(Math.trunc(count), 1), MAX_PERIODS)
+  return Array.from({ length: n }, (_, i) => browserPeriod.shift(end, i - n + 1))
+}
+
+/** Σ posting per kategori dalam `[from, toEx)`; posting tanpa kategori (transfer, valuation, opening) tidak ikut. */
+function categoryTotals(from: string, toEx: string): Map<string, number> {
+  const totals = new Map<string, number>()
+  for (const t of activeTxns()) {
+    if (t.date < from || t.date >= toEx) continue
+    for (const x of t.postings) if (x.categoryId) totals.set(x.categoryId, (totals.get(x.categoryId) ?? 0) + x.amount)
+  }
+  return totals
+}
+
+function cashflowPoint(p: Period): CashflowPointDto {
+  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
+  let income = 0
+  let expense = 0
+  for (const [c, amount] of categoryTotals(from, toEx)) {
+    const kind = state.categories.find((x) => x.id === c)?.kind
+    if (kind === 'income') income += amount
+    else if (kind === 'expense') expense -= amount
+  }
+  return { period: browserPeriod.key(p), from, to: previousDay(toEx), income, expense, net: income - expense }
+}
+
+function categoryBreakdown(p: Period, kind: CategoryKindDto): CategoryAmountDto[] {
+  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
+  const roots = new Map<string, number>()
+  for (const [c, amount] of categoryTotals(from, toEx)) {
+    const cat = state.categories.find((x) => x.id === c)
+    if (cat?.kind !== kind) continue
+    const root = cat.parentId ?? cat.id
+    roots.set(root, (roots.get(root) ?? 0) + (kind === 'income' ? amount : -amount))
+  }
+  const name = (c: string) => state.categories.find((x) => x.id === c)?.name ?? ''
+  return [...roots]
+    .filter(([, amount]) => amount > 0)
+    .map(([categoryId, amount]) => ({ categoryId, amount }))
+    .sort((a, b) => b.amount - a.amount || (name(a.categoryId) < name(b.categoryId) ? -1 : name(a.categoryId) > name(b.categoryId) ? 1 : 0))
+}
+
+function netWorthPoint(p: Period): NetWorthPointDto {
+  const date = previousDay(browserPeriod.range(p, state.periodStartDay)[1])
+  let assets = 0
+  let liabilities = 0
+  for (const b of balancesAsOf(date)) {
+    if (!b.includeInNetWorth) continue
+    if (LIABILITIES.includes(b.kind)) liabilities -= b.balance
+    else assets += b.balance
+  }
+  return { period: browserPeriod.key(p), date, assets, liabilities, net: assets - liabilities }
+}
+
 export const browserLedger = {
   getOnboardingStatus: async () => ok(state.onboarded),
   completeOnboarding: async (input: OnboardingDto): Promise<Result<string>> => {
@@ -725,8 +785,7 @@ export const browserLedger = {
     const end = browserPeriod.parse(endPeriod)
     if (!end) return fail('invalid_period')
     const points: AllocationPointDto[] = []
-    for (let i = Math.max(count, 1) - 1; i >= 0; i--) {
-      const p = browserPeriod.shift(end, -i)
+    for (const p of periodsEnding(end, count)) {
       const date = previousDay(browserPeriod.range(p, state.periodStartDay)[1])
       const r = allocationReport(balancesAsOf(date))
       points.push({
@@ -735,5 +794,17 @@ export const browserLedger = {
       })
     }
     return ok(points)
+  },
+  cashflowReport: async (endPeriod: string, count: number): Promise<Result<CashflowPointDto[]>> => {
+    const end = browserPeriod.parse(endPeriod)
+    return end ? ok(periodsEnding(end, count).map(cashflowPoint)) : fail('invalid_period')
+  },
+  categoryBreakdown: async (period: string, kind: CategoryKindDto): Promise<Result<CategoryAmountDto[]>> => {
+    const p = browserPeriod.parse(period)
+    return p ? ok(categoryBreakdown(p, kind)) : fail('invalid_period')
+  },
+  netWorthHistory: async (endPeriod: string, count: number): Promise<Result<NetWorthPointDto[]>> => {
+    const end = browserPeriod.parse(endPeriod)
+    return end ? ok(periodsEnding(end, count).map(netWorthPoint)) : fail('invalid_period')
   },
 }

@@ -64,6 +64,12 @@ export const commands = {
 	setAccountAllocation: (accountId: string, shares: ShareDto[]) => typedError<null, IpcError>(__TAURI_INVOKE("set_account_allocation", { accountId, shares })),
 	/**  `count` periode berakhir di `end_period`, terlama dulu. */
 	allocationHistory: (endPeriod: string, count: number) => typedError<AllocationPointDto[], IpcError>(__TAURI_INVOKE("allocation_history", { endPeriod, count })),
+	/**  Income/expense per periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
+	cashflowReport: (endPeriod: string, count: number) => typedError<CashflowPointDto[], IpcError>(__TAURI_INVOKE("cashflow_report", { endPeriod, count })),
+	/**  Total per kategori root dalam satu periode, nominal terbesar dulu. */
+	categoryBreakdown: (period: string, kind: CategoryKindDto) => typedError<CategoryAmountDto[], IpcError>(__TAURI_INVOKE("category_breakdown", { period, kind })),
+	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
+	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
 };
 
 /* Types */
@@ -199,6 +205,23 @@ export type BudgetTotalDto = {
 	remaining: number,
 };
 
+export type CashflowPointDto = {
+	period: string,
+	from: string,
+	/**  Inklusif. */
+	to: string,
+	income: number,
+	/**  Positif = keluar. */
+	expense: number,
+	net: number,
+};
+
+export type CategoryAmountDto = {
+	/**  Kategori root. */
+	categoryId: string,
+	amount: number,
+};
+
 export type CategoryDto = {
 	id: string,
 	parentId: string | null,
@@ -244,6 +267,14 @@ export type MappingDto = {
 };
 
 export type NetWorthDto = {
+	assets: number,
+	liabilities: number,
+	net: number,
+};
+
+export type NetWorthPointDto = {
+	period: string,
+	date: string,
 	assets: number,
 	liabilities: number,
 	net: number,
