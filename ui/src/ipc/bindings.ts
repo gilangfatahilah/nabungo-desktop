@@ -32,6 +32,19 @@ export const commands = {
 	unarchiveCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("unarchive_category", { id })),
 	deleteCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_category", { id })),
 	mergeCategory: (source: string, target: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_category", { source, target })),
+	createTxn: (form: TxnFormDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_txn", { form })),
+	updateTxn: (id: string, form: TxnFormDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_txn", { id, form })),
+	getTxn: (id: string) => typedError<TxnDetailDto, IpcError>(__TAURI_INVOKE("get_txn", { id })),
+	listTxns: (query: TxnQueryDto) => typedError<TxnPageDto, IpcError>(__TAURI_INVOKE("list_txns", { query })),
+	deleteTxn: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_txn", { id })),
+	undoDeleteTxn: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("undo_delete_txn", { id })),
+	payeeSuggestion: (name: string) => typedError<{
+	accountId: string | null,
+	categoryId: string | null,
+} | null, IpcError>(__TAURI_INVOKE("payee_suggestion", { name })),
+	searchPayees: (query: string) => typedError<string[], IpcError>(__TAURI_INVOKE("search_payees", { query })),
+	listTags: () => typedError<string[], IpcError>(__TAURI_INVOKE("list_tags")),
+	txnFormDefaults: () => typedError<TxnFormDefaultsDto, IpcError>(__TAURI_INVOKE("txn_form_defaults")),
 };
 
 /* Types */
@@ -109,6 +122,11 @@ export type CategoryKindDto = "income" | "expense";
 
 export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "internal";
 
+export type FeeDto = {
+	amount: number,
+	categoryId: string,
+};
+
 /**  Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`. */
 export type IpcError = {
 	code: ErrorCode,
@@ -131,7 +149,100 @@ export type OnboardingDto = {
 	account: AccountFieldsDto,
 };
 
+export type PayeeSuggestionDto = {
+	accountId: string | null,
+	categoryId: string | null,
+};
+
+export type PostingDto = {
+	accountId: string,
+	categoryId: string | null,
+	amount: number,
+	memo: string | null,
+};
+
+export type SplitDto = {
+	categoryId: string,
+	amount: number,
+	memo: string | null,
+};
+
 export type ThemeDto = "light" | "dark" | "system";
+
+export type TxnDetailDto = {
+	id: string,
+	kind: TxnKindDto,
+	date: string,
+	payee: string | null,
+	note: string | null,
+	tags: string[],
+	postings: PostingDto[],
+};
+
+export type TxnFormDefaultsDto = {
+	lastAccountId: string | null,
+	feeCategoryId: string | null,
+};
+
+export type TxnFormDto = {
+	kind: TxnFormKindDto,
+	/**  `YYYY-MM-DD` */
+	date: string,
+	/**  Transfer: akun asal. */
+	accountId: string,
+	/**  Wajib untuk transfer. */
+	toAccountId: string | null,
+	/**  Income/expense: total split (negatif = refund). Transfer: positif. */
+	amount: number,
+	/**  Income/expense; diabaikan untuk transfer. */
+	splits: SplitDto[],
+	/**  Transfer saja. */
+	fee: FeeDto | null,
+	payee: string | null,
+	note: string | null,
+	tags: string[],
+};
+
+/**  Jenis yang bisa dibuat lewat form. */
+export type TxnFormKindDto = "income" | "expense" | "transfer";
+
+export type TxnKindDto = "income" | "expense" | "transfer" | "adjustment" | "valuation" | "opening";
+
+export type TxnPageDto = {
+	rows: TxnRowDto[],
+	total: number,
+};
+
+export type TxnQueryDto = {
+	dateFrom: string | null,
+	dateTo: string | null,
+	accountId: string | null,
+	categoryId: string | null,
+	tag: string | null,
+	payeeId: string | null,
+	amountMin: number | null,
+	amountMax: number | null,
+	search: string | null,
+	limit: number,
+	offset: number,
+};
+
+export type TxnRowDto = {
+	id: string,
+	kind: TxnKindDto,
+	date: string,
+	payee: string | null,
+	note: string | null,
+	amount: number,
+	accountId: string,
+	toAccountId: string | null,
+	categoryId: string | null,
+	splitCount: number,
+	fee: number,
+	tags: string[],
+	accountDelta: number | null,
+	runningBalance: number | null,
+};
 
 export type UiSettingsDto = {
 	theme: ThemeDto,
