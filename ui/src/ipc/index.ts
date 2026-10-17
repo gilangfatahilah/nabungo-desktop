@@ -6,6 +6,7 @@ import {
   type AccountKindDto,
   type AccountsOverviewDto,
   type AppInfo,
+  type BudgetOverviewDto,
   type CategoryDto,
   type CategoryFieldsDto,
   type CategoryKindDto,
@@ -30,6 +31,9 @@ export type {
   AccountKindDto,
   AccountsOverviewDto,
   AppInfo,
+  BudgetOverviewDto,
+  BudgetRowDto,
+  BudgetTotalDto,
   CategoryDto,
   CategoryFieldsDto,
   CategoryKindDto,
@@ -232,4 +236,25 @@ export function listTags(): Promise<string[]> {
 
 export function txnFormDefaults(): Promise<TxnFormDefaultsDto> {
   return unwrap(api().txnFormDefaults())
+}
+
+// --- Budget ---
+
+/** Kunci periode budget (`YYYY-MM`) yang memuat tanggal ISO `date`. */
+export function periodOf(date: string): Promise<string> {
+  return unwrap(api().periodOf(date))
+}
+
+export function budgetOverview(period: string): Promise<BudgetOverviewDto> {
+  return unwrap(api().budgetOverview(period))
+}
+
+/** `amount = null` menghapus budget. */
+export async function setBudget(categoryId: string, period: string, amount: number | null): Promise<void> {
+  await unwrap(api().setBudget(categoryId, period, amount))
+}
+
+/** Mengembalikan jumlah budget yang disalin dari periode sebelumnya. */
+export function copyBudgets(period: string): Promise<number> {
+  return unwrap(api().copyBudgets(period))
 }

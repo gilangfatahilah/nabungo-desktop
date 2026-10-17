@@ -45,6 +45,13 @@ export const commands = {
 	searchPayees: (query: string) => typedError<string[], IpcError>(__TAURI_INVOKE("search_payees", { query })),
 	listTags: () => typedError<string[], IpcError>(__TAURI_INVOKE("list_tags")),
 	txnFormDefaults: () => typedError<TxnFormDefaultsDto, IpcError>(__TAURI_INVOKE("txn_form_defaults")),
+	/**  Kunci periode budget (`YYYY-MM`) yang memuat `date`. */
+	periodOf: (date: string) => typedError<string, IpcError>(__TAURI_INVOKE("period_of", { date })),
+	budgetOverview: (period: string) => typedError<BudgetOverviewDto, IpcError>(__TAURI_INVOKE("budget_overview", { period })),
+	/**  `amount = null` menghapus budget kategori di periode itu. */
+	setBudget: (categoryId: string, period: string, amount: number | null) => typedError<null, IpcError>(__TAURI_INVOKE("set_budget", { categoryId, period, amount })),
+	/**  Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris. */
+	copyBudgets: (period: string) => typedError<number, IpcError>(__TAURI_INVOKE("copy_budgets", { period })),
 };
 
 /* Types */
@@ -97,6 +104,34 @@ export type AppInfo = {
 	version: string,
 	dataDir: string,
 	portable: boolean,
+};
+
+/**  `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri. */
+export type BudgetOverviewDto = {
+	period: string,
+	prev: string,
+	next: string,
+	from: string,
+	/**  Inklusif. */
+	to: string,
+	rows: BudgetRowDto[],
+	total: BudgetTotalDto,
+};
+
+export type BudgetRowDto = {
+	categoryId: string,
+	parentId: string | null,
+	budget: number | null,
+	/**  Positif = terpakai; parent mencakup child. */
+	spent: number,
+	/**  `budget − spent`; negatif = lewat budget. */
+	remaining: number | null,
+};
+
+export type BudgetTotalDto = {
+	budget: number,
+	spent: number,
+	remaining: number,
 };
 
 export type CategoryDto = {

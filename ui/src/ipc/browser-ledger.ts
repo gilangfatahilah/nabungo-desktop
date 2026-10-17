@@ -2,7 +2,8 @@
 // Aturan bisnis yang sebenarnya ada di Rust; aturan transaksi di sini (validasi form, saldo,
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
-  AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, CategoryDto,
+  AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, BudgetOverviewDto,
+  BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
 } from './bindings'
@@ -24,6 +25,7 @@ const state = {
   txns: [] as Txn[],
   payees: [] as { id: string; name: string }[],
   lastFeeCategoryId: null as string | null,
+  budgets: [] as { categoryId: string; period: string; amount: number }[],
 }
 
 type Txn = {
@@ -310,6 +312,77 @@ function defaultFeeCategory(): string | null {
   return active.find((c) => SEED_FEE_NAMES.includes(c.name.toLowerCase()))?.id ?? null
 }
 
+// --- Periode budget (cermin `period.rs`) & budget (cermin app `budget.rs`) ---
+
+type Period = { year: number; month: number }
+
+const browserPeriod = {
+  parse(key: string): Period | null {
+    const m = /^(\d{4})-(\d{2})$/.exec(key)
+    if (!m) return null
+    const p = { year: Number(m[1]), month: Number(m[2]) }
+    return p.month >= 1 && p.month <= 12 ? p : null
+  },
+  key: (p: Period) => `${String(p.year).padStart(4, '0')}-${String(p.month).padStart(2, '0')}`,
+  shift: (p: Period, by: number): Period => {
+    const n = p.year * 12 + (p.month - 1) + by
+    return { year: Math.floor(n / 12), month: (n % 12) + 1 }
+  },
+  iso: (p: Period, day: number) => `${browserPeriod.key(p)}-${String(day).padStart(2, '0')}`,
+  /** Setengah terbuka `[from, toExclusive)`; periode dinamai bulan tempat ia berakhir. */
+  range(p: Period, start: number): [string, string] {
+    if (start === 1) return [browserPeriod.iso(p, 1), browserPeriod.iso(browserPeriod.shift(p, 1), 1)]
+    return [browserPeriod.iso(browserPeriod.shift(p, -1), start), browserPeriod.iso(p, start)]
+  },
+  of(date: string, start: number): Period {
+    const p = { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) }
+    return start > 1 && Number(date.slice(8, 10)) >= start ? browserPeriod.shift(p, 1) : p
+  },
+}
+
+function previousDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function budgetOverview(p: Period): BudgetOverviewDto {
+  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
+  const key = browserPeriod.key(p)
+  const cats = state.categories.filter((c) => c.kind === 'expense')
+  const direct = new Map<string, number>()
+  for (const t of activeTxns()) {
+    if (t.date < from || t.date >= toEx) continue
+    for (const x of t.postings) if (x.categoryId) direct.set(x.categoryId, (direct.get(x.categoryId) ?? 0) + x.amount)
+  }
+  const spent = new Map<string, number>()
+  const add = (k: string, v: number) => spent.set(k, (spent.get(k) ?? 0) + v)
+  for (const c of cats) {
+    const own = -(direct.get(c.id) ?? 0)
+    add(c.id, own)
+    if (c.parentId) add(c.parentId, own)
+  }
+  const budgetOf = (c: string) => state.budgets.find((b) => b.categoryId === c && b.period === key)?.amount ?? null
+  const bySort = (a: CategoryDto, b: CategoryDto) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+  const rows: BudgetRowDto[] = []
+  for (const root of cats.filter((c) => !c.parentId).sort(bySort)) {
+    for (const c of [root, ...cats.filter((x) => x.parentId === root.id).sort(bySort)]) {
+      const budget = budgetOf(c.id)
+      const s = spent.get(c.id) ?? 0
+      if (c.archived && budget === null && s === 0) continue
+      rows.push({ categoryId: c.id, parentId: c.parentId, budget, spent: s, remaining: budget === null ? null : budget - s })
+    }
+  }
+  // Total: baris berbudget yang parent-nya tidak berbudget (aturan K2).
+  const top = rows.filter((r) => r.budget !== null && !(r.parentId && rows.some((x) => x.categoryId === r.parentId && x.budget !== null)))
+  const total = { budget: top.reduce((m, r) => m + r.budget!, 0), spent: top.reduce((m, r) => m + r.spent, 0), remaining: 0 }
+  total.remaining = total.budget - total.spent
+  return {
+    period: key, prev: browserPeriod.key(browserPeriod.shift(p, -1)), next: browserPeriod.key(browserPeriod.shift(p, 1)),
+    from, to: previousDay(toEx), rows, total,
+  }
+}
+
 export const browserLedger = {
   getOnboardingStatus: async () => ok(state.onboarded),
   completeOnboarding: async (input: OnboardingDto): Promise<Result<string>> => {
@@ -439,5 +512,37 @@ export const browserLedger = {
   txnFormDefaults: async (): Promise<Result<TxnFormDefaultsDto>> => {
     const last = activeTxns().filter((t) => t.kind !== 'opening').sort((a, b) => b.seq - a.seq)[0]
     return ok({ lastAccountId: last ? shapeRow(last, null, null).accountId : null, feeCategoryId: defaultFeeCategory() })
+  },
+  periodOf: async (date: string): Promise<Result<string>> =>
+    ok(browserPeriod.key(browserPeriod.of(date, state.periodStartDay))),
+  budgetOverview: async (period: string): Promise<Result<BudgetOverviewDto>> => {
+    const p = browserPeriod.parse(period)
+    return p ? ok(budgetOverview(p)) : fail('invalid_period')
+  },
+  setBudget: async (categoryId: string, period: string, amount: number | null): Promise<Result<null>> => {
+    if (!browserPeriod.parse(period)) return fail('invalid_period')
+    const c = state.categories.find((x) => x.id === categoryId)
+    if (!c) return notFound('category')
+    if (amount !== null && c.archived) return fail('archived', 'category')
+    if (c.kind !== 'expense') return fail('budget_income_category')
+    if (amount !== null && amount < 0) return fail('budget_negative')
+    if (amount !== null && amount > MAX_AMOUNT) return fail('budget_too_large')
+    state.budgets = state.budgets.filter((b) => !(b.categoryId === categoryId && b.period === period))
+    if (amount !== null) state.budgets.push({ categoryId, period, amount })
+    return ok(null)
+  },
+  copyBudgets: async (period: string): Promise<Result<number>> => {
+    const p = browserPeriod.parse(period)
+    if (!p) return fail('invalid_period')
+    const prev = browserPeriod.key(browserPeriod.shift(p, -1))
+    let copied = 0
+    for (const b of state.budgets.filter((x) => x.period === prev)) {
+      const c = state.categories.find((x) => x.id === b.categoryId)
+      if (!c || c.archived || c.kind !== 'expense') continue
+      if (state.budgets.some((x) => x.categoryId === b.categoryId && x.period === period)) continue
+      state.budgets.push({ categoryId: b.categoryId, period, amount: b.amount })
+      copied++
+    }
+    return ok(copied)
   },
 }

@@ -1,10 +1,11 @@
 //! DTO serde/specta untuk command. Tanpa logika bisnis.
 
 use nabungo_app::{
-    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, CategoryFields,
-    CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth, OnboardingInput,
-    PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind,
-    TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, format_date, parse_date,
+    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, BudgetOverview,
+    BudgetPeriod, BudgetRow, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
+    Locale, NetWorth, OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine,
+    Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid,
+    format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -362,7 +363,7 @@ impl TryFrom<OnboardingDto> for OnboardingInput {
     }
 }
 
-fn parse_day(s: &str) -> Result<Date, IpcError> {
+pub fn parse_day(s: &str) -> Result<Date, IpcError> {
     parse_date(s).map_err(|_| IpcError::invalid_date())
 }
 
@@ -663,6 +664,76 @@ pub struct TxnFormDefaultsDto {
     pub fee_category_id: Option<String>,
 }
 
+// --- Budget ---
+
+pub fn parse_period(s: &str) -> Result<BudgetPeriod, IpcError> {
+    Ok(BudgetPeriod::parse(s)?)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetRowDto {
+    pub category_id: String,
+    pub parent_id: Option<String>,
+    pub budget: Option<i64>,
+    /// Positif = terpakai; parent mencakup child.
+    pub spent: i64,
+    /// `budget − spent`; negatif = lewat budget.
+    pub remaining: Option<i64>,
+}
+
+impl From<BudgetRow> for BudgetRowDto {
+    fn from(r: BudgetRow) -> Self {
+        Self {
+            category_id: r.category_id.to_string(),
+            parent_id: r.parent_id.map(|p| p.to_string()),
+            budget: r.budget,
+            spent: r.spent,
+            remaining: r.budget.map(|b| b.saturating_sub(r.spent)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetTotalDto {
+    pub budget: i64,
+    pub spent: i64,
+    pub remaining: i64,
+}
+
+/// `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetOverviewDto {
+    pub period: String,
+    pub prev: String,
+    pub next: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub rows: Vec<BudgetRowDto>,
+    pub total: BudgetTotalDto,
+}
+
+impl From<BudgetOverview> for BudgetOverviewDto {
+    fn from(o: BudgetOverview) -> Self {
+        Self {
+            period: o.period.key(),
+            prev: o.period.prev().key(),
+            next: o.period.next().key(),
+            from: format_date(o.from),
+            to: format_date(o.to),
+            rows: o.rows.into_iter().map(Into::into).collect(),
+            total: BudgetTotalDto {
+                budget: o.totals.budget,
+                spent: o.totals.spent,
+                remaining: o.totals.budget.saturating_sub(o.totals.spent),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -679,6 +750,51 @@ mod tests {
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
         }
+    }
+
+    #[test]
+    fn budget_overview_dto_has_neighbours_and_remaining() {
+        let period = BudgetPeriod::parse("2026-01").unwrap();
+        let cat = Uuid::now_v7();
+        let dto = BudgetOverviewDto::from(BudgetOverview {
+            period,
+            from: parse_date("2025-12-25").unwrap(),
+            to: parse_date("2026-01-24").unwrap(),
+            rows: vec![
+                BudgetRow {
+                    category_id: cat,
+                    parent_id: None,
+                    budget: Some(100),
+                    spent: 130,
+                },
+                BudgetRow {
+                    category_id: Uuid::now_v7(),
+                    parent_id: Some(cat),
+                    budget: None,
+                    spent: 5,
+                },
+            ],
+            totals: nabungo_app::BudgetTotals {
+                budget: 100,
+                spent: 130,
+            },
+        });
+        assert_eq!(
+            (dto.prev.as_str(), dto.next.as_str()),
+            ("2025-12", "2026-02")
+        );
+        assert_eq!(
+            (dto.from.as_str(), dto.to.as_str()),
+            ("2025-12-25", "2026-01-24")
+        );
+        assert_eq!(dto.rows[0].remaining, Some(-30));
+        assert_eq!(dto.rows[1].remaining, None);
+        assert_eq!(dto.rows[1].parent_id, Some(cat.to_string()));
+        assert_eq!(dto.total.remaining, -30);
+        assert_eq!(
+            parse_period("2026-13").unwrap_err().code,
+            ErrorCode::InvalidPeriod
+        );
     }
 
     #[test]

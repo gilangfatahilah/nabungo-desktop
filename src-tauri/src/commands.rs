@@ -6,9 +6,10 @@ use nabungo_app::{Ledger, PeriodStartDay, Uuid};
 use tauri::State;
 
 use crate::dto::{
-    AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AppInfo, CategoryDto, CategoryFieldsDto,
-    CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ThemeDto, TxnDetailDto,
-    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, parse_id,
+    AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AppInfo, BudgetOverviewDto, CategoryDto,
+    CategoryFieldsDto, CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ThemeDto,
+    TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -343,4 +344,46 @@ pub fn txn_form_defaults(state: State<'_, AppState>) -> Result<TxnFormDefaultsDt
         last_account_id: ledger.last_used_account()?.map(|a| a.to_string()),
         fee_category_id: ledger.default_fee_category()?.map(|c| c.to_string()),
     })
+}
+
+// --- Budget ---
+
+/// Kunci periode budget (`YYYY-MM`) yang memuat `date`.
+#[tauri::command]
+#[specta::specta]
+pub fn period_of(state: State<'_, AppState>, date: String) -> Result<String, IpcError> {
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?.period_of(date)?.key())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn budget_overview(
+    state: State<'_, AppState>,
+    period: String,
+) -> Result<BudgetOverviewDto, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.budget_overview(period)?.into())
+}
+
+/// `amount = null` menghapus budget kategori di periode itu.
+#[tauri::command]
+#[specta::specta]
+pub fn set_budget(
+    state: State<'_, AppState>,
+    category_id: String,
+    period: String,
+    amount: Option<i64>,
+) -> Result<(), IpcError> {
+    let category_id = parse_id(&category_id, "category")?;
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.set_budget(category_id, period, amount)?)
+}
+
+/// Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris.
+#[tauri::command]
+#[specta::specta]
+pub fn copy_budgets(state: State<'_, AppState>, period: String) -> Result<u32, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.copy_budgets(period)?)
 }

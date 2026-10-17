@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TxnFormDto } from './bindings'
+import type { BudgetOverviewDto, TxnFormDto } from './bindings'
 import { browserLedger as L } from './browser-ledger'
 
 async function data<T>(p: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: unknown }>): Promise<T> {
@@ -106,5 +106,75 @@ describe('browser ledger transaksi (paritas Rust)', () => {
     expect(await L.getTxn(id)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'transaction' } })
     await data(L.undoDeleteTxn(id))
     expect(await balance(a)).toBe(80_000)
+  })
+})
+
+describe('browser ledger budget (paritas Rust)', () => {
+  async function spend(a: string, c: string, amount: number, date: string) {
+    return data(L.createTxn(form({ accountId: a, date, amount, splits: [{ categoryId: c, amount, memo: null }] })))
+  }
+  const row = (o: BudgetOverviewDto, c: string) => o.rows.find((r) => r.categoryId === c)
+
+  it('transfer tidak memengaruhi budget', async () => {
+    await data(L.setPeriodStartDay(1))
+    const a = await account('BT1', 1_000_000)
+    const b = await account('BT2')
+    const c = await category('expense', 'Belanja BT')
+    await data(L.setBudget(c, '2026-10', 100_000))
+    await spend(a, c, 25_000, '2026-10-02')
+    const before = await data(L.budgetOverview('2026-10'))
+    await data(L.createTxn(form({ kind: 'transfer', accountId: a, toAccountId: b, amount: 200_000 })))
+    expect(await data(L.budgetOverview('2026-10'))).toEqual(before)
+    expect(row(before, c)).toEqual({ categoryId: c, parentId: null, budget: 100_000, spent: 25_000, remaining: 75_000 })
+  })
+
+  it('periodOf dan rentang dengan tanggal mulai 25', async () => {
+    await data(L.setPeriodStartDay(25))
+    expect(await data(L.periodOf('2026-10-24'))).toBe('2026-10')
+    expect(await data(L.periodOf('2026-10-25'))).toBe('2026-11')
+    expect(await data(L.periodOf('2026-12-26'))).toBe('2027-01')
+    const o = await data(L.budgetOverview('2026-01'))
+    expect(o).toMatchObject({ period: '2026-01', prev: '2025-12', next: '2026-02', from: '2025-12-25', to: '2026-01-24' })
+    expect(await L.budgetOverview('2026-13')).toMatchObject({ status: 'error', error: { code: 'invalid_period' } })
+    await data(L.setPeriodStartDay(1))
+  })
+
+  it('salin budget hanya mengisi yang kosong', async () => {
+    const x = await category('expense', 'Salin X')
+    const y = await category('expense', 'Salin Y')
+    await data(L.setBudget(x, '2027-03', 10))
+    await data(L.setBudget(y, '2027-03', 20))
+    await data(L.setBudget(x, '2027-04', 5))
+    expect(await data(L.copyBudgets('2027-04'))).toBe(1)
+    const o = await data(L.budgetOverview('2027-04'))
+    expect([row(o, x)?.budget, row(o, y)?.budget]).toEqual([5, 20])
+    expect(await data(L.copyBudgets('2027-04'))).toBe(0)
+  })
+
+  it('parent mencakup realisasi child; total dari baris teratas yang dibudget', async () => {
+    const a = await account('PC', 1_000_000)
+    const p = await category('expense', 'Induk PC')
+    const ch = await category('expense', 'Anak PC', p)
+    await data(L.setBudget(p, '2027-06', 100_000))
+    await data(L.setBudget(ch, '2027-06', 40_000))
+    await spend(a, ch, 30_000, '2027-06-03')
+    await spend(a, ch, -5_000, '2027-06-04')
+    const o = await data(L.budgetOverview('2027-06'))
+    expect(row(o, p)).toMatchObject({ spent: 25_000, remaining: 75_000 })
+    expect(row(o, ch)).toMatchObject({ parentId: p, spent: 25_000 })
+    const i = o.rows.findIndex((r) => r.categoryId === p)
+    expect(o.rows[i + 1]?.categoryId).toBe(ch)
+    expect(o.total).toEqual({ budget: 100_000, spent: 25_000, remaining: 75_000 })
+  })
+
+  it('aturan setBudget', async () => {
+    const inc = await category('income', 'Pemasukan SB')
+    const c = await category('expense', 'Pengeluaran SB')
+    expect(await L.setBudget(inc, '2026-10', 1)).toMatchObject({ status: 'error', error: { code: 'budget_income_category' } })
+    expect(await L.setBudget(c, '2026-10', -1)).toMatchObject({ status: 'error', error: { code: 'budget_negative' } })
+    expect(await L.setBudget('x', '2026-10', 1)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'category' } })
+    await data(L.archiveCategory(c))
+    expect(await L.setBudget(c, '2026-10', 1)).toMatchObject({ status: 'error', error: { code: 'archived', entity: 'category' } })
+    await data(L.setBudget(c, '2026-10', null))
   })
 })
