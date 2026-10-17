@@ -237,6 +237,8 @@ export default {
     budget_negative: 'Budget tidak boleh negatif',
     budget_too_large: 'Budget terlalu besar',
     budget_income_category: 'Budget hanya untuk kategori pengeluaran',
+    valuation_unchanged: 'Nilai sama dengan saldo saat ini',
+    txn_not_editable: 'Transaksi ini tidak bisa diubah lewat form; hapus lalu catat ulang',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }

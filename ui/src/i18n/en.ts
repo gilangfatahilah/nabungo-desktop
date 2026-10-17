@@ -237,6 +237,8 @@ export default {
     budget_negative: 'Budget cannot be negative',
     budget_too_large: 'Budget is too large',
     budget_income_category: 'Budgets are for expense categories only',
+    valuation_unchanged: 'Value equals the current balance',
+    txn_not_editable: "This transaction can't be edited with the form; delete and record it again",
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema

@@ -42,6 +42,12 @@ pub enum AppError {
     Budget(#[from] BudgetError),
     #[error(transparent)]
     Period(#[from] PeriodError),
+    /// Nilai valuation sama dengan saldo pada tanggal itu.
+    #[error("valuation equals the current balance")]
+    ValuationUnchanged,
+    /// Valuation/adjustment tidak diedit lewat form; hapus lalu catat ulang.
+    #[error("transaction can't be edited with the form")]
+    NotEditable,
 }
 
 impl AppError {

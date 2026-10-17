@@ -17,6 +17,7 @@ mod settings;
 #[cfg(test)]
 mod testkit;
 mod transactions;
+mod valuation;
 
 pub use accounts::{AccountFields, AccountsOverview};
 pub use budget::{BudgetOverview, BudgetRow};
@@ -39,3 +40,4 @@ pub use settings::{Locale, Theme, UiSettings};
 pub use time::Date;
 pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;
+pub use valuation::ValuationPoint;

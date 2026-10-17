@@ -112,8 +112,10 @@ impl Ledger {
             Some(old) if !old.deleted => old,
             _ => return Err(AppError::NotFound("transaction")),
         };
-        if old.kind == TxnKind::Opening {
-            return Err(AppError::OpeningNotAllowed);
+        match old.kind {
+            TxnKind::Opening => return Err(AppError::OpeningNotAllowed),
+            TxnKind::Valuation | TxnKind::Adjustment => return Err(AppError::NotEditable),
+            _ => {}
         }
         let archived_ok: HashSet<Uuid> = old
             .postings

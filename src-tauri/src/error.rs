@@ -55,6 +55,8 @@ pub enum ErrorCode {
     BudgetNegative,
     BudgetTooLarge,
     BudgetIncomeCategory,
+    ValuationUnchanged,
+    TxnNotEditable,
     Internal,
 }
 
@@ -168,6 +170,8 @@ impl From<AppError> for IpcError {
             AppError::AlreadyOnboarded => Self::code(ErrorCode::AlreadyOnboarded),
             AppError::Budget(err) => Self::code(err.into()),
             AppError::Period(err) => Self::code(err.into()),
+            AppError::ValuationUnchanged => Self::code(ErrorCode::ValuationUnchanged),
+            AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
         }
     }
 }
@@ -229,6 +233,14 @@ mod tests {
         assert_eq!(e.code, ErrorCode::InvalidPeriod);
         let e = IpcError::from(PeriodError::InvalidStartDay(29));
         assert_eq!(e.code, ErrorCode::InvalidStartDay);
+    }
+
+    #[test]
+    fn valuation_errors_map() {
+        let e = IpcError::from(AppError::ValuationUnchanged);
+        assert_eq!(e.code, ErrorCode::ValuationUnchanged);
+        let e = IpcError::from(AppError::NotEditable);
+        assert_eq!(e.code, ErrorCode::TxnNotEditable);
     }
 
     #[test]

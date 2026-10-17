@@ -1,12 +1,12 @@
 //! Agregasi baca untuk budget, alokasi, dan laporan. Semua angka diturunkan dari
 //! `posting` milik transaksi aktif (`deleted_at IS NULL`) yang sudah `posted`.
 
-use nabungo_core::date::format_date;
+use nabungo_core::date::{format_date, parse_date};
 use rusqlite::{Connection, params};
 use time::Date;
 use uuid::Uuid;
 
-use crate::{Result, parse_uuid};
+use crate::{Result, StorageError, parse_uuid};
 
 /// Σ `posting.amount` per kategori untuk transaksi dengan `from <= date < to`.
 /// Posting tanpa kategori (transfer, opening, valuation) tidak ikut.
@@ -48,6 +48,27 @@ pub fn account_balance_as_of(conn: &Connection, account_id: Uuid, date: Date) ->
         params![account_id.to_string(), format_date(date)],
         |r| r.get(0),
     )?)
+}
+
+/// Valuation aktif untuk satu akun: `(txn_id, tanggal, selisih)`, terbaru dulu.
+pub fn valuations(conn: &Connection, account_id: Uuid) -> Result<Vec<(Uuid, Date, i64)>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT t.id, t.date, SUM(p.amount)
+         FROM posting p JOIN txn t ON t.id = p.txn_id
+         WHERE p.account_id = ?1 AND t.kind = 'valuation'
+           AND t.deleted_at IS NULL AND t.status = 'posted'
+         GROUP BY t.id ORDER BY t.date DESC, t.id DESC",
+    )?;
+    let mut rows = stmt.query([account_id.to_string()])?;
+    let mut out = Vec::new();
+    while let Some(r) = rows.next()? {
+        let id: String = r.get(0)?;
+        let date: String = r.get(1)?;
+        let date =
+            parse_date(&date).map_err(|e| StorageError::Corrupt(format!("txn date: {e}")))?;
+        out.push((parse_uuid("txn", &id)?, date, r.get(2)?));
+    }
+    Ok(out)
 }
 
 fn collect_pairs(mut rows: rusqlite::Rows<'_>, table: &str) -> Result<Vec<(Uuid, i64)>> {
