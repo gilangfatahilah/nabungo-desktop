@@ -54,7 +54,7 @@ const sections = computed(() => groupAccounts(accounts.overview, { archived: fal
   <Sidebar>
     <SidebarHeader class="gap-3 p-3">
       <p class="px-1 text-lg font-semibold">{{ $t('app.name') }}</p>
-      <Button class="w-full justify-between" data-testid="new-txn" @click="ui.newTxnOpen = true">
+      <Button class="w-full justify-between" data-testid="new-txn" @click="ui.openNewTxn()">
         <span>+ {{ $t('sidebar.newTransaction') }}</span>
         <kbd class="rounded border border-primary-foreground/40 px-1.5 text-xs font-sans">N</kbd>
       </Button>
