@@ -17,6 +17,7 @@ mod settings;
 pub use accounts::{AccountFields, AccountsOverview};
 pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
+pub use nabungo_core::date::{format_date, parse_date};
 pub use nabungo_core::{
     AccountKind, AmountParseError, CatalogError, CategoryKind, MoneyError, NetWorth, PeriodError,
     PeriodStartDay, TxnError, parse_amount,
@@ -27,3 +28,5 @@ pub use nabungo_storage::category::CategoryRow;
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use settings::{Locale, Theme, UiSettings};
+pub use time::Date;
+pub use uuid::Uuid;

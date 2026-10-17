@@ -1,14 +1,14 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
 use nabungo_app::AppError;
-use nabungo_app::{AmountParseError, TxnError};
+use nabungo_app::{AmountParseError, CatalogError, PeriodError, TxnError};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 pub struct IpcError {
     pub code: ErrorCode,
-    /// Nama entitas untuk `not_found`/`archived`.
+    /// Nama entitas untuk `not_found`/`archived`/`in_use`/`duplicate`/`invalid_id`.
     pub entity: Option<String>,
 }
 
@@ -35,10 +35,33 @@ pub enum ErrorCode {
     AmountInvalid,
     AmountFractional,
     AmountTooLarge,
+    InUse,
+    Duplicate,
+    AlreadyOnboarded,
+    InvalidId,
+    InvalidDate,
+    InvalidStartDay,
+    NameEmpty,
+    NameTooLong,
+    InvalidStatementDay,
+    InvalidCreditLimit,
+    CategoryDepth,
+    CategoryKindMismatch,
+    CategoryHasChildren,
+    MergeIntoSelf,
     Internal,
 }
 
 impl IpcError {
+    /// ID dari UI tidak bisa di-parse sebagai UUID.
+    pub fn invalid_id(entity: &str) -> Self {
+        Self::with_entity(ErrorCode::InvalidId, entity)
+    }
+
+    pub fn invalid_date() -> Self {
+        Self::code(ErrorCode::InvalidDate)
+    }
+
     fn code(code: ErrorCode) -> Self {
         Self { code, entity: None }
     }
@@ -72,6 +95,27 @@ impl From<TxnError> for ErrorCode {
     }
 }
 
+impl From<CatalogError> for ErrorCode {
+    fn from(e: CatalogError) -> Self {
+        match e {
+            CatalogError::EmptyName => ErrorCode::NameEmpty,
+            CatalogError::NameTooLong => ErrorCode::NameTooLong,
+            CatalogError::InvalidStatementDay(_) => ErrorCode::InvalidStatementDay,
+            CatalogError::InvalidCreditLimit => ErrorCode::InvalidCreditLimit,
+            CatalogError::CategoryDepth => ErrorCode::CategoryDepth,
+            CatalogError::CategoryKindMismatch => ErrorCode::CategoryKindMismatch,
+            CatalogError::CategoryHasChildren => ErrorCode::CategoryHasChildren,
+            CatalogError::MergeIntoSelf => ErrorCode::MergeIntoSelf,
+        }
+    }
+}
+
+impl From<PeriodError> for IpcError {
+    fn from(_: PeriodError) -> Self {
+        Self::code(ErrorCode::InvalidStartDay)
+    }
+}
+
 impl From<AppError> for IpcError {
     fn from(e: AppError) -> Self {
         match e {
@@ -87,12 +131,14 @@ impl From<AppError> for IpcError {
             AppError::NotFound(entity) => Self::with_entity(ErrorCode::NotFound, entity),
             AppError::Archived(entity) => Self::with_entity(ErrorCode::Archived, entity),
             AppError::OpeningNotAllowed => Self::code(ErrorCode::OpeningNotAllowed),
-            // Sementara; kode spesifik ditambahkan bersama command akun/kategori.
-            AppError::Catalog(_)
-            | AppError::Money(_)
-            | AppError::InUse(_)
-            | AppError::Duplicate(_)
-            | AppError::AlreadyOnboarded => Self::code(ErrorCode::Internal),
+            AppError::Catalog(err) => Self::code(err.into()),
+            AppError::Money(err) => {
+                tracing::error!(error = %err, "money error");
+                Self::code(ErrorCode::Internal)
+            }
+            AppError::InUse(entity) => Self::with_entity(ErrorCode::InUse, entity),
+            AppError::Duplicate(entity) => Self::with_entity(ErrorCode::Duplicate, entity),
+            AppError::AlreadyOnboarded => Self::code(ErrorCode::AlreadyOnboarded),
         }
     }
 }
@@ -124,6 +170,18 @@ mod tests {
         let e = IpcError::from(AppError::Txn(TxnError::TransferSameAccount));
         assert_eq!(e.code, ErrorCode::TxnTransferSameAccount);
         assert_eq!(e.entity, None);
+    }
+
+    #[test]
+    fn catalog_errors_map() {
+        let e = IpcError::from(AppError::Catalog(CatalogError::CategoryDepth));
+        assert_eq!(e.code, ErrorCode::CategoryDepth);
+        let e = IpcError::from(AppError::InUse("account"));
+        assert_eq!(e.code, ErrorCode::InUse);
+        assert_eq!(e.entity.as_deref(), Some("account"));
+        let e = IpcError::from(AppError::Duplicate("category"));
+        assert_eq!(e.code, ErrorCode::Duplicate);
+        assert_eq!(e.entity.as_deref(), Some("category"));
     }
 
     #[test]

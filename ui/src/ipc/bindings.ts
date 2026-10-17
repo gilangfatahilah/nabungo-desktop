@@ -9,25 +9,127 @@ export const commands = {
 	setTheme: (theme: ThemeDto) => typedError<null, IpcError>(__TAURI_INVOKE("set_theme", { theme })),
 	setLocale: (locale: LocaleDto) => typedError<null, IpcError>(__TAURI_INVOKE("set_locale", { locale })),
 	parseAmount: (input: string) => typedError<number, IpcError>(__TAURI_INVOKE("parse_amount", { input })),
+	getOnboardingStatus: () => typedError<boolean, IpcError>(__TAURI_INVOKE("get_onboarding_status")),
+	/**  Mengembalikan ID akun pertama. */
+	completeOnboarding: (input: OnboardingDto) => typedError<string, IpcError>(__TAURI_INVOKE("complete_onboarding", { input })),
+	getPeriodStartDay: () => typedError<number, IpcError>(__TAURI_INVOKE("get_period_start_day")),
+	setPeriodStartDay: (day: number) => typedError<null, IpcError>(__TAURI_INVOKE("set_period_start_day", { day })),
+	accountsOverview: () => typedError<AccountsOverviewDto, IpcError>(__TAURI_INVOKE("accounts_overview")),
+	createAccount: (kind: AccountKindDto, fields: AccountFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_account", { kind, fields })),
+	updateAccount: (id: string, fields: AccountFieldsDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_account", { id, fields })),
+	archiveAccount: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("archive_account", { id })),
+	unarchiveAccount: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("unarchive_account", { id })),
+	deleteAccount: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_account", { id })),
+	reorderAccounts: (groupId: string | null, ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("reorder_accounts", { groupId, ids })),
+	createAccountGroup: (name: string) => typedError<string, IpcError>(__TAURI_INVOKE("create_account_group", { name })),
+	renameAccountGroup: (id: string, name: string) => typedError<null, IpcError>(__TAURI_INVOKE("rename_account_group", { id, name })),
+	deleteAccountGroup: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_account_group", { id })),
+	reorderAccountGroups: (ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("reorder_account_groups", { ids })),
+	listCategories: () => typedError<CategoryDto[], IpcError>(__TAURI_INVOKE("list_categories")),
+	createCategory: (kind: CategoryKindDto, fields: CategoryFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_category", { kind, fields })),
+	updateCategory: (id: string, fields: CategoryFieldsDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_category", { id, fields })),
+	archiveCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("archive_category", { id })),
+	unarchiveCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("unarchive_category", { id })),
+	deleteCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_category", { id })),
+	mergeCategory: (source: string, target: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_category", { source, target })),
 };
 
 /* Types */
+export type AccountDto = {
+	id: string,
+	name: string,
+	kind: AccountKindDto,
+	groupId: string | null,
+	includeInNetWorth: boolean,
+	creditLimit: number | null,
+	statementDay: number | null,
+	icon: string | null,
+	color: string | null,
+	sortOrder: number,
+	archived: boolean,
+	balance: number,
+	/**  0 bila akun tidak punya saldo awal. */
+	openingBalance: number,
+	openingDate: string | null,
+};
+
+export type AccountFieldsDto = {
+	name: string,
+	groupId: string | null,
+	includeInNetWorth: boolean,
+	creditLimit: number | null,
+	statementDay: number | null,
+	icon: string | null,
+	color: string | null,
+	openingBalance: number,
+	/**  `YYYY-MM-DD` */
+	openingDate: string,
+};
+
+export type AccountGroupDto = {
+	id: string,
+	name: string,
+	sortOrder: number,
+};
+
+export type AccountKindDto = "cash" | "bank" | "ewallet" | "investment" | "receivable" | "credit_card" | "loan";
+
+export type AccountsOverviewDto = {
+	groups: AccountGroupDto[],
+	accounts: AccountDto[],
+	netWorth: NetWorthDto,
+};
+
 export type AppInfo = {
 	version: string,
 	dataDir: string,
 	portable: boolean,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "internal";
+export type CategoryDto = {
+	id: string,
+	parentId: string | null,
+	kind: CategoryKindDto,
+	name: string,
+	icon: string | null,
+	color: string | null,
+	sortOrder: number,
+	archived: boolean,
+	inUse: boolean,
+};
+
+export type CategoryFieldsDto = {
+	name: string,
+	parentId: string | null,
+	icon: string | null,
+	color: string | null,
+};
+
+export type CategoryKindDto = "income" | "expense";
+
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "internal";
 
 /**  Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`. */
 export type IpcError = {
 	code: ErrorCode,
-	/**  Nama entitas untuk `not_found`/`archived`. */
+	/**  Nama entitas untuk `not_found`/`archived`/`in_use`/`duplicate`/`invalid_id`. */
 	entity: string | null,
 };
 
 export type LocaleDto = "id" | "en";
+
+export type NetWorthDto = {
+	assets: number,
+	liabilities: number,
+	net: number,
+};
+
+export type OnboardingDto = {
+	locale: LocaleDto,
+	periodStartDay: number,
+	accountKind: AccountKindDto,
+	account: AccountFieldsDto,
+};
 
 export type ThemeDto = "light" | "dark" | "system";
 
