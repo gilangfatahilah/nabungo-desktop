@@ -5,7 +5,10 @@ import {
   type AccountFieldsDto,
   type AccountKindDto,
   type AccountsOverviewDto,
+  type AllocationOverviewDto,
+  type AllocationPointDto,
   type AppInfo,
+  type BucketFieldsDto,
   type BudgetOverviewDto,
   type CategoryDto,
   type CategoryFieldsDto,
@@ -20,6 +23,7 @@ import {
   type TxnPageDto,
   type TxnQueryDto,
   type PayeeSuggestionDto,
+  type ShareDto,
   type UiSettingsDto,
   type ValuationPointDto,
 } from './bindings'
@@ -31,9 +35,19 @@ export type {
   AccountGroupDto,
   AccountKindDto,
   AccountsOverviewDto,
+  AllocationOverviewDto,
+  AllocationPointDto,
   AppInfo,
+  BucketActualDto,
+  BucketBpDto,
+  BucketDto,
+  BucketFieldsDto,
   BudgetOverviewDto,
+  MappingDto,
+  ShareDto,
+  UnallocatedDto,
   ValuationPointDto,
+  WarningDto,
   BudgetRowDto,
   BudgetTotalDto,
   CategoryDto,
@@ -269,4 +283,32 @@ export function recordValuation(accountId: string, date: string, value: number):
 
 export function valuationHistory(accountId: string): Promise<ValuationPointDto[]> {
   return unwrap(api().valuationHistory(accountId))
+}
+
+// --- Alokasi modal ---
+
+export function allocationOverview(): Promise<AllocationOverviewDto> {
+  return unwrap(api().listAllocation())
+}
+
+export function createBucket(fields: BucketFieldsDto): Promise<string> {
+  return unwrap(api().createBucket(fields))
+}
+
+export async function updateBucket(id: string, fields: BucketFieldsDto): Promise<void> {
+  await unwrap(api().updateBucket(id, fields))
+}
+
+export async function deleteBucket(id: string): Promise<void> {
+  await unwrap(api().deleteBucket(id))
+}
+
+/** Mengganti seluruh porsi akun; `[]` = akun tidak dialokasikan. */
+export async function setAccountAllocation(accountId: string, shares: ShareDto[]): Promise<void> {
+  await unwrap(api().setAccountAllocation(accountId, shares))
+}
+
+/** `count` periode berakhir di `endPeriod`, terlama dulu. */
+export function allocationHistory(endPeriod: string, count: number): Promise<AllocationPointDto[]> {
+  return unwrap(api().allocationHistory(endPeriod, count))
 }

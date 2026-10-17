@@ -2,7 +2,9 @@
 // Aturan bisnis yang sebenarnya ada di Rust; aturan transaksi di sini (validasi form, saldo,
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
-  AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, BudgetOverviewDto,
+  AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
+  AllocationPointDto, BucketActualDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
@@ -27,6 +29,8 @@ const state = {
   payees: [] as { id: string; name: string }[],
   lastFeeCategoryId: null as string | null,
   budgets: [] as { categoryId: string; period: string; amount: number }[],
+  buckets: [] as BucketDto[],
+  mappings: [] as MappingDto[],
 }
 
 type Txn = {
@@ -388,6 +392,97 @@ function budgetOverview(p: Period): BudgetOverviewDto {
   }
 }
 
+// --- Alokasi modal (cermin core `allocation.rs` & app `allocation.rs`) ---
+
+const FULL_BP = 10_000
+// Rust menghitung di i128; di sini Number cukup karena saldo ≤ MAX_AMOUNT (1e12) dan
+// MAX_AMOUNT × 10000 = 1e16 < 2^53. `Math.trunc` meniru pembagian integer Rust (ke arah nol).
+const mulDiv = (a: number, b: number, c: number) => Math.trunc((a * b) / c)
+
+const checkBp = (bp: number) => Number.isInteger(bp) && bp >= 0 && bp <= FULL_BP
+
+function bucketTree(): BucketDto[] {
+  const order = (a: BucketDto, b: BucketDto) => a.sortOrder - b.sortOrder || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  return state.buckets.filter((b) => !b.parentId).sort(order)
+    .flatMap((root) => [root, ...state.buckets.filter((c) => c.parentId === root.id).sort(order)])
+}
+
+function validateBucket(selfId: string | null, f: BucketFieldsDto): Result<string> {
+  const name = f.name.trim()
+  if (!name) return fail('name_empty')
+  if (f.parentId !== null) {
+    if (f.parentId === selfId) return fail('allocation_depth')
+    const parent = state.buckets.find((b) => b.id === f.parentId)
+    if (!parent) return notFound('bucket')
+    if (parent.parentId !== null) return fail('allocation_depth')
+    if (selfId && state.buckets.some((b) => b.parentId === selfId)) return fail('allocation_depth')
+  }
+  if (!checkBp(f.targetBp)) return fail('allocation_invalid_bp')
+  const siblings = state.buckets.filter((b) => b.parentId === f.parentId && b.id !== selfId)
+  if (siblings.reduce((m, b) => m + b.targetBp, f.targetBp) > FULL_BP) return fail('allocation_targets_exceed')
+  if (siblings.some((b) => b.name.toLowerCase() === name.toLowerCase())) return fail('duplicate', 'bucket')
+  return ok(name)
+}
+
+type Balance = { id: string; kind: AccountKindDto; balance: number; includeInNetWorth: boolean }
+
+function allocationReport(accounts: Balance[]) {
+  let gross = 0
+  let liabilities = 0
+  const counted = new Map<string, number>()
+  for (const a of accounts.filter((x) => x.includeInNetWorth)) {
+    if (LIABILITIES.includes(a.kind)) liabilities -= a.balance
+    else {
+      gross += a.balance
+      counted.set(a.id, a.balance)
+    }
+  }
+  const direct = new Map<string, number>()
+  const mappedBp = new Map<string, number>()
+  for (const m of state.mappings) {
+    const balance = counted.get(m.accountId)
+    if (balance === undefined) continue
+    direct.set(m.bucketId, (direct.get(m.bucketId) ?? 0) + mulDiv(balance, m.shareBp, FULL_BP))
+    mappedBp.set(m.accountId, (mappedBp.get(m.accountId) ?? 0) + m.shareBp)
+  }
+  const buckets = bucketTree()
+  const bpOf = (amount: number) => (gross > 0 ? mulDiv(amount, FULL_BP, gross) : 0)
+  const actuals: BucketActualDto[] = buckets.map((b) => {
+    const actual = (direct.get(b.id) ?? 0)
+      + buckets.filter((c) => c.parentId === b.id).reduce((m, c) => m + (direct.get(c.id) ?? 0), 0)
+    const parent = buckets.find((p) => p.id === b.parentId)
+    const targetBp = parent ? mulDiv(parent.targetBp, b.targetBp, FULL_BP) : b.targetBp
+    const actualBp = bpOf(actual)
+    return {
+      bucketId: b.id, targetBp, actual, actualBp, diffBp: actualBp - targetBp,
+      diffAmount: actual - mulDiv(gross, targetBp, FULL_BP),
+    }
+  })
+  const unallocated: UnallocatedDto[] = []
+  for (const a of accounts.filter((x) => counted.has(x.id))) {
+    const remainingBp = FULL_BP - (mappedBp.get(a.id) ?? 0)
+    const amount = mulDiv(a.balance, remainingBp, FULL_BP)
+    if (remainingBp <= 0 || amount === 0) continue
+    unallocated.push({ accountId: a.id, remainingBp, amount })
+  }
+  const unallocatedTotal = unallocated.reduce((m, u) => m + u.amount, 0)
+  const warnings: WarningDto[] = []
+  for (const b of buckets) {
+    if (warnings.some((w) => w.parentId === b.parentId)) continue
+    const totalBp = buckets.filter((s) => s.parentId === b.parentId).reduce((m, s) => m + s.targetBp, 0)
+    if (totalBp !== FULL_BP) warnings.push({ parentId: b.parentId, totalBp })
+  }
+  return { buckets, gross, liabilities, actuals, unallocated, unallocatedTotal, unallocatedBp: bpOf(unallocatedTotal), warnings }
+}
+
+const balancesAsOf = (asOf: string | null): Balance[] =>
+  state.accounts.map((a) => ({ id: a.id, kind: a.kind, balance: balanceOf(a.id, asOf), includeInNetWorth: a.includeInNetWorth }))
+
+function allocationOverview(): AllocationOverviewDto {
+  const { buckets, ...report } = allocationReport(balancesAsOf(null))
+  return { buckets: buckets.map((b) => ({ ...b })), mappings: state.mappings.map((m) => ({ ...m })), ...report }
+}
+
 export const browserLedger = {
   getOnboardingStatus: async () => ok(state.onboarded),
   completeOnboarding: async (input: OnboardingDto): Promise<Result<string>> => {
@@ -424,6 +519,7 @@ export const browserLedger = {
   unarchiveAccount: async (i: string) => setArchived(state.accounts, i, false, 'account'),
   deleteAccount: async (i: string) => {
     state.accounts = state.accounts.filter((a) => a.id !== i)
+    state.mappings = state.mappings.filter((m) => m.accountId !== i)
     return ok(null)
   },
   reorderAccounts: async (groupId: string | null, ids: string[]) => {
@@ -573,5 +669,71 @@ export const browserLedger = {
       .filter((t) => t.kind === 'valuation' && t.postings[0]?.accountId === accountId)
       .sort(byNewest)
       .map((t) => ({ txnId: t.id, date: t.date, change: t.postings[0]!.amount, value: balanceOf(accountId, t.date) })))
+  },
+
+  listAllocation: async (): Promise<Result<AllocationOverviewDto>> => ok(allocationOverview()),
+  createBucket: async (fields: BucketFieldsDto): Promise<Result<string>> => {
+    const v = validateBucket(null, fields)
+    if (v.status === 'error') return v
+    const b: BucketDto = {
+      id: id(), parentId: fields.parentId, name: v.data, targetBp: fields.targetBp, color: fields.color,
+      sortOrder: nextSort(state.buckets.filter((x) => x.parentId === fields.parentId)),
+    }
+    state.buckets.push(b)
+    return ok(b.id)
+  },
+  updateBucket: async (i: string, fields: BucketFieldsDto): Promise<Result<null>> => {
+    if (!fields.name.trim()) return fail('name_empty')
+    const b = state.buckets.find((x) => x.id === i)
+    if (!b) return notFound('bucket')
+    const v = validateBucket(i, fields)
+    if (v.status === 'error') return v
+    const sortOrder = b.parentId === fields.parentId
+      ? b.sortOrder
+      : nextSort(state.buckets.filter((x) => x.parentId === fields.parentId))
+    Object.assign(b, { name: v.data, parentId: fields.parentId, targetBp: fields.targetBp, color: fields.color, sortOrder })
+    return ok(null)
+  },
+  deleteBucket: async (i: string): Promise<Result<null>> => {
+    if (!state.buckets.some((b) => b.id === i)) return notFound('bucket')
+    if (state.buckets.some((b) => b.parentId === i)) return fail('in_use', 'bucket')
+    state.buckets = state.buckets.filter((b) => b.id !== i)
+    state.mappings = state.mappings.filter((m) => m.bucketId !== i)
+    return ok(null)
+  },
+  setAccountAllocation: async (accountId: string, shares: ShareDto[]): Promise<Result<null>> => {
+    const a = state.accounts.find((x) => x.id === accountId)
+    if (!a) return notFound('account')
+    if (LIABILITIES.includes(a.kind)) return fail('allocation_liability')
+    const seen = new Set<string>()
+    let total = 0
+    for (const s of shares) {
+      if (!checkBp(s.shareBp)) return fail('allocation_invalid_bp')
+      if (seen.has(s.bucketId)) return fail('allocation_duplicate_bucket')
+      seen.add(s.bucketId)
+      total += s.shareBp
+    }
+    if (total > FULL_BP) return fail('allocation_shares_exceed')
+    if (shares.some((s) => !state.buckets.some((b) => b.id === s.bucketId))) return notFound('bucket')
+    state.mappings = state.mappings
+      .filter((m) => m.accountId !== accountId)
+      .concat(shares.map((s) => ({ accountId, bucketId: s.bucketId, shareBp: s.shareBp })))
+    return ok(null)
+  },
+  // Seperti `Ledger::allocation_history`: saldo per hari terakhir tiap periode, terlama dulu.
+  allocationHistory: async (endPeriod: string, count: number): Promise<Result<AllocationPointDto[]>> => {
+    const end = browserPeriod.parse(endPeriod)
+    if (!end) return fail('invalid_period')
+    const points: AllocationPointDto[] = []
+    for (let i = Math.max(count, 1) - 1; i >= 0; i--) {
+      const p = browserPeriod.shift(end, -i)
+      const date = previousDay(browserPeriod.range(p, state.periodStartDay)[1])
+      const r = allocationReport(balancesAsOf(date))
+      points.push({
+        period: browserPeriod.key(p), date, gross: r.gross,
+        buckets: r.buckets.flatMap((b, n) => (b.parentId ? [] : [{ bucketId: b.id, actualBp: r.actuals[n]!.actualBp }])),
+      })
+    }
+    return ok(points)
   },
 }

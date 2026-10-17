@@ -56,6 +56,14 @@ export const commands = {
 	recordValuation: (accountId: string, date: string, value: number) => typedError<string, IpcError>(__TAURI_INVOKE("record_valuation", { accountId, date, value })),
 	/**  Riwayat valuation, terbaru dulu. */
 	valuationHistory: (accountId: string) => typedError<ValuationPointDto[], IpcError>(__TAURI_INVOKE("valuation_history", { accountId })),
+	listAllocation: () => typedError<AllocationOverviewDto, IpcError>(__TAURI_INVOKE("list_allocation")),
+	createBucket: (fields: BucketFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_bucket", { fields })),
+	updateBucket: (id: string, fields: BucketFieldsDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_bucket", { id, fields })),
+	deleteBucket: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_bucket", { id })),
+	/**  Mengganti seluruh porsi akun; daftar kosong = akun tidak dialokasikan. */
+	setAccountAllocation: (accountId: string, shares: ShareDto[]) => typedError<null, IpcError>(__TAURI_INVOKE("set_account_allocation", { accountId, shares })),
+	/**  `count` periode berakhir di `end_period`, terlama dulu. */
+	allocationHistory: (endPeriod: string, count: number) => typedError<AllocationPointDto[], IpcError>(__TAURI_INVOKE("allocation_history", { endPeriod, count })),
 };
 
 /* Types */
@@ -104,10 +112,63 @@ export type AccountsOverviewDto = {
 	netWorth: NetWorthDto,
 };
 
+export type AllocationOverviewDto = {
+	/**  Urutan pohon: root lalu child-nya. */
+	buckets: BucketDto[],
+	mappings: MappingDto[],
+	gross: number,
+	liabilities: number,
+	actuals: BucketActualDto[],
+	unallocated: UnallocatedDto[],
+	unallocatedTotal: number,
+	unallocatedBp: number,
+	warnings: WarningDto[],
+};
+
+/**  Porsi bucket root per hari terakhir `period` (`date`). */
+export type AllocationPointDto = {
+	period: string,
+	date: string,
+	gross: number,
+	buckets: BucketBpDto[],
+};
+
 export type AppInfo = {
 	version: string,
 	dataDir: string,
 	portable: boolean,
+};
+
+/**  `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`. */
+export type BucketActualDto = {
+	bucketId: string,
+	targetBp: number,
+	actual: number,
+	actualBp: number,
+	diffBp: number,
+	diffAmount: number,
+};
+
+export type BucketBpDto = {
+	bucketId: string,
+	actualBp: number,
+};
+
+export type BucketDto = {
+	id: string,
+	parentId: string | null,
+	name: string,
+	/**  Relatif terhadap parent (child) atau total (root); 10000 = 100%. */
+	targetBp: number,
+	color: string | null,
+	sortOrder: number,
+};
+
+export type BucketFieldsDto = {
+	name: string,
+	parentId: string | null,
+	targetBp: number,
+	color: string | null,
 };
 
 /**  `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri. */
@@ -176,6 +237,12 @@ export type IpcError = {
 
 export type LocaleDto = "id" | "en";
 
+export type MappingDto = {
+	accountId: string,
+	bucketId: string,
+	shareBp: number,
+};
+
 export type NetWorthDto = {
 	assets: number,
 	liabilities: number,
@@ -199,6 +266,11 @@ export type PostingDto = {
 	categoryId: string | null,
 	amount: number,
 	memo: string | null,
+};
+
+export type ShareDto = {
+	bucketId: string,
+	shareBp: number,
 };
 
 export type SplitDto = {
@@ -289,12 +361,24 @@ export type UiSettingsDto = {
 	locale: LocaleDto,
 };
 
+export type UnallocatedDto = {
+	accountId: string,
+	remainingBp: number,
+	amount: number,
+};
+
 /**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */
 export type ValuationPointDto = {
 	txnId: string,
 	date: string,
 	change: number,
 	value: number,
+};
+
+/**  Sibling (root bila `parent_id = null`) yang Σ target ≠ 100%. */
+export type WarningDto = {
+	parentId: string | null,
+	totalBp: number,
 };
 
 /* Tauri Specta runtime */

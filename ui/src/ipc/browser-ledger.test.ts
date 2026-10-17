@@ -214,3 +214,98 @@ describe('browser ledger valuation (paritas Rust)', () => {
     expect(await L.recordValuation(rdn, '2026-10-03', 2_000)).toMatchObject({ status: 'error', error: { code: 'archived', entity: 'account' } })
   })
 })
+
+describe('browser ledger alokasi (paritas Rust)', () => {
+  // State browser-ledger dibagi antar test; bucket dibersihkan agar Σ target sibling mulai dari 0.
+  async function resetBuckets() {
+    const o = await data(L.listAllocation())
+    for (const b of [...o.buckets].reverse()) await data(L.deleteBucket(b.id))
+  }
+  const bucket = (name: string, parentId: string | null, targetBp: number) =>
+    data(L.createBucket({ name, parentId, targetBp, color: null }))
+  const err = (code: string) => ({ status: 'error', error: { code } })
+  const investment = (name: string, opening: number) => data(L.createAccount('investment', {
+    name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+    icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01',
+  }))
+
+  it('nested target is relative', async () => {
+    await resetBuckets()
+    const aset = await bucket('Aset', null, 7000)
+    const saham = await bucket('Saham', aset, 6000)
+    const o = await data(L.listAllocation())
+    expect(o.buckets.map((b) => b.id)).toEqual([aset, saham])
+    expect(o.actuals.find((a) => a.bucketId === saham)!.targetBp).toBe(4200)
+    expect(o.actuals.find((a) => a.bucketId === aset)!.targetBp).toBe(7000)
+    expect(await L.createBucket({ name: 'Liquid', parentId: null, targetBp: 3001, color: null }))
+      .toMatchObject(err('allocation_targets_exceed'))
+    expect(await L.createBucket({ name: ' aset ', parentId: null, targetBp: 0, color: null }))
+      .toMatchObject({ status: 'error', error: { code: 'duplicate', entity: 'bucket' } })
+    expect(await L.deleteBucket(aset)).toMatchObject({ status: 'error', error: { code: 'in_use', entity: 'bucket' } })
+  })
+
+  it('split mapping and unallocated', async () => {
+    await resetBuckets()
+    const saham = await bucket('Saham', null, 6000)
+    const liquid = await bucket('Liquid', null, 4000)
+    const rdn = await investment('RDN A', 10_000_000)
+    const part = await account('Bank A', 1_000_000)
+    await data(L.setAccountAllocation(rdn, [{ bucketId: saham, shareBp: 9000 }, { bucketId: liquid, shareBp: 1000 }]))
+    await data(L.setAccountAllocation(part, [{ bucketId: liquid, shareBp: 2500 }]))
+    const o = await data(L.listAllocation())
+    expect(o.mappings.filter((m) => m.accountId === rdn)).toHaveLength(2)
+    const actual = (id: string) => o.actuals.find((a) => a.bucketId === id)!.actual
+    expect([actual(saham), actual(liquid)]).toEqual([9_000_000, 1_250_000])
+    expect(o.unallocated.find((u) => u.accountId === part)).toEqual({ accountId: part, remainingBp: 7500, amount: 750_000 })
+    expect(o.unallocated.find((u) => u.accountId === rdn)).toBeUndefined()
+    await data(L.setAccountAllocation(rdn, []))
+    expect((await data(L.listAllocation())).mappings.filter((m) => m.accountId === rdn)).toEqual([])
+  })
+
+  it('rejects shares over 100%', async () => {
+    await resetBuckets()
+    const a = await bucket('A', null, 5000)
+    const b = await bucket('B', null, 5000)
+    const acc = await account('Bank S', 1_000)
+    expect(await L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 6000 }, { bucketId: b, shareBp: 4001 }]))
+      .toMatchObject(err('allocation_shares_exceed'))
+    expect(await L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 10 }, { bucketId: a, shareBp: 10 }]))
+      .toMatchObject(err('allocation_duplicate_bucket'))
+    expect(await L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 10001 }])).toMatchObject(err('allocation_invalid_bp'))
+    const cc = await data(L.createAccount('credit_card', {
+      name: 'Kartu S', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01',
+    }))
+    expect(await L.setAccountAllocation(cc, [{ bucketId: a, shareBp: 100 }])).toMatchObject(err('allocation_liability'))
+    await data(L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 100 }]))
+    await data(L.deleteAccount(acc))
+    expect((await data(L.listAllocation())).mappings.some((m) => m.accountId === acc)).toBe(false)
+  })
+
+  it('rejects third level bucket', async () => {
+    await resetBuckets()
+    const aset = await bucket('Aset', null, 7000)
+    const liquid = await bucket('Liquid', null, 3000)
+    const saham = await bucket('Saham', aset, 6000)
+    expect(await L.createBucket({ name: 'Bluechip', parentId: saham, targetBp: 100, color: null })).toMatchObject(err('allocation_depth'))
+    expect(await L.updateBucket(aset, { name: 'Aset', parentId: liquid, targetBp: 7000, color: null })).toMatchObject(err('allocation_depth'))
+    expect(await L.updateBucket(liquid, { name: 'Liquid', parentId: liquid, targetBp: 3000, color: null })).toMatchObject(err('allocation_depth'))
+  })
+
+  it('history uses balances at each period end', async () => {
+    await resetBuckets()
+    const kas = await bucket('Kas', null, 10000)
+    const before = await data(L.allocationHistory('2026-10', 2))
+    expect(before.map((p) => [p.period, p.date])).toEqual([['2026-09', '2026-09-30'], ['2026-10', '2026-10-31']])
+    const bank = await account('Bank H', 500_000)
+    const kopi = await category('expense', 'Kopi H')
+    await data(L.createTxn(form({ accountId: bank, date: '2026-11-05', amount: 100_000, splits: [{ categoryId: kopi, amount: 100_000, memo: null }] })))
+    await data(L.setAccountAllocation(bank, [{ bucketId: kas, shareBp: 10000 }]))
+    const [sep, oct] = await data(L.allocationHistory('2026-10', 2))
+    // Opening 2026-10-01: tidak ada di September; belanja November tidak memengaruhi akhir Oktober.
+    expect(sep!.gross).toBe(before[0]!.gross)
+    expect(oct!.gross).toBe(before[1]!.gross + 500_000)
+    expect(oct!.buckets).toEqual([{ bucketId: kas, actualBp: Math.trunc((500_000 * 10_000) / oct!.gross) }])
+    expect(await L.allocationHistory('2026-13', 2)).toMatchObject(err('invalid_period'))
+  })
+})

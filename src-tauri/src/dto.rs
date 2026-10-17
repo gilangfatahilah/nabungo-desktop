@@ -1,11 +1,12 @@
 //! DTO serde/specta untuk command. Tanpa logika bisnis.
 
 use nabungo_app::{
-    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, BudgetOverview,
-    BudgetPeriod, BudgetRow, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
-    Locale, NetWorth, OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine,
-    Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid,
-    ValuationPoint, format_date, parse_date,
+    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
+    AllocationPoint, BucketFields, BucketRow, BudgetOverview, BudgetPeriod, BudgetRow,
+    CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth,
+    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail,
+    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
+    parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -757,6 +758,205 @@ impl From<ValuationPoint> for ValuationPointDto {
     }
 }
 
+// --- Alokasi modal ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketDto {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub name: String,
+    /// Relatif terhadap parent (child) atau total (root); 10000 = 100%.
+    pub target_bp: i64,
+    pub color: Option<String>,
+    pub sort_order: i64,
+}
+
+impl From<BucketRow> for BucketDto {
+    fn from(b: BucketRow) -> Self {
+        Self {
+            id: b.id.to_string(),
+            parent_id: b.parent_id.map(|p| p.to_string()),
+            name: b.name,
+            target_bp: b.target_bp,
+            color: b.color,
+            sort_order: b.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketFieldsDto {
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub target_bp: i64,
+    pub color: Option<String>,
+}
+
+impl TryFrom<BucketFieldsDto> for BucketFields {
+    type Error = IpcError;
+
+    fn try_from(f: BucketFieldsDto) -> Result<Self, IpcError> {
+        Ok(Self {
+            name: f.name,
+            parent_id: parse_opt_id(f.parent_id.as_deref(), "bucket")?,
+            target_bp: f.target_bp,
+            color: f.color,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareDto {
+    pub bucket_id: String,
+    pub share_bp: i64,
+}
+
+impl ShareDto {
+    pub fn parse(&self) -> Result<(Uuid, i64), IpcError> {
+        Ok((parse_id(&self.bucket_id, "bucket")?, self.share_bp))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MappingDto {
+    pub account_id: String,
+    pub bucket_id: String,
+    pub share_bp: i64,
+}
+
+/// `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketActualDto {
+    pub bucket_id: String,
+    pub target_bp: i64,
+    pub actual: i64,
+    pub actual_bp: i64,
+    pub diff_bp: i64,
+    pub diff_amount: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UnallocatedDto {
+    pub account_id: String,
+    pub remaining_bp: i64,
+    pub amount: i64,
+}
+
+/// Sibling (root bila `parent_id = null`) yang Σ target ≠ 100%.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WarningDto {
+    pub parent_id: Option<String>,
+    pub total_bp: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AllocationOverviewDto {
+    /// Urutan pohon: root lalu child-nya.
+    pub buckets: Vec<BucketDto>,
+    pub mappings: Vec<MappingDto>,
+    pub gross: i64,
+    pub liabilities: i64,
+    pub actuals: Vec<BucketActualDto>,
+    pub unallocated: Vec<UnallocatedDto>,
+    pub unallocated_total: i64,
+    pub unallocated_bp: i64,
+    pub warnings: Vec<WarningDto>,
+}
+
+impl From<AllocationOverview> for AllocationOverviewDto {
+    fn from(o: AllocationOverview) -> Self {
+        let r = o.report;
+        Self {
+            buckets: o.buckets.into_iter().map(Into::into).collect(),
+            mappings: o
+                .mappings
+                .into_iter()
+                .map(|m| MappingDto {
+                    account_id: m.account_id.to_string(),
+                    bucket_id: m.bucket_id.to_string(),
+                    share_bp: m.share_bp,
+                })
+                .collect(),
+            gross: r.gross,
+            liabilities: r.liabilities,
+            actuals: r
+                .buckets
+                .into_iter()
+                .map(|b| BucketActualDto {
+                    bucket_id: b.bucket_id.to_string(),
+                    target_bp: b.target_bp,
+                    actual: b.actual,
+                    actual_bp: b.actual_bp,
+                    diff_bp: b.diff_bp,
+                    diff_amount: b.diff_amount,
+                })
+                .collect(),
+            unallocated: r
+                .unallocated
+                .into_iter()
+                .map(|u| UnallocatedDto {
+                    account_id: u.account_id.to_string(),
+                    remaining_bp: u.remaining_bp,
+                    amount: u.amount,
+                })
+                .collect(),
+            unallocated_total: r.unallocated_total,
+            unallocated_bp: r.unallocated_bp,
+            warnings: r
+                .warnings
+                .into_iter()
+                .map(|w| WarningDto {
+                    parent_id: w.parent_id.map(|p| p.to_string()),
+                    total_bp: w.total_bp,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketBpDto {
+    pub bucket_id: String,
+    pub actual_bp: i64,
+}
+
+/// Porsi bucket root per hari terakhir `period` (`date`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AllocationPointDto {
+    pub period: String,
+    pub date: String,
+    pub gross: i64,
+    pub buckets: Vec<BucketBpDto>,
+}
+
+impl From<AllocationPoint> for AllocationPointDto {
+    fn from(p: AllocationPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            date: format_date(p.date),
+            gross: p.gross,
+            buckets: p
+                .buckets
+                .into_iter()
+                .map(|(id, bp)| BucketBpDto {
+                    bucket_id: id.to_string(),
+                    actual_bp: bp,
+                })
+                .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,6 +973,37 @@ mod tests {
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
         }
+    }
+
+    #[test]
+    fn bucket_fields_dto_rejects_bad_parent_id() {
+        let f = BucketFieldsDto {
+            name: "Saham".into(),
+            parent_id: Some("x".into()),
+            target_bp: 6000,
+            color: None,
+        };
+        let e = BucketFields::try_from(f).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidId);
+        assert_eq!(e.entity.as_deref(), Some("bucket"));
+    }
+
+    #[test]
+    fn allocation_point_dto_serializes_camel_case() {
+        let id = Uuid::now_v7();
+        let dto = AllocationPointDto::from(AllocationPoint {
+            period: BudgetPeriod::parse("2026-10").unwrap(),
+            date: parse_date("2026-10-31").unwrap(),
+            gross: 1_000,
+            buckets: vec![(id, 2500)],
+        });
+        assert_eq!(
+            serde_json::to_value(&dto).unwrap(),
+            serde_json::json!({
+                "period": "2026-10", "date": "2026-10-31", "gross": 1000,
+                "buckets": [{ "bucketId": id.to_string(), "actualBp": 2500 }],
+            })
+        );
     }
 
     #[test]
