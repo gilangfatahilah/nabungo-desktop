@@ -83,21 +83,19 @@ function restoreFocus(e: Event) {
 
 <template>
   <Sheet v-model:open="open">
-    <SheetContent side="right" class="w-full overflow-y-auto sm:max-w-lg" @open-auto-focus.prevent @close-auto-focus="restoreFocus">
+    <SheetContent side="right" class="w-full gap-0 sm:max-w-[440px]" @open-auto-focus.prevent @close-auto-focus="restoreFocus">
       <SheetHeader>
         <SheetTitle>{{ title }}</SheetTitle>
         <SheetDescription class="sr-only">{{ title }}</SheetDescription>
       </SheetHeader>
-      <div class="px-4 pb-4">
-        <TxnForm
-          v-if="initial"
-          :key="session"
-          :initial="initial"
-          :id="ui.txnEditor?.mode === 'edit' ? ui.txnEditor.id ?? null : null"
-          @saved="saved"
-          @cancel="ui.closeTxnEditor()"
-        />
-      </div>
+      <TxnForm
+        v-if="initial"
+        :key="session"
+        :initial="initial"
+        :id="ui.txnEditor?.mode === 'edit' ? ui.txnEditor.id ?? null : null"
+        @saved="saved"
+        @cancel="ui.closeTxnEditor()"
+      />
     </SheetContent>
   </Sheet>
 </template>

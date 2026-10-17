@@ -183,4 +183,20 @@ describe('TxnForm', () => {
     expect(i).toBeGreaterThanOrEqual(0)
     expect(focusable[i + 1]?.id).toBe('txn-category')
   })
+
+  it('tag & catatan terlipat di transaksi baru dan terbuka lewat tombol', async () => {
+    await openSheet((u) => u.openNewTxn())
+    expect($('#txn-note')).toBeNull()
+    await click('[data-testid="txn-more"]')
+    expect($('#txn-note')).not.toBeNull()
+    expect($('#txn-tags')).not.toBeNull()
+  })
+
+  it('nominal punya addon Rp dan tombol simpan di footer yang tidak ikut scroll', async () => {
+    await openSheet((u) => u.openNewTxn())
+    expect($<HTMLElement>('[data-testid="txn-amount-prefix"]').textContent).toBe('Rp')
+    const footer = $<HTMLElement>('[data-testid="txn-form-footer"]')
+    expect(footer.querySelector('button[type="submit"]')).not.toBeNull()
+    expect(footer.closest('[data-testid="txn-form-body"]')).toBeNull()
+  })
 })

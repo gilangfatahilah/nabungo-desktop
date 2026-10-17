@@ -13,9 +13,10 @@ onMounted(() => withErrorToast(() => store.reload()))
 
 <template>
   <PageHeader :title="$t('nav.transactions')" />
-  <!-- Mengisi sisa tinggi layout agar list virtual punya area scroll sendiri; header & filter tetap terlihat. -->
-  <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
-    <TxnFilters />
+  <!-- Mengisi sisa tinggi layout agar list virtual punya area scroll sendiri; header & toolbar tetap terlihat.
+       Tanpa kotak ber-border: daftar langsung di Lembar (ui-guidelines §9.2). -->
+  <div class="flex min-h-0 flex-1 flex-col">
+    <TxnFilters class="border-b" />
     <TxnList />
   </div>
 </template>

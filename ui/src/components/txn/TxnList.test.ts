@@ -123,11 +123,32 @@ describe('TxnList', () => {
     expect(document.body.querySelector('[data-testid="txn-menu-delete"]')!.hasAttribute('data-disabled')).toBe(false)
   })
 
-  it('kosong menampilkan pesan dan tombol transaksi baru', async () => {
-    await useTransactionsStore().setQuery({ search: 'tidak-ada-yang-cocok' })
+  it('kosong karena filter: pesan filter dan tombol hapus filter', async () => {
+    const store = useTransactionsStore()
+    await store.setQuery({ search: 'tidak-ada-yang-cocok' })
+    await mountList()
+    expect(document.body.textContent).toContain(i18n.global.t('txn.emptyFiltered'))
+    document.body.querySelector<HTMLElement>('[data-testid="txn-empty-clear"]')!.click()
+    await settle()
+    expect(store.query.search).toBeNull()
+  })
+
+  it('kosong tanpa filter: ajakan mencatat transaksi pertama', async () => {
+    useTransactionsStore().rows = []
     await mountList()
     expect(document.body.textContent).toContain(i18n.global.t('txn.empty'))
     document.body.querySelector<HTMLElement>('[data-testid="txn-empty-new"]')!.click()
     expect(useUiStore().txnEditor).toEqual({ mode: 'create' })
+  })
+
+  it('baris: tile ikon kategori, kategori anak dengan induk di tooltip, tag sebagai teks', async () => {
+    await mountList()
+    const el = rowEl(expenseId)
+    expect(el.querySelector('[data-testid="txn-icon"]')).not.toBeNull()
+    const cat = el.querySelector<HTMLElement>('[data-testid="txn-category"]')!
+    expect(cat.textContent!.trim()).toBe('Kopi & jajan')
+    expect(cat.title).toBe('Makan & Minum › Kopi & jajan')
+    expect(el.querySelector('[data-testid="txn-tag"]')!.textContent).toBe('#ngopi')
+    expect(rowEl(transferId).querySelector('[data-testid="txn-icon"]')!.className).toContain('bg-muted')
   })
 })

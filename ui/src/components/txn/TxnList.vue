@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { ArrowDownLeftIcon, ArrowRightIcon, ArrowRightLeftIcon, ArrowUpRightIcon, EllipsisIcon, FlagIcon, PlusIcon, ScaleIcon } from '@lucide/vue'
+import { ArrowRightIcon, ArrowRightLeftIcon, EllipsisIcon, FlagIcon, PlusIcon, ScaleIcon, SplitIcon } from '@lucide/vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
+import { type Component, computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import EmptyState from '@/components/EmptyState.vue'
 import MoneyText from '@/components/MoneyText.vue'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Kbd } from '@/components/ui/kbd'
 import type { TxnKindDto, TxnRowDto } from '@/ipc'
+import { colorClass } from '@/lib/colors'
+import { iconFor } from '@/lib/icons'
+import { activeFilterCount } from '@/lib/txnFilter'
 import { formatDateHeader, groupByDate } from '@/lib/txnList'
 import { isEditable } from '@/lib/txnForm'
 import { withErrorToast } from '@/lib/notify'
@@ -36,29 +40,40 @@ const items = computed(() => groupByDate(store.rows))
 const showRunning = computed(() => store.query.accountId !== null)
 
 const accountName = computed(() => new Map(accounts.overview.accounts.map((a) => [a.id, a.name])))
-const categoryName = computed(() => {
-  const byId = new Map(categories.list.map((c) => [c.id, c]))
-  return (id: string | null) => {
-    const c = id ? byId.get(id) : undefined
-    if (!c) return ''
-    const parent = c.parentId ? byId.get(c.parentId) : undefined
-    return parent ? `${parent.name} › ${c.name}` : c.name
-  }
-})
+const categoryById = computed(() => new Map(categories.list.map((c) => [c.id, c])))
+const hasFilter = computed(() => activeFilterCount(store.query) > 0)
 
-const ICONS: Record<TxnKindDto, typeof ArrowUpRightIcon> = {
-  expense: ArrowUpRightIcon, income: ArrowDownLeftIcon, transfer: ArrowRightLeftIcon,
-  adjustment: ScaleIcon, valuation: ScaleIcon, opening: FlagIcon,
+/** Nama lengkap "Induk › Anak" untuk tooltip; baris hanya menampilkan anak (§8.5). */
+function categoryPath(id: string | null): string {
+  const c = id ? categoryById.value.get(id) : undefined
+  if (!c) return ''
+  const parent = c.parentId ? categoryById.value.get(c.parentId) : undefined
+  return parent ? `${parent.name} › ${c.name}` : c.name
 }
 
 function categoryLabel(r: TxnRowDto): string {
   if (r.kind === 'transfer') return t('txn.kinds.transfer')
   if (r.kind === 'opening') return t('txn.opening')
   if (r.splitCount > 1) return t('txn.splitCount', { n: r.splitCount })
-  return categoryName.value(r.categoryId)
+  return (r.categoryId && categoryById.value.get(r.categoryId)?.name) || ''
+}
+
+const KIND_ICONS: Partial<Record<TxnKindDto, Component>> = {
+  transfer: ArrowRightLeftIcon, opening: FlagIcon, adjustment: ScaleIcon, valuation: ScaleIcon,
+}
+
+/** Tile 28px: ikon & warna kategori; transfer/saldo awal/penyesuaian/split di tile netral. */
+function tile(r: TxnRowDto): { icon: Component; class: string } {
+  const kindIcon = KIND_ICONS[r.kind]
+  if (kindIcon) return { icon: kindIcon, class: colorClass(null) }
+  if (r.splitCount > 1) return { icon: SplitIcon, class: colorClass(null) }
+  const c = r.categoryId ? categoryById.value.get(r.categoryId) : undefined
+  return { icon: iconFor(c?.icon ?? null), class: colorClass(c?.color ?? null) }
 }
 
 const title = (r: TxnRowDto) => r.payee ?? r.note ?? categoryLabel(r)
+/** Kategori di baris 2 hanya bila judul bukan kategori itu sendiri. */
+const showCategory = (r: TxnRowDto) => r.kind !== 'transfer' && (r.payee ?? r.note) !== null
 
 /** Transfer & saldo awal netral; lainnya mengikuti tanda (refund pengeluaran tampil hijau). */
 function tone(r: TxnRowDto): 'neutral' | 'expense' | 'income' {
@@ -71,7 +86,7 @@ const scroller = useTemplateRef<HTMLElement>('scroller')
 const virtualizer = useVirtualizer(computed(() => ({
   count: items.value.length,
   getScrollElement: () => scroller.value,
-  estimateSize: (i: number) => (items.value[i]?.type === 'date' ? 32 : 56),
+  estimateSize: (i: number) => (items.value[i]?.type === 'date' ? 40 : 56),
   getItemKey: (i: number) => items.value[i]?.key ?? i,
   overscan: 10,
 })))
@@ -127,11 +142,15 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
 </script>
 
 <template>
-  <div v-if="store.rows.length === 0 && !store.loading" class="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-    <p>{{ t('txn.empty') }}</p>
-    <Button data-testid="txn-empty-new" @click="ui.openNewTxn()"><PlusIcon /> {{ t('sidebar.newTransaction') }}</Button>
-  </div>
-  <div v-else ref="scroller" class="min-h-0 flex-1 overflow-y-auto" role="list" :aria-label="t('nav.transactions')">
+  <template v-if="store.rows.length === 0 && !store.loading">
+    <EmptyState v-if="hasFilter" :title="t('txn.emptyFiltered')" class="py-4">
+      <Button variant="outline" data-testid="txn-empty-clear" @click="withErrorToast(() => store.clear())">{{ t('txn.filters.clearAll') }}</Button>
+    </EmptyState>
+    <EmptyState v-else :title="t('txn.empty')" :description="t('txn.emptyHint')" class="py-4">
+      <Button data-testid="txn-empty-new" @click="ui.openNewTxn()"><PlusIcon /> {{ t('txn.emptyAction') }} <Kbd class="ml-1">N</Kbd></Button>
+    </EmptyState>
+  </template>
+  <div v-else ref="scroller" class="-mx-2 min-h-0 flex-1 overflow-y-auto px-2" role="list" :aria-label="t('nav.transactions')">
     <div :style="virtual ? { height: `${virtualizer.getTotalSize()}px`, position: 'relative' } : undefined">
       <div
         v-for="v in visible"
@@ -139,7 +158,7 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
         :data-index="v.index"
         :style="virtual ? { position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` } : undefined"
       >
-        <div v-if="v.item.type === 'date'" class="flex h-8 items-end border-b px-3 pb-1 text-xs font-medium text-muted-foreground">
+        <div v-if="v.item.type === 'date'" class="flex h-10 items-end px-2 pb-1.5 text-meta font-medium text-muted-foreground">
           {{ formatDateHeader(v.item.date, settings.locale) }}
         </div>
         <div
@@ -147,38 +166,46 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
           role="listitem"
           tabindex="0"
           :data-txn-id="v.item.row.id"
-          class="flex h-14 items-center gap-3 border-b px-3 outline-none hover:bg-muted/50 focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+          class="group/row flex h-14 items-center gap-3 rounded-lg px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           @keydown="onKey($event, v.item.row)"
           @dblclick="edit(v.item.row)"
         >
-          <component :is="ICONS[v.item.row.kind]" class="size-4 shrink-0 text-muted-foreground" :aria-label="t(`txn.kinds.${v.item.row.kind}`)" />
+          <span data-testid="txn-icon" class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="tile(v.item.row).class">
+            <component :is="tile(v.item.row).icon" class="size-4" :aria-label="t(`txn.kinds.${v.item.row.kind}`)" />
+          </span>
           <div class="flex min-w-0 flex-1 flex-col">
-            <span class="truncate text-sm font-medium">{{ title(v.item.row) }}</span>
-            <span class="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-              <span v-if="v.item.row.kind !== 'transfer'" class="truncate">{{ categoryLabel(v.item.row) }}</span>
-              <span data-testid="txn-accounts" class="flex items-center gap-1 truncate">
+            <span class="truncate font-medium">{{ title(v.item.row) }}</span>
+            <span class="flex min-w-0 items-center gap-3 text-meta text-muted-foreground">
+              <span
+                v-if="showCategory(v.item.row)" data-testid="txn-category" class="truncate"
+                :title="categoryPath(v.item.row.categoryId) || undefined"
+              >{{ categoryLabel(v.item.row) }}</span>
+              <span data-testid="txn-accounts" class="flex shrink-0 items-center gap-1">
                 {{ accountName.get(v.item.row.accountId) }}
                 <template v-if="v.item.row.toAccountId">
                   <ArrowRightIcon class="size-3" aria-label="→" /><span class="sr-only">→</span>
                   {{ accountName.get(v.item.row.toAccountId) }}
                 </template>
               </span>
-              <Badge v-for="tag in v.item.row.tags" :key="tag" variant="secondary" class="h-4 px-1 text-[10px]">#{{ tag }}</Badge>
+              <span v-for="tag in v.item.row.tags" :key="tag" data-testid="txn-tag" class="shrink-0">#{{ tag }}</span>
+              <span v-if="v.item.row.fee" class="shrink-0">{{ t('txn.fee') }} <MoneyText :amount="v.item.row.fee" /></span>
             </span>
           </div>
           <div class="flex flex-col items-end">
-            <MoneyText data-testid="txn-amount" class="text-sm font-medium" :amount="v.item.row.amount" :kind="tone(v.item.row)" />
-            <span v-if="v.item.row.fee" class="text-xs text-muted-foreground">{{ t('txn.fee') }}: <MoneyText :amount="v.item.row.fee" /></span>
+            <MoneyText data-testid="txn-amount" class="font-medium" :amount="v.item.row.amount" :kind="tone(v.item.row)" />
+            <MoneyText
+              v-if="showRunning && v.item.row.runningBalance !== null"
+              data-testid="txn-running"
+              class="text-meta text-muted-foreground"
+              :amount="v.item.row.runningBalance"
+            />
           </div>
-          <MoneyText
-            v-if="showRunning && v.item.row.runningBalance !== null"
-            data-testid="txn-running"
-            class="w-28 text-right text-sm text-muted-foreground"
-            :amount="v.item.row.runningBalance"
-          />
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
-              <Button variant="ghost" size="icon" class="size-8" data-testid="txn-menu" :aria-label="t('actions.more')" tabindex="-1">
+              <Button
+                variant="ghost" size="icon" class="size-8 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-[state=open]:opacity-100"
+                data-testid="txn-menu" :aria-label="t('actions.more')" tabindex="-1"
+              >
                 <EllipsisIcon />
               </Button>
             </DropdownMenuTrigger>

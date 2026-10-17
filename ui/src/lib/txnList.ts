@@ -17,7 +17,9 @@ export function groupByDate(rows: TxnRowDto[]): ListItem[] {
   return items
 }
 
-/** `YYYY-MM-DD` → "12 Okt 2026" sesuai locale, tanpa geser zona waktu. */
+/** `YYYY-MM-DD` → "16 Okt 2026, Jumat" sesuai locale, tanpa geser zona waktu. */
 export function formatDateHeader(iso: string, locale: LocaleDto): string {
-  return formatDateInput(iso, locale)
+  const [y, m, d] = iso.split('-').map(Number)
+  const weekday = new Intl.DateTimeFormat(locale === 'id' ? 'id-ID' : 'en-US', { weekday: 'long' }).format(new Date(y!, m! - 1, d!))
+  return `${formatDateInput(iso, locale)}, ${weekday}`
 }

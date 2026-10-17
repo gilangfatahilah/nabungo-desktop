@@ -3,12 +3,13 @@ import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
 import * as ipc from '@/ipc'
-import type { TxnQueryDto, TxnRowDto } from '@/ipc'
+import type { TxnRowDto } from '@/ipc'
+import type { TxnFilter } from '@/lib/txnFilter'
 import { withErrorToast } from '@/lib/notify'
 import { toDto, type TxnFormState } from '@/lib/txnForm'
 import { useAccountsStore } from './accounts'
 
-export type TxnFilter = Omit<TxnQueryDto, 'limit' | 'offset'>
+export type { TxnFilter } from '@/lib/txnFilter'
 
 const PAGE = 100
 
@@ -56,6 +57,10 @@ export const useTransactionsStore = defineStore('transactions', () => {
     await reload()
   }
 
+  async function clear() {
+    await setQuery({ ...EMPTY_FILTER })
+  }
+
   async function refresh() {
     await Promise.all([reload(true), useAccountsStore().load()])
   }
@@ -84,5 +89,5 @@ export const useTransactionsStore = defineStore('transactions', () => {
     })
   }
 
-  return { query, rows, total, loading, reload, loadMore, setQuery, save, remove }
+  return { query, rows, total, loading, reload, loadMore, setQuery, clear, save, remove }
 })
