@@ -14,6 +14,7 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::ledger::{AppError, Ledger};
+use crate::reports::periods_ending;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BucketFields {
@@ -130,6 +131,7 @@ impl Ledger {
     }
 
     /// Porsi bucket root per akhir tiap periode (K9), terlama dulu, memakai mapping & target saat ini.
+    /// `count` di-clamp ke `1..=24`.
     pub fn allocation_history(
         &self,
         end: BudgetPeriod,
@@ -160,6 +162,7 @@ impl Ledger {
 
     /// `count` periode berakhir di `end` (terlama dulu), masing-masing dengan saldo akun per
     /// hari terakhir periode. Akun tanpa posting sampai tanggal itu bersaldo 0.
+    /// `count` di-clamp ke `1..=24` (lihat [`periods_ending`]).
     pub(crate) fn period_points(
         &self,
         end: BudgetPeriod,
@@ -167,13 +170,7 @@ impl Ledger {
     ) -> Result<Vec<(BudgetPeriod, Date, Vec<AccountBalance>)>, AppError> {
         let start = self.period_start_day()?;
         let accounts = account::list_accounts(&self.conn)?;
-        let mut periods = vec![end];
-        for _ in 1..count {
-            let prev = periods.last().expect("non-empty").prev();
-            periods.push(prev);
-        }
-        periods.reverse();
-        periods
+        periods_ending(end, count)
             .into_iter()
             .map(|period| {
                 let date = period.last_day(start);

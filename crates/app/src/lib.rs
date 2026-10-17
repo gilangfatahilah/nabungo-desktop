@@ -14,6 +14,7 @@ mod defaults;
 mod ledger;
 mod onboarding;
 mod payee;
+mod reports;
 mod settings;
 #[cfg(test)]
 mod testkit;
@@ -41,6 +42,7 @@ pub use nabungo_storage::txn::PostingRecord;
 pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
+pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
 pub use settings::{Locale, Theme, UiSettings};
 pub use time::Date;
 pub use transactions::{TxnDetail, TxnForm};
