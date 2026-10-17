@@ -1,9 +1,40 @@
 // Facade IPC: satu-satunya pintu UI ke backend. Komponen tidak memakai `commands` langsung.
 import { isTauri } from '@tauri-apps/api/core'
-import { commands, type AppInfo, type IpcError, type LocaleDto, type ThemeDto, type UiSettingsDto } from './bindings'
+import {
+  commands,
+  type AccountFieldsDto,
+  type AccountKindDto,
+  type AccountsOverviewDto,
+  type AppInfo,
+  type CategoryDto,
+  type CategoryFieldsDto,
+  type CategoryKindDto,
+  type IpcError,
+  type LocaleDto,
+  type OnboardingDto,
+  type ThemeDto,
+  type UiSettingsDto,
+} from './bindings'
 import { browserCommands } from './browser'
 
-export type { AppInfo, ErrorCode, IpcError, LocaleDto, ThemeDto, UiSettingsDto } from './bindings'
+export type {
+  AccountDto,
+  AccountFieldsDto,
+  AccountGroupDto,
+  AccountKindDto,
+  AccountsOverviewDto,
+  AppInfo,
+  CategoryDto,
+  CategoryFieldsDto,
+  CategoryKindDto,
+  ErrorCode,
+  IpcError,
+  LocaleDto,
+  NetWorthDto,
+  OnboardingDto,
+  ThemeDto,
+  UiSettingsDto,
+} from './bindings'
 
 /** Error domain dari backend; `error.code` diterjemahkan oleh UI. */
 export class IpcFailure extends Error {
@@ -46,4 +77,99 @@ export async function setLocale(locale: LocaleDto): Promise<void> {
 
 export function parseAmount(input: string): Promise<number> {
   return unwrap(api().parseAmount(input))
+}
+
+// --- Onboarding & periode budget ---
+
+export function getOnboardingStatus(): Promise<boolean> {
+  return unwrap(api().getOnboardingStatus())
+}
+
+/** Mengembalikan ID akun pertama. */
+export function completeOnboarding(input: OnboardingDto): Promise<string> {
+  return unwrap(api().completeOnboarding(input))
+}
+
+export function getPeriodStartDay(): Promise<number> {
+  return unwrap(api().getPeriodStartDay())
+}
+
+export async function setPeriodStartDay(day: number): Promise<void> {
+  await unwrap(api().setPeriodStartDay(day))
+}
+
+// --- Akun & account group ---
+
+export function accountsOverview(): Promise<AccountsOverviewDto> {
+  return unwrap(api().accountsOverview())
+}
+
+export function createAccount(kind: AccountKindDto, fields: AccountFieldsDto): Promise<string> {
+  return unwrap(api().createAccount(kind, fields))
+}
+
+export async function updateAccount(id: string, fields: AccountFieldsDto): Promise<void> {
+  await unwrap(api().updateAccount(id, fields))
+}
+
+export async function archiveAccount(id: string): Promise<void> {
+  await unwrap(api().archiveAccount(id))
+}
+
+export async function unarchiveAccount(id: string): Promise<void> {
+  await unwrap(api().unarchiveAccount(id))
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  await unwrap(api().deleteAccount(id))
+}
+
+export async function reorderAccounts(groupId: string | null, ids: string[]): Promise<void> {
+  await unwrap(api().reorderAccounts(groupId, ids))
+}
+
+export function createAccountGroup(name: string): Promise<string> {
+  return unwrap(api().createAccountGroup(name))
+}
+
+export async function renameAccountGroup(id: string, name: string): Promise<void> {
+  await unwrap(api().renameAccountGroup(id, name))
+}
+
+export async function deleteAccountGroup(id: string): Promise<void> {
+  await unwrap(api().deleteAccountGroup(id))
+}
+
+export async function reorderAccountGroups(ids: string[]): Promise<void> {
+  await unwrap(api().reorderAccountGroups(ids))
+}
+
+// --- Kategori ---
+
+export function listCategories(): Promise<CategoryDto[]> {
+  return unwrap(api().listCategories())
+}
+
+export function createCategory(kind: CategoryKindDto, fields: CategoryFieldsDto): Promise<string> {
+  return unwrap(api().createCategory(kind, fields))
+}
+
+export async function updateCategory(id: string, fields: CategoryFieldsDto): Promise<void> {
+  await unwrap(api().updateCategory(id, fields))
+}
+
+export async function archiveCategory(id: string): Promise<void> {
+  await unwrap(api().archiveCategory(id))
+}
+
+export async function unarchiveCategory(id: string): Promise<void> {
+  await unwrap(api().unarchiveCategory(id))
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  await unwrap(api().deleteCategory(id))
+}
+
+export async function mergeCategory(source: string, target: string): Promise<void> {
+  await unwrap(api().mergeCategory(source, target))
 }

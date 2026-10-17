@@ -10,12 +10,17 @@ const { t } = useI18n()
 
 const themes: ThemeDto[] = ['light', 'dark', 'system']
 const locales: LocaleDto[] = ['id', 'en']
+const days = Array.from({ length: 28 }, (_, i) => i + 1)
 
 function onTheme(v: unknown) {
   if (typeof v === 'string' && (themes as string[]).includes(v)) void withErrorToast(() => settings.setTheme(v as ThemeDto))
 }
 function onLocale(v: unknown) {
   if (typeof v === 'string' && (locales as string[]).includes(v)) void withErrorToast(() => settings.setLocale(v as LocaleDto))
+}
+function onDay(v: unknown) {
+  const day = Number(v)
+  if (days.includes(day)) void withErrorToast(() => settings.setPeriodStartDay(day))
 }
 </script>
 
@@ -44,6 +49,18 @@ function onLocale(v: unknown) {
             <SelectItem v-for="v in locales" :key="v" :value="v">{{ t(`settings.locales.${v}`) }}</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div class="flex flex-col gap-2">
+        <label id="period-label" class="text-sm font-medium">{{ t('settings.periodStartDay') }}</label>
+        <Select :model-value="String(settings.periodStartDay)" @update:model-value="onDay">
+          <SelectTrigger aria-labelledby="period-label" aria-describedby="period-hint" class="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="d in days" :key="d" :value="String(d)">{{ d }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p id="period-hint" class="text-xs text-muted-foreground">{{ t('settings.periodStartDayHint') }}</p>
       </div>
     </div>
   </section>

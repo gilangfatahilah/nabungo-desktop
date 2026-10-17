@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { i18n } from '@/i18n'
-import { getUiSettings, setLocale as ipcSetLocale, setTheme as ipcSetTheme, type LocaleDto, type ThemeDto } from '@/ipc'
+import {
+  getPeriodStartDay,
+  getUiSettings,
+  setLocale as ipcSetLocale,
+  setPeriodStartDay as ipcSetPeriodStartDay,
+  setTheme as ipcSetTheme,
+  type LocaleDto,
+  type ThemeDto,
+} from '@/ipc'
 import { applyTheme, resolveTheme } from '@/lib/theme'
 
 const QUERY = '(prefers-color-scheme: dark)'
@@ -14,6 +22,7 @@ function mediaQuery(): MediaQueryList | null {
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeDto>('system')
   const locale = ref<LocaleDto>('id')
+  const periodStartDay = ref(1)
   let listening = false
 
   function apply() {
@@ -36,9 +45,10 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function load() {
-    const s = await getUiSettings()
+    const [s, day] = await Promise.all([getUiSettings(), getPeriodStartDay()])
     theme.value = s.theme
     locale.value = s.locale
+    periodStartDay.value = day
     applyLocale()
     apply()
     watchSystem()
@@ -56,8 +66,13 @@ export const useSettingsStore = defineStore('settings', () => {
     applyLocale()
   }
 
+  async function setPeriodStartDay(day: number) {
+    await ipcSetPeriodStartDay(day)
+    periodStartDay.value = day
+  }
+
   // Terapkan tema sistem sedini mungkin agar tidak berkedip terang di sistem gelap.
   apply()
 
-  return { theme, locale, load, setTheme, setLocale }
+  return { theme, locale, periodStartDay, load, setTheme, setLocale, setPeriodStartDay }
 })

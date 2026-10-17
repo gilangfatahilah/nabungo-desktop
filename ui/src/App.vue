@@ -2,7 +2,7 @@
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { onBeforeUnmount, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
@@ -16,8 +16,11 @@ import { useUiStore } from '@/stores/ui'
 const settings = useSettingsStore()
 const ui = useUiStore()
 const router = useRouter()
+const route = useRoute()
 
 function onAction(a: ShortcutAction) {
+  // Layar `bare` (onboarding) tidak punya navigasi.
+  if (route.meta.bare) return
   if (shouldIgnoreAction(a, ui.newTxnOpen)) return
   if (a.kind === 'navigate') {
     ui.paletteOpen = false
@@ -36,7 +39,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <SidebarProvider>
+  <template v-if="route.meta.bare">
+    <RouterView />
+    <Toaster />
+  </template>
+  <SidebarProvider v-else>
     <AppSidebar />
     <SidebarInset class="h-screen overflow-auto">
       <div class="flex-1 p-6">
