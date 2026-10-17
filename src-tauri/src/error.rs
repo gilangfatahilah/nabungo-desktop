@@ -1,7 +1,9 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
 use nabungo_app::AppError;
-use nabungo_app::{AmountParseError, BudgetError, CatalogError, PeriodError, TxnError};
+use nabungo_app::{
+    AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, TxnError,
+};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
@@ -57,6 +59,12 @@ pub enum ErrorCode {
     BudgetIncomeCategory,
     ValuationUnchanged,
     TxnNotEditable,
+    AllocationInvalidBp,
+    AllocationTargetsExceed,
+    AllocationSharesExceed,
+    AllocationDepth,
+    AllocationLiability,
+    AllocationDuplicateBucket,
     Internal,
 }
 
@@ -145,6 +153,19 @@ impl From<BudgetError> for ErrorCode {
     }
 }
 
+impl From<AllocationError> for ErrorCode {
+    fn from(e: AllocationError) -> Self {
+        match e {
+            AllocationError::InvalidBasisPoints => ErrorCode::AllocationInvalidBp,
+            AllocationError::TargetsExceed { .. } => ErrorCode::AllocationTargetsExceed,
+            AllocationError::SharesExceed { .. } => ErrorCode::AllocationSharesExceed,
+            AllocationError::Depth => ErrorCode::AllocationDepth,
+            AllocationError::LiabilityAccount => ErrorCode::AllocationLiability,
+            AllocationError::DuplicateBucket => ErrorCode::AllocationDuplicateBucket,
+        }
+    }
+}
+
 impl From<AppError> for IpcError {
     fn from(e: AppError) -> Self {
         match e {
@@ -172,6 +193,7 @@ impl From<AppError> for IpcError {
             AppError::Period(err) => Self::code(err.into()),
             AppError::ValuationUnchanged => Self::code(ErrorCode::ValuationUnchanged),
             AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
+            AppError::Allocation(err) => Self::code(err.into()),
         }
     }
 }
@@ -241,6 +263,16 @@ mod tests {
         assert_eq!(e.code, ErrorCode::ValuationUnchanged);
         let e = IpcError::from(AppError::NotEditable);
         assert_eq!(e.code, ErrorCode::TxnNotEditable);
+    }
+
+    #[test]
+    fn allocation_errors_map() {
+        let e = IpcError::from(AppError::Allocation(AllocationError::TargetsExceed {
+            total: 10_001,
+        }));
+        assert_eq!(e.code, ErrorCode::AllocationTargetsExceed);
+        let e = IpcError::from(AppError::Allocation(AllocationError::LiabilityAccount));
+        assert_eq!(e.code, ErrorCode::AllocationLiability);
     }
 
     #[test]

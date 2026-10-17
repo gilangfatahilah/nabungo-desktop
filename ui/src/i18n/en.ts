@@ -249,6 +249,12 @@ export default {
     budget_income_category: 'Budgets are for expense categories only',
     valuation_unchanged: 'Value equals the current balance',
     txn_not_editable: "This transaction can't be edited with the form; delete and record it again",
+    allocation_invalid_bp: 'Percentage must be between 0 and 100',
+    allocation_targets_exceed: 'Targets on one level exceed 100%',
+    allocation_shares_exceed: "An account's shares exceed 100%",
+    allocation_depth: 'Buckets can only be two levels deep',
+    allocation_liability: 'Liability accounts are not allocated',
+    allocation_duplicate_bucket: 'The same bucket is selected twice',
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema

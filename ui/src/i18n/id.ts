@@ -249,6 +249,12 @@ export default {
     budget_income_category: 'Budget hanya untuk kategori pengeluaran',
     valuation_unchanged: 'Nilai sama dengan saldo saat ini',
     txn_not_editable: 'Transaksi ini tidak bisa diubah lewat form; hapus lalu catat ulang',
+    allocation_invalid_bp: 'Persentase harus antara 0 dan 100',
+    allocation_targets_exceed: 'Total target satu tingkat melebihi 100%',
+    allocation_shares_exceed: 'Total porsi satu akun melebihi 100%',
+    allocation_depth: 'Bucket hanya boleh dua tingkat',
+    allocation_liability: 'Akun utang tidak ikut alokasi',
+    allocation_duplicate_bucket: 'Bucket yang sama dipilih dua kali',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }

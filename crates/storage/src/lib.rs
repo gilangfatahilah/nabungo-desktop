@@ -7,6 +7,7 @@ use rusqlite_migration::{M, Migrations};
 
 pub mod account;
 pub mod account_group;
+pub mod allocation;
 pub mod budget;
 pub mod category;
 pub mod payee;
@@ -97,6 +98,7 @@ pub fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/0002_unique_root_category.sql")),
         M::up(include_str!("../migrations/0003_catalog_indexes.sql")),
         M::up(include_str!("../migrations/0004_txn_indexes.sql")),
+        M::up(include_str!("../migrations/0005_allocation_names.sql")),
     ])
 }
 
@@ -189,6 +191,24 @@ mod tests {
             "payee_name_nocase",
             "category_child_name_nocase",
             "category_root_name_nocase",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name = ?1",
+                    [index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "missing index {index}");
+        }
+    }
+
+    #[test]
+    fn migration_0005_indexes_exist() {
+        let conn = open_in_memory().unwrap();
+        for index in [
+            "allocation_bucket_root_name_nocase",
+            "allocation_bucket_child_name_nocase",
         ] {
             let n: i64 = conn
                 .query_row(

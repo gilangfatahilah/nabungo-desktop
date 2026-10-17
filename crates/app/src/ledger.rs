@@ -4,7 +4,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use nabungo_core::{
-    BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft, TxnError, TxnKind,
+    AllocationError, BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft,
+    TxnError, TxnKind,
 };
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
@@ -48,6 +49,8 @@ pub enum AppError {
     /// Valuation/adjustment tidak diedit lewat form; hapus lalu catat ulang.
     #[error("transaction can't be edited with the form")]
     NotEditable,
+    #[error(transparent)]
+    Allocation(#[from] AllocationError),
 }
 
 impl AppError {
