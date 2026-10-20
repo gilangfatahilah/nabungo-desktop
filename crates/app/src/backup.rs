@@ -769,6 +769,8 @@ mod tests {
             let f = Fixture::new();
             let before = snapshot(&f.ledger);
             let db = f.db();
+            // `mut` hanya dipakai cabang unix (symlink).
+            #[cfg_attr(not(unix), allow(unused_mut))]
             let mut targets = vec![
                 db.clone(),
                 f.root.join("nabungo.db-wal"),
