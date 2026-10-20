@@ -12,7 +12,7 @@ workspace = true
 nabungo-core = { version = "0.1.0", path = "../core" }
 nabungo-storage = { version = "0.1.0", path = "../storage" }
 thiserror = "2.0.21"
-time = { version = "0.3.55", features = ["formatting", "macros", "parsing"] }
+time = { version = "0.3.55", features = ["formatting", "local-offset", "macros", "parsing"] }
 csv = "1.4.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

@@ -1,13 +1,15 @@
 //! Command Tauri: tipis, hanya memanggil `Ledger`/core lalu memetakan DTO & error.
 
+use std::path::{Path, PathBuf};
 use std::sync::MutexGuard;
 
-use nabungo_app::{Ledger, PeriodStartDay, Uuid};
-use tauri::State;
+use nabungo_app::{Ledger, OffsetDateTime, PeriodStartDay, Uuid};
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-    AllocationPointDto, AppInfo, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
+    AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
     CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
     NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, StartupReportDto, ThemeDto,
     TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
@@ -546,4 +548,121 @@ pub fn net_worth_history(
 #[specta::specta]
 pub fn startup_report(state: State<'_, AppState>) -> StartupReportDto {
     state.startup.into()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_backups(state: State<'_, AppState>) -> Result<Vec<BackupDto>, IpcError> {
+    let list = nabungo_app::list_backups(&state.data_dir.backups_path())?;
+    Ok(list.into_iter().map(Into::into).collect())
+}
+
+enum Dialog {
+    Save { name: String, ext: &'static str },
+    Open,
+    Folder,
+}
+
+/// Dialog native dijalankan di thread blocking agar tidak menahan event loop;
+/// mutex ledger baru dikunci setelah dialog ditutup.
+async fn pick_path(app: &AppHandle, dialog: Dialog) -> Result<Option<PathBuf>, IpcError> {
+    let app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let file = app.dialog().file();
+        match dialog {
+            Dialog::Save { name, ext } => file
+                .add_filter(ext, &[ext])
+                .set_file_name(name)
+                .blocking_save_file(),
+            Dialog::Open => file.add_filter("db", &["db"]).blocking_pick_file(),
+            Dialog::Folder => file.blocking_pick_folder(),
+        }
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "dialog task gagal");
+        IpcError::code(ErrorCode::Internal)
+    })?;
+    picked.map(file_path).transpose()
+}
+
+fn file_path(p: FilePath) -> Result<PathBuf, IpcError> {
+    p.into_path().map_err(|e| {
+        tracing::error!(error = %e, "path dialog tidak valid");
+        IpcError::code(ErrorCode::FileIo)
+    })
+}
+
+fn display(p: &Path) -> String {
+    p.display().to_string()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn backup_now(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, IpcError> {
+    let name = format!(
+        "nabungo-backup-{}.db",
+        nabungo_app::format_date(nabungo_app::local_today())
+    );
+    let Some(dest) = pick_path(&app, Dialog::Save { name, ext: "db" }).await? else {
+        return Ok(None);
+    };
+    ledger(&state)?.backup_to(&dest)?;
+    Ok(Some(display(&dest)))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn restore_backup(state: State<'_, AppState>, file_name: String) -> Result<(), IpcError> {
+    let dir = state.data_dir.backups_path();
+    Ok(ledger(&state)?.restore_named(&dir, &file_name, OffsetDateTime::now_utc())?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_backup_from_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, IpcError> {
+    let Some(src) = pick_path(&app, Dialog::Open).await? else {
+        return Ok(false);
+    };
+    let dir = state.data_dir.backups_path();
+    ledger(&state)?.restore_file(&src, &dir, OffsetDateTime::now_utc())?;
+    Ok(true)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_json(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, IpcError> {
+    let name = format!(
+        "nabungo-export-{}.json",
+        nabungo_app::format_date(nabungo_app::local_today())
+    );
+    let Some(dest) = pick_path(&app, Dialog::Save { name, ext: "json" }).await? else {
+        return Ok(None);
+    };
+    let file = std::fs::File::create(&dest).map_err(nabungo_app::AppError::from)?;
+    let mut w = std::io::BufWriter::new(file);
+    ledger(&state)?.export_json(&mut w, OffsetDateTime::now_utc())?;
+    Ok(Some(display(&dest)))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn export_csv(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, IpcError> {
+    let Some(parent) = pick_path(&app, Dialog::Folder).await? else {
+        return Ok(None);
+    };
+    let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today())?;
+    Ok(Some(display(&dir)))
 }

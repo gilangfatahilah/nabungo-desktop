@@ -88,7 +88,7 @@ pub fn now_utc() -> String {
     format_utc(time::OffsetDateTime::now_utc())
 }
 
-fn format_utc(t: time::OffsetDateTime) -> String {
+pub fn format_utc(t: time::OffsetDateTime) -> String {
     let t = t.to_offset(time::UtcOffset::UTC);
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",

@@ -67,6 +67,12 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::category_breakdown,
             commands::net_worth_history,
             commands::startup_report,
+            commands::list_backups,
+            commands::backup_now,
+            commands::restore_backup,
+            commands::restore_backup_from_file,
+            commands::export_json,
+            commands::export_csv,
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()
@@ -144,6 +150,7 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| init(app).map_err(Into::into))
         .invoke_handler(builder.invoke_handler())
         .build(tauri::generate_context!())

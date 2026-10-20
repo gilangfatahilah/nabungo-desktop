@@ -71,6 +71,12 @@ export const commands = {
 	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
 	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
 	startupReport: () => __TAURI_INVOKE<StartupReportDto>("startup_report"),
+	listBackups: () => typedError<BackupDto[], IpcError>(__TAURI_INVOKE("list_backups")),
+	backupNow: () => typedError<string | null, IpcError>(__TAURI_INVOKE("backup_now")),
+	restoreBackup: (fileName: string) => typedError<null, IpcError>(__TAURI_INVOKE("restore_backup", { fileName })),
+	restoreBackupFromFile: () => typedError<boolean, IpcError>(__TAURI_INVOKE("restore_backup_from_file")),
+	exportJson: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_json")),
+	exportCsv: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_csv")),
 };
 
 /* Types */
@@ -145,6 +151,16 @@ export type AppInfo = {
 	dataDir: string,
 	portable: boolean,
 };
+
+export type BackupDto = {
+	fileName: string,
+	kind: BackupKindDto,
+	/**  ISO-8601 UTC. */
+	createdAt: string,
+	sizeBytes: number,
+};
+
+export type BackupKindDto = "auto" | "pre_migration" | "pre_restore";
 
 /**  `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`. */
 export type BucketActualDto = {
@@ -244,7 +260,7 @@ export type CategoryFieldsDto = {
 
 export type CategoryKindDto = "income" | "expense";
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "file_io" | "internal";
 
 export type FeeDto = {
 	amount: number,

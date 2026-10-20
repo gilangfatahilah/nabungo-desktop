@@ -6,6 +6,13 @@ pub fn version() -> &'static str {
     nabungo_core::version()
 }
 
+/// Tanggal lokal hari ini; jatuh ke UTC bila offset lokal tak bisa dibaca.
+pub fn local_today() -> Date {
+    OffsetDateTime::now_local()
+        .unwrap_or_else(|_| OffsetDateTime::now_utc())
+        .date()
+}
+
 mod accounts;
 mod allocation;
 mod backup;
@@ -41,6 +48,7 @@ pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::allocation::BucketRow;
 pub use nabungo_storage::category::CategoryRow;
+pub use nabungo_storage::format_utc as format_timestamp;
 pub use nabungo_storage::txn::PostingRecord;
 pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;

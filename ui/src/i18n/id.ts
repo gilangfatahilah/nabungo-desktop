@@ -315,6 +315,10 @@ export default {
     allocation_depth: 'Bucket hanya boleh dua tingkat',
     allocation_liability: 'Akun utang tidak ikut alokasi',
     allocation_duplicate_bucket: 'Bucket yang sama dipilih dua kali',
+    backup_invalid: 'File bukan backup Nabungo yang valid',
+    backup_too_new: 'Backup dibuat oleh versi Nabungo yang lebih baru',
+    backup_target_invalid: 'Lokasi itu tidak boleh dipakai untuk backup',
+    file_io: 'Gagal membaca atau menulis file. Periksa lokasi dan ruang disk.',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }
