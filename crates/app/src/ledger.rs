@@ -3,7 +3,10 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use nabungo_core::{CatalogError, MoneyError, PostingDraft, TxnDraft, TxnError, TxnKind};
+use nabungo_core::{
+    AllocationError, BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft,
+    TxnError, TxnKind,
+};
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
 use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
@@ -36,6 +39,18 @@ pub enum AppError {
     Duplicate(&'static str),
     #[error("onboarding already completed")]
     AlreadyOnboarded,
+    #[error(transparent)]
+    Budget(#[from] BudgetError),
+    #[error(transparent)]
+    Period(#[from] PeriodError),
+    /// Nilai valuation sama dengan saldo pada tanggal itu.
+    #[error("valuation equals the current balance")]
+    ValuationUnchanged,
+    /// Valuation/adjustment tidak diedit lewat form; hapus lalu catat ulang.
+    #[error("transaction can't be edited with the form")]
+    NotEditable,
+    #[error(transparent)]
+    Allocation(#[from] AllocationError),
 }
 
 impl AppError {

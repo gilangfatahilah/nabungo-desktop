@@ -6,9 +6,12 @@ use nabungo_app::{Ledger, PeriodStartDay, Uuid};
 use tauri::State;
 
 use crate::dto::{
-    AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AppInfo, CategoryDto, CategoryFieldsDto,
-    CategoryKindDto, LocaleDto, OnboardingDto, PayeeSuggestionDto, ThemeDto, TxnDetailDto,
-    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, parse_id,
+    AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
+    AllocationPointDto, AppInfo, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
+    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, ThemeDto, TxnDetailDto,
+    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -343,4 +346,198 @@ pub fn txn_form_defaults(state: State<'_, AppState>) -> Result<TxnFormDefaultsDt
         last_account_id: ledger.last_used_account()?.map(|a| a.to_string()),
         fee_category_id: ledger.default_fee_category()?.map(|c| c.to_string()),
     })
+}
+
+// --- Budget ---
+
+/// Kunci periode budget (`YYYY-MM`) yang memuat `date`.
+#[tauri::command]
+#[specta::specta]
+pub fn period_of(state: State<'_, AppState>, date: String) -> Result<String, IpcError> {
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?.period_of(date)?.key())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn budget_overview(
+    state: State<'_, AppState>,
+    period: String,
+) -> Result<BudgetOverviewDto, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.budget_overview(period)?.into())
+}
+
+/// `amount = null` menghapus budget kategori di periode itu.
+#[tauri::command]
+#[specta::specta]
+pub fn set_budget(
+    state: State<'_, AppState>,
+    category_id: String,
+    period: String,
+    amount: Option<i64>,
+) -> Result<(), IpcError> {
+    let category_id = parse_id(&category_id, "category")?;
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.set_budget(category_id, period, amount)?)
+}
+
+/// Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris.
+#[tauri::command]
+#[specta::specta]
+pub fn copy_budgets(state: State<'_, AppState>, period: String) -> Result<u32, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.copy_budgets(period)?)
+}
+
+// --- Valuation ---
+
+/// Catat nilai akun investasi per akhir `date`; yang disimpan adalah selisih terhadap saldo.
+#[tauri::command]
+#[specta::specta]
+pub fn record_valuation(
+    state: State<'_, AppState>,
+    account_id: String,
+    date: String,
+    value: i64,
+) -> Result<String, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?
+        .record_valuation(account_id, date, value)?
+        .to_string())
+}
+
+/// Riwayat valuation, terbaru dulu.
+#[tauri::command]
+#[specta::specta]
+pub fn valuation_history(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<Vec<ValuationPointDto>, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    Ok(ledger(&state)?
+        .valuation_history(account_id)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+// --- Alokasi modal ---
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_allocation(state: State<'_, AppState>) -> Result<AllocationOverviewDto, IpcError> {
+    Ok(ledger(&state)?.allocation_overview()?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_bucket(
+    state: State<'_, AppState>,
+    fields: BucketFieldsDto,
+) -> Result<String, IpcError> {
+    let fields = fields.try_into()?;
+    Ok(ledger(&state)?.create_bucket(&fields)?.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_bucket(
+    state: State<'_, AppState>,
+    id: String,
+    fields: BucketFieldsDto,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "bucket")?;
+    let fields = fields.try_into()?;
+    Ok(ledger(&state)?.update_bucket(id, &fields)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_bucket(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "bucket")?;
+    Ok(ledger(&state)?.delete_bucket(id)?)
+}
+
+/// Mengganti seluruh porsi akun; daftar kosong = akun tidak dialokasikan.
+#[tauri::command]
+#[specta::specta]
+pub fn set_account_allocation(
+    state: State<'_, AppState>,
+    account_id: String,
+    shares: Vec<ShareDto>,
+) -> Result<(), IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let shares = shares
+        .iter()
+        .map(ShareDto::parse)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ledger(&state)?.set_account_allocation(account_id, &shares)?)
+}
+
+/// `count` periode berakhir di `end_period`, terlama dulu.
+#[tauri::command]
+#[specta::specta]
+pub fn allocation_history(
+    state: State<'_, AppState>,
+    end_period: String,
+    count: u8,
+) -> Result<Vec<AllocationPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    Ok(ledger(&state)?
+        .allocation_history(end, count)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+// --- Laporan ---
+
+/// Income/expense per periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
+#[tauri::command]
+#[specta::specta]
+pub fn cashflow_report(
+    state: State<'_, AppState>,
+    end_period: String,
+    count: u8,
+) -> Result<Vec<CashflowPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    Ok(ledger(&state)?
+        .cashflow_report(end, count)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Total per kategori root dalam satu periode, nominal terbesar dulu.
+#[tauri::command]
+#[specta::specta]
+pub fn category_breakdown(
+    state: State<'_, AppState>,
+    period: String,
+    kind: CategoryKindDto,
+) -> Result<Vec<CategoryAmountDto>, IpcError> {
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?
+        .category_breakdown(period, kind.into())?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
+#[tauri::command]
+#[specta::specta]
+pub fn net_worth_history(
+    state: State<'_, AppState>,
+    end_period: String,
+    count: u8,
+) -> Result<Vec<NetWorthPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    Ok(ledger(&state)?
+        .net_worth_history(end, count)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }

@@ -45,3 +45,12 @@ export function moneyParts(amountMinor: number, locale: LocaleDto = 'id'): Money
       .join(''),
   }
 }
+
+/** Nominal ringkas tanpa simbol mata uang ("11,5 jt", "11.5M") untuk label sumbu grafik. */
+export function formatCompact(amountMinor: number, locale: LocaleDto = 'id'): string {
+  const text = new Intl.NumberFormat(locale === 'id' ? 'id-ID' : 'en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(Math.abs(amountMinor))
+  return (amountMinor < 0 ? MINUS : '') + text
+}

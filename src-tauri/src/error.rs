@@ -1,7 +1,9 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
 use nabungo_app::AppError;
-use nabungo_app::{AmountParseError, CatalogError, PeriodError, TxnError};
+use nabungo_app::{
+    AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, TxnError,
+};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
@@ -51,6 +53,18 @@ pub enum ErrorCode {
     CategoryKindMismatch,
     CategoryHasChildren,
     MergeIntoSelf,
+    InvalidPeriod,
+    BudgetNegative,
+    BudgetTooLarge,
+    BudgetIncomeCategory,
+    ValuationUnchanged,
+    TxnNotEditable,
+    AllocationInvalidBp,
+    AllocationTargetsExceed,
+    AllocationSharesExceed,
+    AllocationDepth,
+    AllocationLiability,
+    AllocationDuplicateBucket,
     Internal,
 }
 
@@ -114,9 +128,41 @@ impl From<CatalogError> for ErrorCode {
     }
 }
 
+impl From<PeriodError> for ErrorCode {
+    fn from(e: PeriodError) -> Self {
+        match e {
+            PeriodError::InvalidStartDay(_) => ErrorCode::InvalidStartDay,
+            PeriodError::InvalidMonth(_) | PeriodError::InvalidKey => ErrorCode::InvalidPeriod,
+        }
+    }
+}
+
 impl From<PeriodError> for IpcError {
-    fn from(_: PeriodError) -> Self {
-        Self::code(ErrorCode::InvalidStartDay)
+    fn from(e: PeriodError) -> Self {
+        Self::code(e.into())
+    }
+}
+
+impl From<BudgetError> for ErrorCode {
+    fn from(e: BudgetError) -> Self {
+        match e {
+            BudgetError::Negative => ErrorCode::BudgetNegative,
+            BudgetError::TooLarge => ErrorCode::BudgetTooLarge,
+            BudgetError::IncomeCategory => ErrorCode::BudgetIncomeCategory,
+        }
+    }
+}
+
+impl From<AllocationError> for ErrorCode {
+    fn from(e: AllocationError) -> Self {
+        match e {
+            AllocationError::InvalidBasisPoints => ErrorCode::AllocationInvalidBp,
+            AllocationError::TargetsExceed { .. } => ErrorCode::AllocationTargetsExceed,
+            AllocationError::SharesExceed { .. } => ErrorCode::AllocationSharesExceed,
+            AllocationError::Depth => ErrorCode::AllocationDepth,
+            AllocationError::LiabilityAccount => ErrorCode::AllocationLiability,
+            AllocationError::DuplicateBucket => ErrorCode::AllocationDuplicateBucket,
+        }
     }
 }
 
@@ -143,6 +189,11 @@ impl From<AppError> for IpcError {
             AppError::InUse(entity) => Self::with_entity(ErrorCode::InUse, entity),
             AppError::Duplicate(entity) => Self::with_entity(ErrorCode::Duplicate, entity),
             AppError::AlreadyOnboarded => Self::code(ErrorCode::AlreadyOnboarded),
+            AppError::Budget(err) => Self::code(err.into()),
+            AppError::Period(err) => Self::code(err.into()),
+            AppError::ValuationUnchanged => Self::code(ErrorCode::ValuationUnchanged),
+            AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
+            AppError::Allocation(err) => Self::code(err.into()),
         }
     }
 }
@@ -194,6 +245,34 @@ mod tests {
         assert_eq!(e.code, ErrorCode::TxnSplitMismatch);
         let e = IpcError::from(AppError::Txn(TxnError::NotPositive));
         assert_eq!(e.code, ErrorCode::TxnNotPositive);
+    }
+
+    #[test]
+    fn budget_and_period_errors_map() {
+        let e = IpcError::from(AppError::Budget(BudgetError::IncomeCategory));
+        assert_eq!(e.code, ErrorCode::BudgetIncomeCategory);
+        let e = IpcError::from(AppError::Period(PeriodError::InvalidKey));
+        assert_eq!(e.code, ErrorCode::InvalidPeriod);
+        let e = IpcError::from(PeriodError::InvalidStartDay(29));
+        assert_eq!(e.code, ErrorCode::InvalidStartDay);
+    }
+
+    #[test]
+    fn valuation_errors_map() {
+        let e = IpcError::from(AppError::ValuationUnchanged);
+        assert_eq!(e.code, ErrorCode::ValuationUnchanged);
+        let e = IpcError::from(AppError::NotEditable);
+        assert_eq!(e.code, ErrorCode::TxnNotEditable);
+    }
+
+    #[test]
+    fn allocation_errors_map() {
+        let e = IpcError::from(AppError::Allocation(AllocationError::TargetsExceed {
+            total: 10_001,
+        }));
+        assert_eq!(e.code, ErrorCode::AllocationTargetsExceed);
+        let e = IpcError::from(AppError::Allocation(AllocationError::LiabilityAccount));
+        assert_eq!(e.code, ErrorCode::AllocationLiability);
     }
 
     #[test]

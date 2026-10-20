@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateInput, parseDateInput, todayIso } from './date'
+import { formatDateInput, formatPeriod, formatRange, parseDateInput, todayIso } from './date'
 
 describe('todayIso', () => {
   it('memakai tanggal lokal dengan nol di depan', () => {
@@ -45,5 +45,17 @@ describe('parseDateInput', () => {
     expect(parseDateInput('31/02/2026', 'id', today)).toBeNull()
     expect(parseDateInput('', 'id', today)).toBeNull()
     expect(parseDateInput('kemarin sore', 'id', today)).toBeNull()
+  })
+})
+
+describe('formatPeriod / formatRange', () => {
+  it('periode budget sebagai bulan pendek + tahun', () => {
+    expect(formatPeriod('2026-10', 'id')).toBe('Okt 2026')
+    expect(formatPeriod('2026-10', 'en')).toBe('Oct 2026')
+  })
+
+  it('rentang tanggal tanpa tahun', () => {
+    expect(formatRange('2026-09-25', '2026-10-24', 'id')).toBe('25 Sep – 24 Okt')
+    expect(formatRange('2026-09-25', '2026-10-24', 'en')).toBe('Sep 25 – Oct 24')
   })
 })

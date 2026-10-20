@@ -5,7 +5,9 @@
 //! Nominal uang selalu `i64` dalam satuan minor; floating point dilarang.
 #![deny(clippy::float_arithmetic)]
 
+pub mod allocation;
 pub mod amount;
+pub mod budget;
 pub mod catalog;
 pub mod date;
 pub mod form;
@@ -15,7 +17,15 @@ pub mod networth;
 pub mod period;
 pub mod txn;
 
+pub use allocation::{
+    AccountBalance, AllocationError, AllocationReport, Bucket, BucketActual, Mapping,
+    SiblingWarning, Unallocated, allocation_report, check_bp, check_shares, check_sibling_targets,
+};
 pub use amount::{AmountParseError, parse_amount};
+pub use budget::{
+    BudgetCategory, BudgetError, BudgetLine, BudgetTotals, budget_totals, rollup_spent,
+    validate_budget_amount,
+};
 pub use catalog::{
     CatalogError, MAX_NAME_LEN, MergeSide, ParentInfo, check_merge, check_parent, normalize_name,
     validate_credit_limit, validate_statement_day,

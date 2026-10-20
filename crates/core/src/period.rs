@@ -8,6 +8,8 @@ pub enum PeriodError {
     InvalidStartDay(u8),
     #[error("month must be 1..=12, got {0}")]
     InvalidMonth(u8),
+    #[error("period key must be YYYY-MM")]
+    InvalidKey,
 }
 
 /// Tanggal awal periode budget. Dibatasi 1..=28 agar ada di setiap bulan.
@@ -86,6 +88,25 @@ impl BudgetPeriod {
     /// Kunci yang disimpan di kolom `budget.period`, mis. `"2026-11"`.
     pub fn key(&self) -> String {
         format!("{:04}-{:02}", self.year, self.month)
+    }
+
+    /// Kebalikan dari [`key`](Self::key): tepat `YYYY-MM`, bulan 01–12.
+    pub fn parse(key: &str) -> Result<Self, PeriodError> {
+        let b = key.as_bytes();
+        if b.len() != 7 || b[4] != b'-' || !b[..4].iter().chain(&b[5..]).all(u8::is_ascii_digit) {
+            return Err(PeriodError::InvalidKey);
+        }
+        let year = key[..4].parse().map_err(|_| PeriodError::InvalidKey)?;
+        let month = key[5..].parse().map_err(|_| PeriodError::InvalidKey)?;
+        Self::new(year, month).map_err(|_| PeriodError::InvalidKey)
+    }
+
+    /// Hari terakhir periode (inklusif).
+    pub fn last_day(self, start: PeriodStartDay) -> Date {
+        self.date_range(start)
+            .1
+            .previous_day()
+            .expect("period end is never the minimum date")
     }
 
     /// Rentang tanggal setengah terbuka `[start, end)`.
@@ -179,6 +200,38 @@ mod tests {
     fn key_is_zero_padded() {
         assert_eq!(p(2026, 3).key(), "2026-03");
         assert!(BudgetPeriod::new(2026, 13).is_err());
+    }
+
+    #[test]
+    fn parse_roundtrips_key() {
+        assert_eq!(BudgetPeriod::parse("2026-11").unwrap(), p(2026, 11));
+        assert_eq!(BudgetPeriod::parse(&p(2026, 1).key()).unwrap(), p(2026, 1));
+        for bad in [
+            "2026-13",
+            "2026-00",
+            "2026-1",
+            "26-11",
+            "2026/11",
+            "",
+            "2026-11-01",
+            "+026-11",
+        ] {
+            assert_eq!(
+                BudgetPeriod::parse(bad),
+                Err(PeriodError::InvalidKey),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn last_day_is_inclusive_end() {
+        let s25 = PeriodStartDay::new(25).unwrap();
+        assert_eq!(p(2026, 11).last_day(s25), date!(2026 - 11 - 24));
+        assert_eq!(
+            p(2026, 2).last_day(PeriodStartDay::FIRST),
+            date!(2026 - 02 - 28)
+        );
     }
 
     proptest! {

@@ -19,6 +19,7 @@ const props = defineProps<{ groupId: string | null; accounts: AccountDto[]; arch
 const emit = defineEmits<{
   move: [accountId: string, groupId: string | null, index: number]
   edit: [account: AccountDto]
+  valuate: [account: AccountDto]
   archive: [account: AccountDto]
   restore: [account: AccountDto]
   delete: [account: AccountDto]
@@ -82,6 +83,9 @@ if (!props.archived) {
           </template>
           <template v-else>
             <DropdownMenuItem @select="emit('edit', a)">{{ $t('actions.edit') }}</DropdownMenuItem>
+            <DropdownMenuItem v-if="a.kind === 'investment'" data-testid="account-valuate" @select="emit('valuate', a)">
+              {{ $t('accounts.updateValue') }}
+            </DropdownMenuItem>
             <DropdownMenuItem :disabled="i === 0" @select="emit('move', a.id, groupId, i - 1)">
               {{ $t('actions.moveUp') }}
             </DropdownMenuItem>

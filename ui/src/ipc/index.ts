@@ -5,12 +5,19 @@ import {
   type AccountFieldsDto,
   type AccountKindDto,
   type AccountsOverviewDto,
+  type AllocationOverviewDto,
+  type AllocationPointDto,
   type AppInfo,
+  type BucketFieldsDto,
+  type BudgetOverviewDto,
+  type CashflowPointDto,
+  type CategoryAmountDto,
   type CategoryDto,
   type CategoryFieldsDto,
   type CategoryKindDto,
   type IpcError,
   type LocaleDto,
+  type NetWorthPointDto,
   type OnboardingDto,
   type ThemeDto,
   type TxnDetailDto,
@@ -19,7 +26,9 @@ import {
   type TxnPageDto,
   type TxnQueryDto,
   type PayeeSuggestionDto,
+  type ShareDto,
   type UiSettingsDto,
+  type ValuationPointDto,
 } from './bindings'
 import { browserCommands } from './browser'
 
@@ -29,7 +38,24 @@ export type {
   AccountGroupDto,
   AccountKindDto,
   AccountsOverviewDto,
+  AllocationOverviewDto,
+  AllocationPointDto,
   AppInfo,
+  BucketActualDto,
+  BucketBpDto,
+  BucketDto,
+  BucketFieldsDto,
+  BudgetOverviewDto,
+  CashflowPointDto,
+  CategoryAmountDto,
+  MappingDto,
+  NetWorthPointDto,
+  ShareDto,
+  UnallocatedDto,
+  ValuationPointDto,
+  WarningDto,
+  BudgetRowDto,
+  BudgetTotalDto,
   CategoryDto,
   CategoryFieldsDto,
   CategoryKindDto,
@@ -232,4 +258,80 @@ export function listTags(): Promise<string[]> {
 
 export function txnFormDefaults(): Promise<TxnFormDefaultsDto> {
   return unwrap(api().txnFormDefaults())
+}
+
+// --- Budget ---
+
+/** Kunci periode budget (`YYYY-MM`) yang memuat tanggal ISO `date`. */
+export function periodOf(date: string): Promise<string> {
+  return unwrap(api().periodOf(date))
+}
+
+export function budgetOverview(period: string): Promise<BudgetOverviewDto> {
+  return unwrap(api().budgetOverview(period))
+}
+
+/** `amount = null` menghapus budget. */
+export async function setBudget(categoryId: string, period: string, amount: number | null): Promise<void> {
+  await unwrap(api().setBudget(categoryId, period, amount))
+}
+
+/** Mengembalikan jumlah budget yang disalin dari periode sebelumnya. */
+export function copyBudgets(period: string): Promise<number> {
+  return unwrap(api().copyBudgets(period))
+}
+
+// --- Valuation ---
+
+export function recordValuation(accountId: string, date: string, value: number): Promise<string> {
+  return unwrap(api().recordValuation(accountId, date, value))
+}
+
+export function valuationHistory(accountId: string): Promise<ValuationPointDto[]> {
+  return unwrap(api().valuationHistory(accountId))
+}
+
+// --- Alokasi modal ---
+
+export function allocationOverview(): Promise<AllocationOverviewDto> {
+  return unwrap(api().listAllocation())
+}
+
+export function createBucket(fields: BucketFieldsDto): Promise<string> {
+  return unwrap(api().createBucket(fields))
+}
+
+export async function updateBucket(id: string, fields: BucketFieldsDto): Promise<void> {
+  await unwrap(api().updateBucket(id, fields))
+}
+
+export async function deleteBucket(id: string): Promise<void> {
+  await unwrap(api().deleteBucket(id))
+}
+
+/** Mengganti seluruh porsi akun; `[]` = akun tidak dialokasikan. */
+export async function setAccountAllocation(accountId: string, shares: ShareDto[]): Promise<void> {
+  await unwrap(api().setAccountAllocation(accountId, shares))
+}
+
+/** `count` periode berakhir di `endPeriod`, terlama dulu. */
+export function allocationHistory(endPeriod: string, count: number): Promise<AllocationPointDto[]> {
+  return unwrap(api().allocationHistory(endPeriod, count))
+}
+
+// --- Laporan ---
+
+/** `count` periode (maks. 24) berakhir di `endPeriod`, terlama dulu. */
+export function cashflowReport(endPeriod: string, count: number): Promise<CashflowPointDto[]> {
+  return unwrap(api().cashflowReport(endPeriod, count))
+}
+
+/** Total per kategori root, nominal terbesar dulu; kategori bernilai 0 tidak muncul. */
+export function categoryBreakdown(period: string, kind: CategoryKindDto): Promise<CategoryAmountDto[]> {
+  return unwrap(api().categoryBreakdown(period, kind))
+}
+
+/** Net worth per akhir periode, `count` periode (maks. 24) berakhir di `endPeriod`. */
+export function netWorthHistory(endPeriod: string, count: number): Promise<NetWorthPointDto[]> {
+  return unwrap(api().netWorthHistory(endPeriod, count))
 }

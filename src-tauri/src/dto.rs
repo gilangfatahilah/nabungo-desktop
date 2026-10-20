@@ -1,10 +1,12 @@
 //! DTO serde/specta untuk command. Tanpa logika bisnis.
 
 use nabungo_app::{
-    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, CategoryFields,
-    CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth, OnboardingInput,
-    PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind,
-    TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, format_date, parse_date,
+    AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
+    AllocationPoint, BucketFields, BucketRow, BudgetOverview, BudgetPeriod, BudgetRow,
+    CashflowPoint, CategoryAmount, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
+    Locale, NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PeriodStartDay,
+    PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery,
+    UiSettings, Uuid, ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -362,7 +364,7 @@ impl TryFrom<OnboardingDto> for OnboardingInput {
     }
 }
 
-fn parse_day(s: &str) -> Result<Date, IpcError> {
+pub fn parse_day(s: &str) -> Result<Date, IpcError> {
     parse_date(s).map_err(|_| IpcError::invalid_date())
 }
 
@@ -663,6 +665,363 @@ pub struct TxnFormDefaultsDto {
     pub fee_category_id: Option<String>,
 }
 
+// --- Budget ---
+
+pub fn parse_period(s: &str) -> Result<BudgetPeriod, IpcError> {
+    Ok(BudgetPeriod::parse(s)?)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetRowDto {
+    pub category_id: String,
+    pub parent_id: Option<String>,
+    pub budget: Option<i64>,
+    /// Positif = terpakai; parent mencakup child.
+    pub spent: i64,
+    /// `budget − spent`; negatif = lewat budget.
+    pub remaining: Option<i64>,
+}
+
+impl From<BudgetRow> for BudgetRowDto {
+    fn from(r: BudgetRow) -> Self {
+        Self {
+            category_id: r.category_id.to_string(),
+            parent_id: r.parent_id.map(|p| p.to_string()),
+            budget: r.budget,
+            spent: r.spent,
+            remaining: r.budget.map(|b| b.saturating_sub(r.spent)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetTotalDto {
+    pub budget: i64,
+    pub spent: i64,
+    pub remaining: i64,
+}
+
+/// `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetOverviewDto {
+    pub period: String,
+    pub prev: String,
+    pub next: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub rows: Vec<BudgetRowDto>,
+    pub total: BudgetTotalDto,
+}
+
+impl From<BudgetOverview> for BudgetOverviewDto {
+    fn from(o: BudgetOverview) -> Self {
+        Self {
+            period: o.period.key(),
+            prev: o.period.prev().key(),
+            next: o.period.next().key(),
+            from: format_date(o.from),
+            to: format_date(o.to),
+            rows: o.rows.into_iter().map(Into::into).collect(),
+            total: BudgetTotalDto {
+                budget: o.totals.budget,
+                spent: o.totals.spent,
+                remaining: o.totals.budget.saturating_sub(o.totals.spent),
+            },
+        }
+    }
+}
+
+// --- Valuation ---
+
+/// `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ValuationPointDto {
+    pub txn_id: String,
+    pub date: String,
+    pub change: i64,
+    pub value: i64,
+}
+
+impl From<ValuationPoint> for ValuationPointDto {
+    fn from(p: ValuationPoint) -> Self {
+        Self {
+            txn_id: p.txn_id.to_string(),
+            date: format_date(p.date),
+            change: p.change,
+            value: p.value,
+        }
+    }
+}
+
+// --- Alokasi modal ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketDto {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub name: String,
+    /// Relatif terhadap parent (child) atau total (root); 10000 = 100%.
+    pub target_bp: i64,
+    pub color: Option<String>,
+    pub sort_order: i64,
+}
+
+impl From<BucketRow> for BucketDto {
+    fn from(b: BucketRow) -> Self {
+        Self {
+            id: b.id.to_string(),
+            parent_id: b.parent_id.map(|p| p.to_string()),
+            name: b.name,
+            target_bp: b.target_bp,
+            color: b.color,
+            sort_order: b.sort_order,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketFieldsDto {
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub target_bp: i64,
+    pub color: Option<String>,
+}
+
+impl TryFrom<BucketFieldsDto> for BucketFields {
+    type Error = IpcError;
+
+    fn try_from(f: BucketFieldsDto) -> Result<Self, IpcError> {
+        Ok(Self {
+            name: f.name,
+            parent_id: parse_opt_id(f.parent_id.as_deref(), "bucket")?,
+            target_bp: f.target_bp,
+            color: f.color,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareDto {
+    pub bucket_id: String,
+    pub share_bp: i64,
+}
+
+impl ShareDto {
+    pub fn parse(&self) -> Result<(Uuid, i64), IpcError> {
+        Ok((parse_id(&self.bucket_id, "bucket")?, self.share_bp))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MappingDto {
+    pub account_id: String,
+    pub bucket_id: String,
+    pub share_bp: i64,
+}
+
+/// `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketActualDto {
+    pub bucket_id: String,
+    pub target_bp: i64,
+    pub actual: i64,
+    pub actual_bp: i64,
+    pub diff_bp: i64,
+    pub diff_amount: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UnallocatedDto {
+    pub account_id: String,
+    pub remaining_bp: i64,
+    pub amount: i64,
+}
+
+/// Sibling (root bila `parent_id = null`) yang Σ target ≠ 100%.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WarningDto {
+    pub parent_id: Option<String>,
+    pub total_bp: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AllocationOverviewDto {
+    /// Urutan pohon: root lalu child-nya.
+    pub buckets: Vec<BucketDto>,
+    pub mappings: Vec<MappingDto>,
+    pub gross: i64,
+    pub liabilities: i64,
+    pub actuals: Vec<BucketActualDto>,
+    pub unallocated: Vec<UnallocatedDto>,
+    pub unallocated_total: i64,
+    pub unallocated_bp: i64,
+    pub warnings: Vec<WarningDto>,
+}
+
+impl From<AllocationOverview> for AllocationOverviewDto {
+    fn from(o: AllocationOverview) -> Self {
+        let r = o.report;
+        Self {
+            buckets: o.buckets.into_iter().map(Into::into).collect(),
+            mappings: o
+                .mappings
+                .into_iter()
+                .map(|m| MappingDto {
+                    account_id: m.account_id.to_string(),
+                    bucket_id: m.bucket_id.to_string(),
+                    share_bp: m.share_bp,
+                })
+                .collect(),
+            gross: r.gross,
+            liabilities: r.liabilities,
+            actuals: r
+                .buckets
+                .into_iter()
+                .map(|b| BucketActualDto {
+                    bucket_id: b.bucket_id.to_string(),
+                    target_bp: b.target_bp,
+                    actual: b.actual,
+                    actual_bp: b.actual_bp,
+                    diff_bp: b.diff_bp,
+                    diff_amount: b.diff_amount,
+                })
+                .collect(),
+            unallocated: r
+                .unallocated
+                .into_iter()
+                .map(|u| UnallocatedDto {
+                    account_id: u.account_id.to_string(),
+                    remaining_bp: u.remaining_bp,
+                    amount: u.amount,
+                })
+                .collect(),
+            unallocated_total: r.unallocated_total,
+            unallocated_bp: r.unallocated_bp,
+            warnings: r
+                .warnings
+                .into_iter()
+                .map(|w| WarningDto {
+                    parent_id: w.parent_id.map(|p| p.to_string()),
+                    total_bp: w.total_bp,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BucketBpDto {
+    pub bucket_id: String,
+    pub actual_bp: i64,
+}
+
+/// Porsi bucket root per hari terakhir `period` (`date`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AllocationPointDto {
+    pub period: String,
+    pub date: String,
+    pub gross: i64,
+    pub buckets: Vec<BucketBpDto>,
+}
+
+impl From<AllocationPoint> for AllocationPointDto {
+    fn from(p: AllocationPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            date: format_date(p.date),
+            gross: p.gross,
+            buckets: p
+                .buckets
+                .into_iter()
+                .map(|(id, bp)| BucketBpDto {
+                    bucket_id: id.to_string(),
+                    actual_bp: bp,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CashflowPointDto {
+    pub period: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub income: i64,
+    /// Positif = keluar.
+    pub expense: i64,
+    pub net: i64,
+}
+
+impl From<CashflowPoint> for CashflowPointDto {
+    fn from(p: CashflowPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            from: format_date(p.from),
+            to: format_date(p.to),
+            income: p.income,
+            expense: p.expense,
+            net: p.net,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryAmountDto {
+    /// Kategori root.
+    pub category_id: String,
+    pub amount: i64,
+}
+
+impl From<CategoryAmount> for CategoryAmountDto {
+    fn from(c: CategoryAmount) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NetWorthPointDto {
+    pub period: String,
+    pub date: String,
+    pub assets: i64,
+    pub liabilities: i64,
+    pub net: i64,
+}
+
+impl From<NetWorthPoint> for NetWorthPointDto {
+    fn from(p: NetWorthPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            date: format_date(p.date),
+            assets: p.assets,
+            liabilities: p.liabilities,
+            net: p.net,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -679,6 +1038,115 @@ mod tests {
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
         }
+    }
+
+    #[test]
+    fn cashflow_point_serializes_camel_case() {
+        let p = CashflowPoint {
+            period: BudgetPeriod::new(2026, 10).unwrap(),
+            from: parse_date("2026-09-25").unwrap(),
+            to: parse_date("2026-10-24").unwrap(),
+            income: 10,
+            expense: 3,
+            net: 7,
+        };
+        assert_eq!(
+            serde_json::to_value(CashflowPointDto::from(p)).unwrap(),
+            serde_json::json!({ "period": "2026-10", "from": "2026-09-25", "to": "2026-10-24",
+                "income": 10, "expense": 3, "net": 7 })
+        );
+    }
+
+    #[test]
+    fn bucket_fields_dto_rejects_bad_parent_id() {
+        let f = BucketFieldsDto {
+            name: "Saham".into(),
+            parent_id: Some("x".into()),
+            target_bp: 6000,
+            color: None,
+        };
+        let e = BucketFields::try_from(f).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidId);
+        assert_eq!(e.entity.as_deref(), Some("bucket"));
+    }
+
+    #[test]
+    fn allocation_point_dto_serializes_camel_case() {
+        let id = Uuid::now_v7();
+        let dto = AllocationPointDto::from(AllocationPoint {
+            period: BudgetPeriod::parse("2026-10").unwrap(),
+            date: parse_date("2026-10-31").unwrap(),
+            gross: 1_000,
+            buckets: vec![(id, 2500)],
+        });
+        assert_eq!(
+            serde_json::to_value(&dto).unwrap(),
+            serde_json::json!({
+                "period": "2026-10", "date": "2026-10-31", "gross": 1000,
+                "buckets": [{ "bucketId": id.to_string(), "actualBp": 2500 }],
+            })
+        );
+    }
+
+    #[test]
+    fn valuation_point_dto_serializes_camel_case() {
+        let id = Uuid::now_v7();
+        let dto = ValuationPointDto::from(ValuationPoint {
+            txn_id: id,
+            date: nabungo_app::parse_date("2026-10-31").unwrap(),
+            change: -500,
+            value: 9_500,
+        });
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "txnId": id.to_string(), "date": "2026-10-31", "change": -500, "value": 9_500 })
+        );
+    }
+
+    #[test]
+    fn budget_overview_dto_has_neighbours_and_remaining() {
+        let period = BudgetPeriod::parse("2026-01").unwrap();
+        let cat = Uuid::now_v7();
+        let dto = BudgetOverviewDto::from(BudgetOverview {
+            period,
+            from: parse_date("2025-12-25").unwrap(),
+            to: parse_date("2026-01-24").unwrap(),
+            rows: vec![
+                BudgetRow {
+                    category_id: cat,
+                    parent_id: None,
+                    budget: Some(100),
+                    spent: 130,
+                },
+                BudgetRow {
+                    category_id: Uuid::now_v7(),
+                    parent_id: Some(cat),
+                    budget: None,
+                    spent: 5,
+                },
+            ],
+            totals: nabungo_app::BudgetTotals {
+                budget: 100,
+                spent: 130,
+            },
+        });
+        assert_eq!(
+            (dto.prev.as_str(), dto.next.as_str()),
+            ("2025-12", "2026-02")
+        );
+        assert_eq!(
+            (dto.from.as_str(), dto.to.as_str()),
+            ("2025-12-25", "2026-01-24")
+        );
+        assert_eq!(dto.rows[0].remaining, Some(-30));
+        assert_eq!(dto.rows[1].remaining, None);
+        assert_eq!(dto.rows[1].parent_id, Some(cat.to_string()));
+        assert_eq!(dto.total.remaining, -30);
+        assert_eq!(
+            parse_period("2026-13").unwrap_err().code,
+            ErrorCode::InvalidPeriod
+        );
     }
 
     #[test]

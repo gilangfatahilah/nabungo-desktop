@@ -45,6 +45,31 @@ export const commands = {
 	searchPayees: (query: string) => typedError<string[], IpcError>(__TAURI_INVOKE("search_payees", { query })),
 	listTags: () => typedError<string[], IpcError>(__TAURI_INVOKE("list_tags")),
 	txnFormDefaults: () => typedError<TxnFormDefaultsDto, IpcError>(__TAURI_INVOKE("txn_form_defaults")),
+	/**  Kunci periode budget (`YYYY-MM`) yang memuat `date`. */
+	periodOf: (date: string) => typedError<string, IpcError>(__TAURI_INVOKE("period_of", { date })),
+	budgetOverview: (period: string) => typedError<BudgetOverviewDto, IpcError>(__TAURI_INVOKE("budget_overview", { period })),
+	/**  `amount = null` menghapus budget kategori di periode itu. */
+	setBudget: (categoryId: string, period: string, amount: number | null) => typedError<null, IpcError>(__TAURI_INVOKE("set_budget", { categoryId, period, amount })),
+	/**  Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris. */
+	copyBudgets: (period: string) => typedError<number, IpcError>(__TAURI_INVOKE("copy_budgets", { period })),
+	/**  Catat nilai akun investasi per akhir `date`; yang disimpan adalah selisih terhadap saldo. */
+	recordValuation: (accountId: string, date: string, value: number) => typedError<string, IpcError>(__TAURI_INVOKE("record_valuation", { accountId, date, value })),
+	/**  Riwayat valuation, terbaru dulu. */
+	valuationHistory: (accountId: string) => typedError<ValuationPointDto[], IpcError>(__TAURI_INVOKE("valuation_history", { accountId })),
+	listAllocation: () => typedError<AllocationOverviewDto, IpcError>(__TAURI_INVOKE("list_allocation")),
+	createBucket: (fields: BucketFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_bucket", { fields })),
+	updateBucket: (id: string, fields: BucketFieldsDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_bucket", { id, fields })),
+	deleteBucket: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_bucket", { id })),
+	/**  Mengganti seluruh porsi akun; daftar kosong = akun tidak dialokasikan. */
+	setAccountAllocation: (accountId: string, shares: ShareDto[]) => typedError<null, IpcError>(__TAURI_INVOKE("set_account_allocation", { accountId, shares })),
+	/**  `count` periode berakhir di `end_period`, terlama dulu. */
+	allocationHistory: (endPeriod: string, count: number) => typedError<AllocationPointDto[], IpcError>(__TAURI_INVOKE("allocation_history", { endPeriod, count })),
+	/**  Income/expense per periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
+	cashflowReport: (endPeriod: string, count: number) => typedError<CashflowPointDto[], IpcError>(__TAURI_INVOKE("cashflow_report", { endPeriod, count })),
+	/**  Total per kategori root dalam satu periode, nominal terbesar dulu. */
+	categoryBreakdown: (period: string, kind: CategoryKindDto) => typedError<CategoryAmountDto[], IpcError>(__TAURI_INVOKE("category_breakdown", { period, kind })),
+	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
+	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
 };
 
 /* Types */
@@ -93,10 +118,108 @@ export type AccountsOverviewDto = {
 	netWorth: NetWorthDto,
 };
 
+export type AllocationOverviewDto = {
+	/**  Urutan pohon: root lalu child-nya. */
+	buckets: BucketDto[],
+	mappings: MappingDto[],
+	gross: number,
+	liabilities: number,
+	actuals: BucketActualDto[],
+	unallocated: UnallocatedDto[],
+	unallocatedTotal: number,
+	unallocatedBp: number,
+	warnings: WarningDto[],
+};
+
+/**  Porsi bucket root per hari terakhir `period` (`date`). */
+export type AllocationPointDto = {
+	period: string,
+	date: string,
+	gross: number,
+	buckets: BucketBpDto[],
+};
+
 export type AppInfo = {
 	version: string,
 	dataDir: string,
 	portable: boolean,
+};
+
+/**  `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`. */
+export type BucketActualDto = {
+	bucketId: string,
+	targetBp: number,
+	actual: number,
+	actualBp: number,
+	diffBp: number,
+	diffAmount: number,
+};
+
+export type BucketBpDto = {
+	bucketId: string,
+	actualBp: number,
+};
+
+export type BucketDto = {
+	id: string,
+	parentId: string | null,
+	name: string,
+	/**  Relatif terhadap parent (child) atau total (root); 10000 = 100%. */
+	targetBp: number,
+	color: string | null,
+	sortOrder: number,
+};
+
+export type BucketFieldsDto = {
+	name: string,
+	parentId: string | null,
+	targetBp: number,
+	color: string | null,
+};
+
+/**  `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri. */
+export type BudgetOverviewDto = {
+	period: string,
+	prev: string,
+	next: string,
+	from: string,
+	/**  Inklusif. */
+	to: string,
+	rows: BudgetRowDto[],
+	total: BudgetTotalDto,
+};
+
+export type BudgetRowDto = {
+	categoryId: string,
+	parentId: string | null,
+	budget: number | null,
+	/**  Positif = terpakai; parent mencakup child. */
+	spent: number,
+	/**  `budget − spent`; negatif = lewat budget. */
+	remaining: number | null,
+};
+
+export type BudgetTotalDto = {
+	budget: number,
+	spent: number,
+	remaining: number,
+};
+
+export type CashflowPointDto = {
+	period: string,
+	from: string,
+	/**  Inklusif. */
+	to: string,
+	income: number,
+	/**  Positif = keluar. */
+	expense: number,
+	net: number,
+};
+
+export type CategoryAmountDto = {
+	/**  Kategori root. */
+	categoryId: string,
+	amount: number,
 };
 
 export type CategoryDto = {
@@ -120,7 +243,7 @@ export type CategoryFieldsDto = {
 
 export type CategoryKindDto = "income" | "expense";
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "internal";
 
 export type FeeDto = {
 	amount: number,
@@ -137,7 +260,21 @@ export type IpcError = {
 
 export type LocaleDto = "id" | "en";
 
+export type MappingDto = {
+	accountId: string,
+	bucketId: string,
+	shareBp: number,
+};
+
 export type NetWorthDto = {
+	assets: number,
+	liabilities: number,
+	net: number,
+};
+
+export type NetWorthPointDto = {
+	period: string,
+	date: string,
 	assets: number,
 	liabilities: number,
 	net: number,
@@ -160,6 +297,11 @@ export type PostingDto = {
 	categoryId: string | null,
 	amount: number,
 	memo: string | null,
+};
+
+export type ShareDto = {
+	bucketId: string,
+	shareBp: number,
 };
 
 export type SplitDto = {
@@ -248,6 +390,26 @@ export type TxnRowDto = {
 export type UiSettingsDto = {
 	theme: ThemeDto,
 	locale: LocaleDto,
+};
+
+export type UnallocatedDto = {
+	accountId: string,
+	remainingBp: number,
+	amount: number,
+};
+
+/**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */
+export type ValuationPointDto = {
+	txnId: string,
+	date: string,
+	change: number,
+	value: number,
+};
+
+/**  Sibling (root bila `parent_id = null`) yang Σ target ≠ 100%. */
+export type WarningDto = {
+	parentId: string | null,
+	totalBp: number,
 };
 
 /* Tauri Specta runtime */

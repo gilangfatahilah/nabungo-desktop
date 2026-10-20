@@ -16,6 +16,22 @@ export function formatDateInput(value: string, locale: LocaleDto): string {
     .format(new Date(y!, m! - 1, d!))
 }
 
+/** Kunci periode `YYYY-MM` → "Okt 2026" / "Oct 2026". */
+export function formatPeriod(key: string, locale: LocaleDto): string {
+  const [y, m] = key.split('-').map(Number)
+  return new Intl.DateTimeFormat(intlLocale(locale), { month: 'short', year: 'numeric' }).format(new Date(y!, m! - 1, 1))
+}
+
+/** Rentang inklusif tanpa tahun → "25 Sep – 24 Okt" / "Sep 25 – Oct 24". */
+export function formatRange(from: string, to: string, locale: LocaleDto): string {
+  const f = new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short' })
+  const at = (v: string) => {
+    const [y, m, d] = v.split('-').map(Number)
+    return f.format(new Date(y!, m! - 1, d!))
+  }
+  return `${at(from)} – ${at(to)}`
+}
+
 function valid(y: number, m: number, d: number): string | null {
   const dt = new Date(y, m - 1, d)
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? iso(y, m, d) : null
