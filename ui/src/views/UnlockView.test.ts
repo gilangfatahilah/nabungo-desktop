@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '@/i18n'
+import { reloadApp } from '@/lib/reload'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
 import { useSecurityStore } from '@/stores/security'
@@ -88,6 +89,8 @@ describe('UnlockView', () => {
     expect(router.currentRoute.value.name).toBe('unlock')
     expect(router.currentRoute.value.query.redirect).toBe('/accounts')
     expect(security.locked).toBe(true)
+    // Fallback browser: backend in-memory, reload = data hilang; hanya Tauri yang memuat ulang UI.
+    expect(reloadApp).not.toHaveBeenCalled()
     await cleanup()
   })
 })

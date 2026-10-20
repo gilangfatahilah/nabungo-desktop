@@ -1,3 +1,4 @@
+import { isTauri } from '@tauri-apps/api/core'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -70,6 +71,7 @@ export const useSecurityStore = defineStore('security', () => {
   /**
    * Pindah ke layar kunci lalu muat ulang UI, agar data store lain tidak tertinggal di memori
    * di balik layar kunci. Sudah di `unlock` → cukup tandai terkunci (tidak ada loop reload).
+   * Fallback browser tidak dimuat ulang: backend-nya in-memory, reload sama dengan menghapus DB.
    */
   async function showLockScreen(router: Router) {
     locked.value = true
@@ -77,7 +79,7 @@ export const useSecurityStore = defineStore('security', () => {
     if (current.name === 'unlock') return
     const redirect = current.name === 'dashboard' || current.name === undefined ? undefined : current.fullPath
     await router.replace({ name: 'unlock', query: redirect ? { redirect } : {} })
-    reloadApp()
+    if (isTauri()) reloadApp()
   }
 
   /** Error `locked` dari command apa pun → layar kunci. */
