@@ -9,9 +9,9 @@ use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
     CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
-    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, ThemeDto, TxnDetailDto,
-    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
-    parse_day, parse_id, parse_period,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, StartupReportDto, ThemeDto,
+    TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
+    ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::AppState;
@@ -540,4 +540,10 @@ pub fn net_worth_history(
         .into_iter()
         .map(Into::into)
         .collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn startup_report(state: State<'_, AppState>) -> StartupReportDto {
+    state.startup.into()
 }

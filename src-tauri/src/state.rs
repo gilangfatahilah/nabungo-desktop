@@ -4,11 +4,13 @@ use std::sync::Mutex;
 
 use nabungo_app::Ledger;
 
+use crate::lifecycle::StartupReport;
 use crate::paths::DataDir;
 
 pub struct AppState {
     pub ledger: Mutex<Ledger>,
     pub data_dir: DataDir,
+    pub startup: StartupReport,
 }
 
 /// Penahan `WorkerGuard` log selama app berjalan.

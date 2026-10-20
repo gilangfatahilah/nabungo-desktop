@@ -3,6 +3,7 @@
 mod commands;
 mod dto;
 mod error;
+mod lifecycle;
 mod logging;
 mod paths;
 mod state;
@@ -65,6 +66,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cashflow_report,
             commands::category_breakdown,
             commands::net_worth_history,
+            commands::startup_report,
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()
@@ -86,7 +88,18 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
     let guard = logging::init_logging(&data_dir.path)?;
     tracing::info!(path = %data_dir.path.display(), portable = data_dir.portable, "Nabungo mulai");
 
-    let ledger = match nabungo_app::Ledger::open(&data_dir.db_path()) {
+    let unclean_shutdown = lifecycle::SessionMarker::acquire(&data_dir.session_marker_path())
+        .context("gagal menulis penanda sesi")?;
+    if unclean_shutdown {
+        tracing::warn!("sesi sebelumnya tidak berakhir normal");
+    }
+    let backups = data_dir.backups_path();
+    let opened = nabungo_app::Ledger::open_with_backups(
+        &data_dir.db_path(),
+        &backups,
+        nabungo_app::OffsetDateTime::now_utc(),
+    );
+    let ledger = match opened {
         Ok(l) => l,
         Err(e) => {
             tracing::error!(error = %e, "gagal membuka database");
@@ -94,11 +107,29 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
             return Err(e.into());
         }
     };
+    let startup = lifecycle::StartupReport {
+        unclean_shutdown,
+        integrity: if unclean_shutdown {
+            lifecycle::check_integrity(&ledger)
+        } else {
+            lifecycle::IntegrityStatus::Skipped
+        },
+    };
+    let auto_backup = lifecycle::auto_backup_allowed(&startup);
+    if auto_backup {
+        lifecycle::run_auto_backup(&ledger, &backups);
+    } else {
+        tracing::warn!("backup otomatis dimatikan untuk sesi ini");
+    }
     app.manage(state::LogGuard(guard));
     app.manage(state::AppState {
         ledger: std::sync::Mutex::new(ledger),
         data_dir,
+        startup,
     });
+    if auto_backup {
+        lifecycle::spawn_backup_scheduler(app.handle().clone());
+    }
     Ok(())
 }
 
@@ -115,8 +146,16 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| init(app).map_err(Into::into))
         .invoke_handler(builder.invoke_handler())
-        .run(tauri::generate_context!())
-        .expect("error while running Nabungo");
+        .build(tauri::generate_context!())
+        .expect("error while building Nabungo")
+        .run(|app, event| {
+            use tauri::Manager;
+            if let tauri::RunEvent::Exit = event
+                && let Some(state) = app.try_state::<state::AppState>()
+            {
+                lifecycle::SessionMarker::release(&state.data_dir.session_marker_path());
+            }
+        });
 }
 
 #[cfg(test)]

@@ -15,6 +15,14 @@ impl DataDir {
     pub fn db_path(&self) -> PathBuf {
         self.path.join("nabungo.db")
     }
+
+    pub fn backups_path(&self) -> PathBuf {
+        self.path.join("backups")
+    }
+
+    pub fn session_marker_path(&self) -> PathBuf {
+        self.path.join("session.lock")
+    }
 }
 
 /// Portable bila `exe_dir/portable` ada (data di `exe_dir/data`); selain itu `base_data_dir/nabungo`.

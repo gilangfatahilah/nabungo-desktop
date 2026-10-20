@@ -70,6 +70,7 @@ export const commands = {
 	categoryBreakdown: (period: string, kind: CategoryKindDto) => typedError<CategoryAmountDto[], IpcError>(__TAURI_INVOKE("category_breakdown", { period, kind })),
 	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
 	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
+	startupReport: () => __TAURI_INVOKE<StartupReportDto>("startup_report"),
 };
 
 /* Types */
@@ -251,6 +252,8 @@ export type FeeDto = {
 	categoryId: string | null,
 };
 
+export type IntegrityStatusDto = "skipped" | "ok" | "failed";
+
 /**  Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`. */
 export type IpcError = {
 	code: ErrorCode,
@@ -308,6 +311,11 @@ export type SplitDto = {
 	categoryId: string,
 	amount: number,
 	memo: string | null,
+};
+
+export type StartupReportDto = {
+	uncleanShutdown: boolean,
+	integrity: IntegrityStatusDto,
 };
 
 export type ThemeDto = "light" | "dark" | "system";

@@ -11,6 +11,7 @@ use nabungo_app::{
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, IpcError};
+use crate::lifecycle::{IntegrityStatus, StartupReport};
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -1315,5 +1316,33 @@ mod tests {
         assert_eq!(v["accountDelta"], -206_500);
         assert_eq!(v["toAccountId"], a.to_string());
         assert_eq!(v["splitCount"], 0);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegrityStatusDto {
+    Skipped,
+    Ok,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupReportDto {
+    pub unclean_shutdown: bool,
+    pub integrity: IntegrityStatusDto,
+}
+
+impl From<StartupReport> for StartupReportDto {
+    fn from(r: StartupReport) -> Self {
+        Self {
+            unclean_shutdown: r.unclean_shutdown,
+            integrity: match r.integrity {
+                IntegrityStatus::Skipped => IntegrityStatusDto::Skipped,
+                IntegrityStatus::Ok => IntegrityStatusDto::Ok,
+                IntegrityStatus::Failed => IntegrityStatusDto::Failed,
+            },
+        }
     }
 }
