@@ -29,6 +29,7 @@ mod settings;
 mod testkit;
 mod transactions;
 mod valuation;
+pub mod vault;
 
 pub use accounts::{AccountFields, AccountsOverview};
 pub use allocation::{AllocationOverview, AllocationPoint, BucketFields};

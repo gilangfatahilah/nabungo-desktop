@@ -16,7 +16,7 @@ use uuid::Uuid;
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error(transparent)]
-    Storage(#[from] StorageError),
+    Storage(StorageError),
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -62,6 +62,31 @@ pub enum AppError {
     /// Tujuan/sumber backup adalah DB yang sedang dipakai.
     #[error("backup target is the live database")]
     BackupTargetInvalid,
+    /// Database terkunci: belum dibuka dengan password/recovery key.
+    #[error("database is locked")]
+    Locked,
+    #[error("wrong password")]
+    WrongPassword,
+    #[error("invalid recovery key")]
+    InvalidRecoveryKey,
+    #[error("password is too short")]
+    PasswordTooShort,
+    /// `nabungo.key` rusak atau versinya tidak dikenal.
+    #[error("key file is invalid")]
+    KeyFileInvalid,
+    /// Enable saat sudah terenkripsi / disable saat belum.
+    #[error("encryption is already in that state")]
+    EncryptionState,
+}
+
+impl From<StorageError> for AppError {
+    fn from(e: StorageError) -> Self {
+        match e {
+            StorageError::WrongKey => AppError::WrongPassword,
+            StorageError::KeyRequired => AppError::Locked,
+            e => AppError::Storage(e),
+        }
+    }
 }
 
 impl AppError {
@@ -69,7 +94,7 @@ impl AppError {
     pub(crate) fn duplicate_as(entity: &'static str) -> impl Fn(StorageError) -> AppError {
         move |e| match e {
             StorageError::Duplicate => AppError::Duplicate(entity),
-            e => AppError::Storage(e),
+            e => e.into(),
         }
     }
 
@@ -78,7 +103,7 @@ impl AppError {
         match e {
             StorageError::InvalidBackup => AppError::InvalidBackup,
             StorageError::BackupTooNew(_) => AppError::BackupTooNew,
-            e => AppError::Storage(e),
+            e => e.into(),
         }
     }
 }

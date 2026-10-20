@@ -205,6 +205,13 @@ impl From<AppError> for IpcError {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::FileIo)
             }
+            // Sementara (Fase 6b Task 2); ErrorCode khusus ditambahkan di Task 4.
+            AppError::Locked
+            | AppError::WrongPassword
+            | AppError::InvalidRecoveryKey
+            | AppError::PasswordTooShort
+            | AppError::KeyFileInvalid
+            | AppError::EncryptionState => Self::code(ErrorCode::Internal),
         }
     }
 }
