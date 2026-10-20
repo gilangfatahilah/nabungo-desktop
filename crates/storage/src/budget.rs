@@ -40,9 +40,22 @@ pub fn list_budgets(conn: &Connection, period: &str) -> Result<Vec<BudgetRow>> {
     let mut stmt = conn.prepare_cached(
         "SELECT category_id, period, amount FROM budget WHERE period = ?1 ORDER BY category_id",
     )?;
-    let rows = stmt.query_map([period], |r| {
+    collect_rows(stmt.query_map([period], |r| {
         Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
-    })?;
+    })?)
+}
+
+/// Semua budget (semua periode), urut periode lalu kategori — untuk ekspor.
+pub fn list_all_budgets(conn: &Connection) -> Result<Vec<BudgetRow>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT category_id, period, amount FROM budget ORDER BY period, category_id",
+    )?;
+    collect_rows(stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?)))?)
+}
+
+fn collect_rows(
+    rows: impl Iterator<Item = rusqlite::Result<(String, String, i64)>>,
+) -> Result<Vec<BudgetRow>> {
     rows.map(|row| {
         let (id, period, amount) = row?;
         Ok(BudgetRow {

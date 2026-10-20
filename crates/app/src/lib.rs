@@ -12,6 +12,7 @@ mod backup;
 mod budget;
 mod categories;
 mod defaults;
+mod export;
 mod ledger;
 mod onboarding;
 mod payee;
