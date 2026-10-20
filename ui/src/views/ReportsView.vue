@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { useCategoriesStore } from '@/stores/categories'
 import { REPORT_PERIODS, useReportsStore } from '@/stores/reports'
 import { useSettingsStore } from '@/stores/settings'
+import { useTransactionsStore } from '@/stores/transactions'
 
 const store = useReportsStore()
 const categories = useCategoriesStore()
@@ -59,6 +60,9 @@ const row = 'grid grid-cols-[8rem_repeat(3,minmax(7rem,10rem))] items-center gap
 onMounted(() => {
   void withErrorToast(() => Promise.all([store.load(), categories.load()]))
 })
+
+const txns = useTransactionsStore()
+watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
 </script>
 
 <template>

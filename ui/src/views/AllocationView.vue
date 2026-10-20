@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EllipsisVertical, Plus } from '@lucide/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { useAccountsStore } from '@/stores/accounts'
 import { useAllocationStore } from '@/stores/allocation'
 import { useSettingsStore } from '@/stores/settings'
+import { useTransactionsStore } from '@/stores/transactions'
 
 const store = useAllocationStore()
 const accounts = useAccountsStore()
@@ -112,6 +113,9 @@ function openMapping(a: AccountDto) {
 onMounted(() => {
   void withErrorToast(() => Promise.all([store.load(), accounts.load()]))
 })
+
+const txns = useTransactionsStore()
+watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
 </script>
 
 <template>

@@ -5,11 +5,15 @@ import { nextTick } from 'vue'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
+import { useTransactionsStore } from '@/stores/transactions'
+import { emptyForm } from '@/lib/txnForm'
 import ReportsView from './ReportsView.vue'
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.body.querySelector(sel) as T
 const $$ = (sel: string) => [...document.body.querySelectorAll<HTMLElement>(sel)]
 const cells = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>('[role="cell"]')].map((c) => c.textContent!.trim())
+
+let bca = ''
 
 async function settle() {
   await flushPromises()
@@ -23,7 +27,7 @@ async function view() {
 }
 
 beforeAll(async () => {
-  const bca = await ipc.completeOnboarding({
+  bca = await ipc.completeOnboarding({
     locale: 'id', periodStartDay: 1, accountKind: 'bank',
     account: { name: 'BCA', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
       icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-09-01' },
@@ -103,5 +107,17 @@ describe('ReportsView', () => {
     expect(cells($('[data-testid="networth-row-2026-08"]'))).toEqual(['Agu 2026', '0', '0', '0'])
     expect(cells($('[data-testid="networth-row-2026-09"]'))).toEqual(['Sep 2026', '950.000', '0', '950.000'])
     expect(cells($('[data-testid="networth-row-2026-10"]'))).toEqual(['Okt 2026', '8.885.000', '0', '8.885.000'])
+  })
+
+  it('memuat ulang setelah transaksi disimpan dari form global', async () => {
+    await view()
+    const transport = (await ipc.listCategories()).find((c) => c.name === 'Transportasi')!.id
+    await useTransactionsStore().save(null, {
+      ...emptyForm('expense', { accountId: bca, feeCategoryId: null, today: '2026-10-05' }),
+      amount: 10_000, categoryId: transport,
+    })
+    await settle()
+    expect(cells($('[data-testid="cashflow-row-2026-10"]'))).toEqual(['Okt 2026', '8.000.000', '75.000', '7.925.000'])
+    expect(cells($$('[data-testid="breakdown-row"]')[0]!)).toEqual(['Transportasi', '50.000', '66,67%'])
   })
 })

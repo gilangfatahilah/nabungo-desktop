@@ -5,6 +5,8 @@ import { nextTick } from 'vue'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
+import { useTransactionsStore } from '@/stores/transactions'
+import { emptyForm } from '@/lib/txnForm'
 import AllocationView from './AllocationView.vue'
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.body.querySelector(sel) as T
@@ -108,5 +110,20 @@ describe('AllocationView', () => {
     const row = $(`[data-testid="bucket-row-${await bucketId('Saham')}"]`)
     expect(row.textContent).toContain('60% dari Aset')
     expect($(`[data-testid="bucket-target-${await bucketId('Saham')}"]`).textContent).toBe('36%')
+  })
+
+  it('memuat ulang setelah transaksi disimpan dari form global', async () => {
+    await view()
+    const aset = () => $(`[data-testid="bucket-row-${asetId}"]`).textContent
+    const asetId = await bucketId('Aset')
+    expect(aset()).toContain('900.000')
+    const gaji = (await ipc.listCategories()).find((c) => c.name === 'Gaji')!.id
+    await useTransactionsStore().save(null, {
+      ...emptyForm('income', { accountId: bca, feeCategoryId: null, today: '2026-10-05' }),
+      amount: 500_000, categoryId: gaji,
+    })
+    await settle()
+    expect($(`[data-testid="mapping-${bca}"]`).textContent).toContain('1.500.000')
+    expect(aset()).toContain('1.350.000')
   })
 })

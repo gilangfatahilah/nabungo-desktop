@@ -25,6 +25,8 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const rows = ref<TxnRowDto[]>([])
   const total = ref(0)
   const loading = ref(false)
+  /** Naik setiap transaksi disimpan/dihapus/dipulihkan: layar turunan (budget, laporan, alokasi) memuat ulang. */
+  const ledgerVersion = ref(0)
 
   /** `keepLoaded`: setelah aksi tulis, muat ulang sebanyak baris yang sudah dimuat agar posisi tidak hilang. */
   async function reload(keepLoaded = false) {
@@ -63,6 +65,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
   async function refresh() {
     await Promise.all([reload(true), useAccountsStore().load()])
+    ledgerVersion.value++
   }
 
   async function save(id: string | null, state: TxnFormState): Promise<string> {
@@ -89,5 +92,5 @@ export const useTransactionsStore = defineStore('transactions', () => {
     })
   }
 
-  return { query, rows, total, loading, reload, loadMore, setQuery, clear, save, remove }
+  return { query, rows, total, loading, ledgerVersion, reload, loadMore, setQuery, clear, save, remove }
 })

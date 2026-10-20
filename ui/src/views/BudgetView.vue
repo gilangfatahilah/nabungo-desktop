@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, Copy } from '@lucide/vue'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import BudgetBar from '@/components/BudgetBar.vue'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { useBudgetStore } from '@/stores/budget'
 import { useCategoriesStore } from '@/stores/categories'
 import { useSettingsStore } from '@/stores/settings'
+import { useTransactionsStore } from '@/stores/transactions'
 
 const store = useBudgetStore()
 const categories = useCategoriesStore()
@@ -31,6 +32,11 @@ onMounted(() => {
     if (!categories.loaded) await categories.load()
     await store.init()
   })
+})
+
+const txns = useTransactionsStore()
+watch(() => txns.ledgerVersion, () => {
+  if (store.period) void withErrorToast(() => store.load(store.period!))
 })
 
 const num = (v: number) => {

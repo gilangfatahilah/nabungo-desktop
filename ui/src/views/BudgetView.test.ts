@@ -5,6 +5,8 @@ import { nextTick } from 'vue'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
+import { useTransactionsStore } from '@/stores/transactions'
+import { emptyForm } from '@/lib/txnForm'
 import BudgetView from './BudgetView.vue'
 
 const $ = <T extends Element = HTMLElement>(sel: string) => document.body.querySelector(sel) as T
@@ -103,5 +105,16 @@ describe('BudgetView', () => {
     ;[...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes(id.budget.copy))!.click()
     await settle()
     expect(cell('Restoran').textContent).toContain('50.000')
+  })
+
+  it('memuat ulang setelah transaksi disimpan dari form global', async () => {
+    await view()
+    expect(remaining('Kopi & jajan')).toBe('−15.000')
+    await useTransactionsStore().save(null, {
+      ...emptyForm('expense', { accountId: bca, feeCategoryId: null, today: '2026-10-05' }),
+      amount: 5_000, categoryId: cats['Kopi & jajan']!,
+    })
+    await settle()
+    expect(remaining('Kopi & jajan')).toBe('−20.000')
   })
 })
