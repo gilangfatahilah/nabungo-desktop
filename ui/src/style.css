@@ -167,3 +167,36 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Cetak recovery key: hanya `.print-recovery` yang terlihat di kertas. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-recovery,
+  .print-recovery * {
+    visibility: visible;
+  }
+  .print-recovery {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 2rem;
+    background: #fff;
+    color: #000;
+    font-size: 12pt;
+    line-height: 1.6;
+  }
+  .print-recovery h1 {
+    font-size: 16pt;
+    font-weight: 600;
+  }
+  .print-recovery-key {
+    margin: 1.5rem 0;
+    font-family: ui-monospace, monospace;
+    font-size: 14pt;
+    letter-spacing: 0.08em;
+    word-break: break-all;
+  }
+}

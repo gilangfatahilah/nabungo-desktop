@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'vue-sonner'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import { reloadApp } from '@/lib/reload'
@@ -14,7 +15,8 @@ const button = (text: string, root: ParentNode = document.body) =>
 const rows = () => document.body.querySelectorAll('[data-testid="backup-row"]')
 
 async function mountView() {
-  const w = mount(SettingsView, { global: { plugins: [i18n] }, attachTo: document.body })
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
+  const w = mount(SettingsView, { global: { plugins: [i18n, router] }, attachTo: document.body })
   await flushPromises()
   return w
 }

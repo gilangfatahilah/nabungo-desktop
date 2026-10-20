@@ -2,13 +2,12 @@
 import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
 import { browserLedger, browserSecurity, isBrowserLocked } from './browser-ledger'
+import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
 const settings: UiSettingsDto = { theme: 'system', locale: 'id', autoLockMinutes: 5 }
 
-/** Sama dengan `AUTO_LOCK_CHOICES` di `crates/app/src/settings.rs`. */
-const AUTO_LOCK_CHOICES = [1, 5, 10, 15, 30]
 
 const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })
 
@@ -49,7 +48,7 @@ export const browserCommands = lockGuard({
     return 'ok' in r ? ok(r.ok) : { status: 'error', error: { code: r.err, entity: null } }
   },
   setAutoLockMinutes: async (minutes: number): Promise<Result<null>> => {
-    if (!AUTO_LOCK_CHOICES.includes(minutes)) return { status: 'error', error: { code: 'invalid_auto_lock', entity: null } }
+    if (!(AUTO_LOCK_CHOICES as readonly number[]).includes(minutes)) return { status: 'error', error: { code: 'invalid_auto_lock', entity: null } }
     settings.autoLockMinutes = minutes
     return ok(null)
   },

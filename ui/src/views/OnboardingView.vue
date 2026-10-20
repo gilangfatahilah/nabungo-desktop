@@ -3,17 +3,24 @@ import { ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AmountInput from '@/components/AmountInput.vue'
+import EncryptionFields, { type EncryptionInput } from '@/components/EncryptionFields.vue'
+import RecoveryKeyDialog from '@/components/RecoveryKeyDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { toast } from 'vue-sonner'
 import { completeOnboarding, type AccountKindDto, type LocaleDto } from '@/ipc'
 import { ACCOUNT_KINDS, isLiability, openingSign } from '@/lib/accounts'
 import { todayIso } from '@/lib/date'
+import { errorMessage, type Translate } from '@/lib/errors'
 import { withErrorToast } from '@/lib/notify'
+import { useSecurityStore } from '@/stores/security'
 import { useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
+const security = useSecurityStore()
 const router = useRouter()
 const { t } = useI18n()
 
@@ -29,8 +36,17 @@ const nameError = ref<string | null>(null)
 const busy = ref(false)
 const balanceInput = useTemplateRef<{ commit(): Promise<boolean> }>('balanceInput')
 
+// Enkripsi opsional, default mati (SEC-01).
+const encrypt = ref(false)
+const encInput = ref<EncryptionInput>({ password: '', confirm: '', acknowledged: false })
+const encValid = ref(false)
+const encSubmitted = ref(false)
+const recoveryKey = ref('')
+const recoveryOpen = ref(false)
+
 // Tombol tetap aktif; validasi tampil di field (docs/design/ui-guidelines.md §9.7).
 watch(name, () => (nameError.value = null))
+watch(encrypt, () => (encSubmitted.value = false))
 
 function onLocale(v: unknown) {
   if (typeof v === 'string' && (locales as string[]).includes(v)) void withErrorToast(() => settings.setLocale(v as LocaleDto))
@@ -44,7 +60,13 @@ async function submit() {
     return
   }
   if (balanceInput.value && !(await balanceInput.value.commit())) return
+  if (encrypt.value && !encValid.value) {
+    encSubmitted.value = true
+    document.getElementById('enc-password')?.focus()
+    return
+  }
   busy.value = true
+  let completed = false
   await withErrorToast(async () => {
     await completeOnboarding({
       locale: settings.locale,
@@ -63,9 +85,30 @@ async function submit() {
       },
     })
     settings.periodStartDay = Number(day.value)
-    await router.replace('/')
+    completed = true
   })
+  if (!completed) {
+    busy.value = false
+    return
+  }
+  if (encrypt.value) {
+    try {
+      recoveryKey.value = await security.enable(encInput.value.password)
+      busy.value = false
+      recoveryOpen.value = true
+      return // lanjut ke dasbor setelah recovery key disimpan
+    } catch (e) {
+      // Onboarding sudah tersimpan; enkripsi bisa diaktifkan lagi dari Pengaturan.
+      toast.error(errorMessage(e, t as unknown as Translate), { description: t('onboarding.encryptLater') })
+    }
+  }
   busy.value = false
+  await router.replace('/')
+}
+
+async function onRecoveryDone() {
+  recoveryKey.value = ''
+  await router.replace('/')
 }
 </script>
 
@@ -129,7 +172,21 @@ async function submit() {
         <p v-if="amountError" class="text-meta text-destructive" role="alert">{{ amountError }}</p>
       </section>
 
+      <section class="flex flex-col gap-4">
+        <h2 class="font-medium">4. {{ t('onboarding.encryption') }}</h2>
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-1">
+            <Label for="ob-encrypt">{{ t('onboarding.encryptionToggle') }}</Label>
+            <p id="ob-encrypt-hint" class="text-meta text-muted-foreground">{{ t('onboarding.encryptionHint') }}</p>
+          </div>
+          <Switch id="ob-encrypt" v-model="encrypt" data-testid="ob-encrypt" aria-describedby="ob-encrypt-hint" />
+        </div>
+        <EncryptionFields v-if="encrypt" v-model="encInput" :show-errors="encSubmitted" @valid="encValid = $event" />
+      </section>
+
       <Button type="submit" size="lg" :disabled="busy">{{ t('onboarding.submit') }}</Button>
     </form>
+
+    <RecoveryKeyDialog v-model:open="recoveryOpen" :recovery-key="recoveryKey" @done="onRecoveryDone" />
   </main>
 </template>
