@@ -36,8 +36,8 @@ const label = (period: string) => formatPeriod(period, settings.locale)
 
 const cashflowLabels = computed(() => store.cashflow.map((p) => label(p.period)))
 const cashflowSeries = computed(() => [
-  { key: 'income', label: t('reports.inflow'), color: 'var(--chart-2)', values: store.cashflow.map((p) => p.income) },
-  { key: 'expense', label: t('reports.outflow'), color: 'var(--chart-3)', values: store.cashflow.map((p) => p.expense) },
+  { key: 'income', label: t('reports.inflow'), color: 'var(--income)', values: store.cashflow.map((p) => p.income) },
+  { key: 'expense', label: t('reports.outflow'), color: 'var(--expense)', values: store.cashflow.map((p) => p.expense) },
 ])
 const selectedIndex = computed(() => store.cashflow.findIndex((p) => p.period === store.period))
 const select = (period: string) => withErrorToast(() => store.select(period))

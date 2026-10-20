@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, Plus } from '@lucide/vue'
+import AppLogo from '@/components/AppLogo.vue'
 import MoneyText from '@/components/MoneyText.vue'
 import { balanceTone, groupAccounts } from '@/lib/accounts'
 import { useAccountsStore } from '@/stores/accounts'
@@ -50,7 +51,7 @@ const current = computed(() => route.name)
 const accounts = useAccountsStore()
 const sections = computed(() => groupAccounts(accounts.overview, { archived: false }))
 
-// Item aktif: latar Lembar + garis Nila 2px di kiri (docs/design/ui-guidelines.md §7.4).
+// Item aktif: latar Lembar + garis Zamrud 2px di kiri (docs/design/ui-guidelines.md §7.4).
 const itemClass = 'data-active:bg-background data-active:text-foreground data-active:shadow-[inset_2px_0_0_var(--primary)]'
 // Petunjuk shortcut hanya saat hover/fokus atau item aktif.
 const hintClass = 'ml-auto opacity-0 transition-opacity group-hover/menu-button:opacity-100 group-focus-visible/menu-button:opacity-100 group-data-active/menu-button:opacity-100'
@@ -60,7 +61,7 @@ const keys = (k: string) => k.split(/[ +]/)
 <template>
   <Sidebar>
     <SidebarHeader class="gap-4 px-3 pt-5 pb-2">
-      <p class="px-1 text-heading font-semibold">{{ $t('app.name') }}</p>
+      <AppLogo class="px-1" />
       <Button class="w-full justify-between" data-testid="new-txn" @click="ui.openNewTxn()">
         <span class="flex items-center gap-1.5"><Plus />{{ $t('sidebar.newTransaction') }}</span>
         <Kbd>N</Kbd>

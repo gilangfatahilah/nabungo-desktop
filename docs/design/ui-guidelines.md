@@ -27,9 +27,9 @@ Diambil dari screenshot 1280×800 setelah Fase 4.
 | Toast menumpuk tiga lapis di pojok kanan bawah | global | Bising |
 | Dark mode memakai hitam murni di area konten | dark | Kontras berlebihan, panel tidak terbaca sebagai lapisan |
 
-## 3. Arah visual: "Nila"
+## 3. Arah visual: "Zamrud"
 
-Satu ide yang dibawa ke seluruh aplikasi: **tinta nila di atas kertas buku kas yang dingin dan bersih**. Nila (indigo) adalah warna tinta pada uang kertas Rp50.000 dan pewarna tradisional Nusantara. Warna ini dipakai hemat, hanya untuk aksi utama dan fokus. Semua yang lain netral, dan angka yang bicara.
+Satu ide yang dibawa ke seluruh aplikasi: **koin zamrud yang masuk ke celah tabungan, di atas kertas buku kas yang dingin dan bersih**. Zamrud (emerald) adalah warna logo Nabungo (`docs/design/brand/`) dan diambil dari tema emerald shadcn (skala emerald Tailwind). Warna ini dipakai hemat, hanya untuk aksi utama dan fokus. Semua yang lain netral, dan angka yang bicara.
 
 **Satu hal yang berani: Garis periode.** Strip horizontal yang menggambarkan periode budget berjalan (dari tanggal mulai periode, misalnya tanggal gajian, sampai periode berikutnya). Strip ini memuat penanda "hari ini" dan porsi uang yang sudah keluar. Ini elemen pengenal Nabungo dan muncul di Dasbor serta header Budget. Selain elemen ini, semuanya sunyi.
 
@@ -54,9 +54,9 @@ Token didefinisikan sebagai CSS variable di `ui/src/style.css` (`:root` dan `.da
 | **Kanvas** | sidebar, hover, latar muted | `#F4F6F8` | `#12161C` | `--sidebar`, `--muted`, `--secondary`, `--accent` (light) |
 | **Lembar** | area konten, sheet, dialog | `#FFFFFF` | `#1A1F27` | `--background`, `--card`, `--popover` |
 | **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border` (border input sedikit lebih gelap: `--input` `#CFD5DC` / `#3A434F`) |
-| **Nila** | aksi utama, fokus, seleksi | `#24508F` | `#8FB0E8` | `--primary`, `--ring` |
+| **Zamrud** | aksi utama, fokus, seleksi | `#047857` (emerald-700) | `#34D399` (emerald-400) | `--primary`, `--ring` |
 
-Teks di atas Nila memakai `#FFFFFF` (light) / `#0E1A2E` (dark).
+Teks di atas Zamrud memakai `#FFFFFF` (light) / `#022C22` (emerald-950, dark). Light memakai emerald-700, bukan emerald-600 default tema shadcn: emerald-600 dengan teks putih hanya 3.8:1.
 
 ### 4.2 Warna semantik
 
@@ -75,7 +75,7 @@ Semua pasangan teks/latar di atas lolos kontras ≥ 4.5:1 di Lembar dan Kanvas. 
 - Warna income/expense **tidak pernah jadi satu-satunya pembeda**. Selalu ada tanda (`+` / `−` U+2212) atau ikon. Pengguna buta warna merah-hijau harus tetap bisa membaca.
 - Warna hanya pada **angka**, bukan latar baris atau seluruh teks baris.
 - Total, saldo, dan kekayaan bersih memakai **Tinta**, bukan hijau/merah. Saldo negatif memakai Keluar.
-- Nila tidak dipakai untuk angka.
+- Zamrud tidak dipakai untuk angka (Masuk juga hijau; Zamrud di angka akan terbaca sebagai income).
 
 ### 4.3 Warna kategori
 
@@ -143,7 +143,7 @@ Setiap halaman wajib memakainya. Isinya:
 
 - **Judul** (`text-title`): satu kata atau frasa pendek, sama dengan label navigasi.
 - **Ringkasan** opsional, satu baris `text-meta`, misalnya "Kekayaan bersih Rp 4.343.000".
-- **Aksi** di kanan: maksimal satu tombol utama (Nila) dan dua tombol sekunder. Aksi lain masuk menu `⋯`.
+- **Aksi** di kanan: maksimal satu tombol utama (Zamrud) dan dua tombol sekunder. Aksi lain masuk menu `⋯`.
 
 Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menempel saat daftar di-scroll.
 
@@ -156,9 +156,10 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
 ### 7.4 Sidebar
 
 ```
- Nabungo                      ← wordmark, text-heading, Tinta
- [ + Transaksi baru      N ]  ← tombol utama Nila, lebar penuh
-                                 (satu-satunya Nila di sidebar)
+ ◓ nabungo                    ← wordmark (AppLogo): tanda koin Zamrud + teks
+                                 huruf kecil, text-heading bold, Tinta
+ [ + Transaksi baru      N ]  ← tombol utama Zamrud, lebar penuh
+                                 (satu-satunya blok Zamrud di sidebar)
  Dasbor                   G D ← item 32px, Kbd di kanan saat hover/aktif saja
  Transaksi                G T
  Budget                   G B
@@ -178,7 +179,7 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
  Pengaturan            Ctrl ,
 ```
 
-- Item aktif: latar Lembar + teks Tinta 500 + garis 2px Nila di kiri. Bukan latar abu-abu blok.
+- Item aktif: latar Lembar + teks Tinta 500 + garis 2px Zamrud di kiri. Bukan latar abu-abu blok.
 - Petunjuk shortcut hanya muncul saat hover/fokus dan pada item aktif, agar sidebar tidak penuh huruf.
 - Di sidebar, angka tanpa prefiks `Rp` (konteksnya sudah jelas) agar kolom angka sejajar dan tidak sesak.
 
@@ -188,7 +189,7 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
 
 | Varian | Pemakaian | Tampilan |
 |---|---|---|
-| **Utama** | satu aksi terpenting per layar/dialog | latar Nila, teks putih |
+| **Utama** | satu aksi terpenting per layar/dialog | latar Zamrud, teks putih |
 | **Sekunder** | aksi lain yang sejajar | border Garis, latar Lembar |
 | **Hantu** | aksi di baris, toolbar, ikon | tanpa border, hover Kanvas |
 | **Bahaya** | hapus permanen, gabung kategori | latar Bahaya; hanya di dialog konfirmasi |
@@ -203,7 +204,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 ### 8.3 Input & form
 
 - Label di atas field, `text-body` 500. Helper/error di bawah field, `text-meta`. Error berwarna Bahaya dan **menempel di field yang salah**, bukan di bawah form.
-- Field error: border Bahaya + teks error. Fokus: ring 2px Nila, offset 2px (berlaku untuk semua elemen interaktif).
+- Field error: border Bahaya + teks error. Fokus: ring 2px Zamrud, offset 2px (berlaku untuk semua elemen interaktif).
 - **Nominal:** rata kanan, `num`, ukuran 20px di form transaksi (field terpenting). Prefiks `Rp` di dalam field sebagai addon pudar.
 - **Tanggal:** ganti `<input type="date">` dengan `DateInput` (Popover + Calendar shadcn). Tampilan `17 Okt 2026` sesuai locale, nilai tetap `YYYY-MM-DD`. Ketik manual tetap bisa (`17/10`, `kemarin`, `hari ini` boleh ditambahkan nanti).
 - **Select:** selalu shadcn `Select`/`Combobox`, tidak ada `<select>` native.
@@ -250,7 +251,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 - Baris 2 (`text-meta`, Tinta pudar): kategori anak saja, dengan induk di tooltip; akun; tag sebagai teks `#tag`. Pemisah berupa jarak 12px, bukan `·` atau `›`.
 - Kanan: nominal bertanda dengan warna semantik; di bawahnya saldo berjalan (bila filter satu akun).
 - Menu `⋯` hanya terlihat saat hover/fokus baris. Baris bisa difokus (Tab/↑↓), dan `Enter` membuka edit, `Delete` menghapus.
-- Hover: latar Kanvas. Terfokus: ring Nila di dalam baris.
+- Hover: latar Kanvas. Terfokus: ring Zamrud di dalam baris.
 
 ### 8.6 Filter (Transaksi)
 
@@ -318,7 +319,7 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
  BCA  4.343.000   Dompet 200.000   GoPay 54.000            Rp 4.597.000
 ```
 
-- Garis periode: lebar penuh konten, panel. Batang menggambarkan **waktu** (tanggal awal → akhir), dengan isi Nila sampai hari ini. Teks di dalamnya membandingkan uang keluar terhadap uang masuk/budget. Sebelum Fase 5 (budget belum ada), tampilkan masuk vs keluar periode saja.
+- Garis periode: lebar penuh konten, panel. Batang menggambarkan **waktu** (tanggal awal → akhir), dengan isi Zamrud sampai hari ini. Teks di dalamnya membandingkan uang keluar terhadap uang masuk/budget. Sebelum Fase 5 (budget belum ada), tampilkan masuk vs keluar periode saja.
 - Dua kolom di bawahnya (≥ 1100px), satu kolom di bawah itu.
 - Kekayaan bersih turun ke baris akun, tidak lagi menjadi hero.
 
@@ -353,11 +354,11 @@ Segmented control horizontal **Pengeluaran | Pemasukan** di header (mengganti ta
 ### 9.6 Alokasi & Laporan (Fase 5)
 
 - Alokasi: tabel target (`target_bp` sebagai persen) vs porsi aktual dengan batang ganda tipis (target berupa garis penanda, aktual berupa isi).
-- Laporan: chart memakai palet `--chart-1..5` yang diturunkan dari Nila, Masuk, Keluar, Waspada, dan Tinta pudar. Tidak ada gradient atau 3D. Setiap chart punya tabel angka di bawahnya (aksesibilitas, dan pengguna keuangan memang membaca angka).
+- Laporan: chart memakai palet `--chart-1..5`: Zamrud, Biru (`#24508F` / `#8FB0E8`, agar irisan donut tidak dua hijau berdampingan), Keluar, Waspada, dan Tinta pudar. Seri yang bermakna masuk/keluar (cashflow) memakai `--income`/`--expense` langsung, bukan nomor chart. Tidak ada gradient atau 3D. Setiap chart punya tabel angka di bawahnya (aksesibilitas, dan pengguna keuangan memang membaca angka).
 
 ### 9.7 Onboarding
 
-Satu kolom 440px, rata kiri di tengah layar. Langkah bernomor boleh dipakai di sini karena memang berurutan. Pakai `Select` shadcn untuk bahasa dan tanggal periode (tanggal 1–28 dengan teks "Tanggal 25 setiap bulan"). Tombol utama Nila tetap aktif; validasi muncul di field.
+Satu kolom 440px, rata kiri di tengah layar. Langkah bernomor boleh dipakai di sini karena memang berurutan. Pakai `Select` shadcn untuk bahasa dan tanggal periode (tanggal 1–28 dengan teks "Tanggal 25 setiap bulan"). Tombol utama Zamrud tetap aktif; validasi muncul di field.
 
 ## 10. Gerak
 
@@ -392,7 +393,7 @@ Satu kolom 440px, rata kiri di tengah layar. Langkah bernomor boleh dipakai di s
 ## 13. Aksesibilitas (lantai minimum)
 
 - Kontras teks ≥ 4.5:1, elemen UI ≥ 3:1, di light dan dark.
-- Semua aksi bisa dilakukan dengan keyboard. Fokus selalu terlihat (ring Nila). Setelah hapus baris, fokus pindah ke baris berikutnya.
+- Semua aksi bisa dilakukan dengan keyboard. Fokus selalu terlihat (ring Zamrud). Setelah hapus baris, fokus pindah ke baris berikutnya.
 - Target klik minimal 28×28px.
 - Warna tidak pernah jadi satu-satunya pembawa informasi (§4.2).
 
