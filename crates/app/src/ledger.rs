@@ -9,7 +9,7 @@ use nabungo_core::{
 };
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
-use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
+use nabungo_storage::{DbKey, Lookup, StorageError, category, now_utc, txn};
 use time::Date;
 use uuid::Uuid;
 
@@ -182,6 +182,8 @@ pub struct Ledger {
     pub(crate) conn: Connection,
     /// Path file DB; `None` untuk DB in-memory.
     pub(crate) path: Option<PathBuf>,
+    /// Key SQLCipher bila DB terenkripsi.
+    pub(crate) key: Option<DbKey>,
 }
 
 impl Ledger {
@@ -190,6 +192,7 @@ impl Ledger {
         Ok(Self {
             conn: nabungo_storage::open(path, None)?,
             path: Some(path.to_path_buf()),
+            key: None,
         })
     }
 
@@ -197,6 +200,7 @@ impl Ledger {
         Ok(Self {
             conn: nabungo_storage::open_in_memory()?,
             path: None,
+            key: None,
         })
     }
 

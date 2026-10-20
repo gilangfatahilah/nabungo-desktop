@@ -103,6 +103,7 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
     let opened = nabungo_app::Ledger::open_with_backups(
         &data_dir.db_path(),
         &backups,
+        None,
         nabungo_app::OffsetDateTime::now_utc(),
     );
     let ledger = match opened {

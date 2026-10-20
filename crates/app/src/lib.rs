@@ -24,6 +24,7 @@ mod ledger;
 mod onboarding;
 mod payee;
 mod reports;
+pub mod security;
 mod settings;
 #[cfg(test)]
 mod testkit;
