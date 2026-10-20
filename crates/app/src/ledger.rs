@@ -1,7 +1,7 @@
 //! Use case pencatatan: resolve input berbasis ID → validasi domain → simpan atomik.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nabungo_core::{
     AllocationError, BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft,
@@ -53,6 +53,15 @@ pub enum AppError {
     Allocation(#[from] AllocationError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    /// File bukan backup Nabungo yang utuh.
+    #[error("file is not a valid Nabungo backup")]
+    InvalidBackup,
+    /// Backup dibuat oleh versi aplikasi yang lebih baru.
+    #[error("backup was made by a newer app version")]
+    BackupTooNew,
+    /// Tujuan/sumber backup adalah DB yang sedang dipakai.
+    #[error("backup target is the live database")]
+    BackupTargetInvalid,
 }
 
 impl AppError {
@@ -60,6 +69,15 @@ impl AppError {
     pub(crate) fn duplicate_as(entity: &'static str) -> impl Fn(StorageError) -> AppError {
         move |e| match e {
             StorageError::Duplicate => AppError::Duplicate(entity),
+            e => AppError::Storage(e),
+        }
+    }
+
+    /// Kesalahan isi file backup → varian khusus; selain itu apa adanya.
+    pub(crate) fn from_backup(e: StorageError) -> AppError {
+        match e {
+            StorageError::InvalidBackup => AppError::InvalidBackup,
+            StorageError::BackupTooNew(_) => AppError::BackupTooNew,
             e => AppError::Storage(e),
         }
     }
@@ -137,18 +155,23 @@ impl TxnInput {
 
 pub struct Ledger {
     pub(crate) conn: Connection,
+    /// Path file DB; `None` untuk DB in-memory.
+    pub(crate) path: Option<PathBuf>,
 }
 
 impl Ledger {
+    /// Buka + migrasi tanpa backup pra-migrasi (test & alat).
     pub fn open(path: &Path) -> Result<Self, AppError> {
         Ok(Self {
             conn: nabungo_storage::open(path)?,
+            path: Some(path.to_path_buf()),
         })
     }
 
     pub fn open_in_memory() -> Result<Self, AppError> {
         Ok(Self {
             conn: nabungo_storage::open_in_memory()?,
+            path: None,
         })
     }
 

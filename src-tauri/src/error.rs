@@ -194,6 +194,9 @@ impl From<AppError> for IpcError {
             AppError::ValuationUnchanged => Self::code(ErrorCode::ValuationUnchanged),
             AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
             AppError::Allocation(err) => Self::code(err.into()),
+            AppError::InvalidBackup | AppError::BackupTooNew | AppError::BackupTargetInvalid => {
+                Self::code(ErrorCode::Internal)
+            }
             AppError::Io(err) => {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::Internal)

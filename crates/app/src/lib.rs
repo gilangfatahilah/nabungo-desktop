@@ -46,7 +46,7 @@ pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
 pub use settings::{Locale, Theme, UiSettings};
-pub use time::Date;
+pub use time::{Date, OffsetDateTime};
 pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;
 pub use valuation::ValuationPoint;

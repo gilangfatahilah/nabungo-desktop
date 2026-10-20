@@ -86,6 +86,8 @@ pub fn backup_into(conn: &Connection, dest: &Path) -> Result<()> {
     let result = (|| {
         let mut dst = open_raw(&partial, OpenFlags::default())?;
         copy_all(&Backup::new(conn, &mut dst)?)?;
+        // Header ikut sumber (WAL); jadikan file tunggal agar bisa disalin/dibuka apa adanya.
+        dst.pragma_update(None, "journal_mode", "DELETE")?;
         if !quick_check(&dst)? {
             return Err(StorageError::Corrupt("backup failed quick_check".into()));
         }
@@ -185,10 +187,16 @@ mod tests {
         assert!(dir.path().join("main.db-wal").exists());
         let dest = dir.path().join("b.db");
         backup_into(&conn, &dest).unwrap();
-        assert_eq!(
-            get(&open_file_read_only(&dest).unwrap()).as_deref(),
-            Some("wal")
-        );
+        let b = open_file_read_only(&dest).unwrap();
+        assert_eq!(get(&b).as_deref(), Some("wal"));
+        // File backup mandiri: mode rollback, tidak menumbuhkan -wal/-shm saat dibuka.
+        let mode: String = b
+            .pragma_query_value(None, "journal_mode", |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "delete");
+        drop(b);
+        assert!(!dir.path().join("b.db-wal").exists());
+        assert!(!dir.path().join("b.db-shm").exists());
     }
 
     #[test]
