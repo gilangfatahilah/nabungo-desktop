@@ -49,6 +49,12 @@ export default {
       done: 'Exported to {path}',
     },
   },
+  integrity: {
+    title: 'The database may be damaged',
+    body: 'Nabungo did not close normally and the database check found a problem. Restore the latest backup before recording new transactions.',
+    later: 'Later',
+    openBackups: 'Open backups',
+  },
   sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'New transaction' },
   txn: {
     new: 'New transaction',

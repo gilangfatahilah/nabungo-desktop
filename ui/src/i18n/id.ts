@@ -49,6 +49,12 @@ export default {
       done: 'Diekspor ke {path}',
     },
   },
+  integrity: {
+    title: 'Database mungkin rusak',
+    body: 'Nabungo tidak ditutup dengan normal dan pemeriksaan database menemukan masalah. Pulihkan dari backup terakhir sebelum mencatat transaksi baru.',
+    later: 'Nanti',
+    openBackups: 'Buka backup',
+  },
   sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi baru' },
   txn: {
     new: 'Transaksi baru',
