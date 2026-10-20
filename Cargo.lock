@@ -2060,6 +2060,7 @@ dependencies = [
  "nabungo-core",
  "rusqlite",
  "rusqlite_migration",
+ "tempfile",
  "thiserror 2.0.21",
  "time",
  "uuid",
