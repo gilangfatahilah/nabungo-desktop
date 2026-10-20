@@ -29,7 +29,7 @@ Menambah komponen shadcn-vue: jalankan dari `ui/` → `CI=true pnpm dlx shadcn-v
 
 Binding TS `ui/src/ipc/bindings.ts` di-generate oleh tauri-specta — otomatis saat `pnpm dev` (debug build) atau lewat `cargo test -p nabungo-desktop export_bindings`. Jangan diedit manual; hasil generate **wajib di-commit** (CI memeriksa tidak ada diff).
 
-Folder data (DB `nabungo.db` + `logs/`): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
+Folder data (DB `nabungo.db`, `logs/`, `backups/`, `session.lock` selama app berjalan): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
 
 Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
 
@@ -54,6 +54,13 @@ Cargo workspace + pnpm workspace. Arah dependensi wajib: `ui → src-tauri → n
 - Uang: `i64` satuan minor (IDR decimals = 0). Di UI pun angka uang diperlakukan sebagai integer; format pakai `ui/src/lib/money.ts`. Persentase alokasi dalam basis point (`target_bp`, `share_bp`; 10000 = 100%).
 - Tanggal transaksi `TEXT` `YYYY-MM-DD` tanpa jam; timestamp audit ISO-8601 UTC. ID UUIDv7 sebagai TEXT. Soft delete via `deleted_at`.
 - v1 hanya IDR (D4), tapi kolom `currency` tetap diisi agar multi-currency v2 tidak butuh migrasi besar.
+
+### Backup & file DB
+
+- Semua open DB file lewat `nabungo_storage`: `open` (PRAGMA + migrasi), `open_file` (PRAGMA saja), `open_file_read_only` (inspeksi backup); jangan `Connection::open` langsung di luar `file.rs`.
+- Backup/restore memakai SQLite online backup API (`backup_into`, `restore_from`), bukan salin file. File backup memakai `journal_mode=DELETE` (satu file tanpa `-wal`).
+- Penamaan/retensi backup ada di `crates/app/src/backup.rs`; DB aktif (+ `-wal`/`-shm`/`-journal`) tidak boleh jadi sumber/tujuan (`BackupTargetInvalid`).
+- Dialog native (tauri-plugin-dialog) dipanggil dari command `async` lewat `spawn_blocking`; `Mutex<Ledger>` dikunci setelah dialog ditutup.
 
 ### Migrasi
 

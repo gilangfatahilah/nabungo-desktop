@@ -10,6 +10,8 @@ pub mod account_group;
 pub mod allocation;
 pub mod budget;
 pub mod category;
+pub mod export;
+mod file;
 pub mod payee;
 pub mod report;
 pub mod setting;
@@ -17,6 +19,10 @@ pub mod tag;
 pub mod txn;
 pub mod txn_list;
 
+pub use file::{
+    backup_into, backup_into_unverified, inspect_backup, integrity_check, migrate, migrate_to,
+    open_file, open_file_read_only, restore_from, schema_version,
+};
 pub use rusqlite;
 
 #[derive(Debug, thiserror::Error)]
@@ -29,6 +35,12 @@ pub enum StorageError {
     Corrupt(String),
     #[error("duplicate name")]
     Duplicate,
+    #[error("not a valid backup")]
+    InvalidBackup,
+    #[error("backup schema version {0} is newer than this app")]
+    BackupTooNew(usize),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 /// Pelanggaran indeks UNIQUE → [`StorageError::Duplicate`]; error lain apa adanya.
@@ -76,7 +88,7 @@ pub fn now_utc() -> String {
     format_utc(time::OffsetDateTime::now_utc())
 }
 
-fn format_utc(t: time::OffsetDateTime) -> String {
+pub fn format_utc(t: time::OffsetDateTime) -> String {
     let t = t.to_offset(time::UtcOffset::UTC);
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
@@ -93,13 +105,20 @@ fn format_utc(t: time::OffsetDateTime) -> String {
 /// Daftar migrasi ber-versi (`PRAGMA user_version`). Hanya boleh ditambah di akhir;
 /// migrasi yang sudah dirilis tidak boleh diubah.
 pub fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![
-        M::up(include_str!("../migrations/0001_init.sql")),
-        M::up(include_str!("../migrations/0002_unique_root_category.sql")),
-        M::up(include_str!("../migrations/0003_catalog_indexes.sql")),
-        M::up(include_str!("../migrations/0004_txn_indexes.sql")),
-        M::up(include_str!("../migrations/0005_allocation_names.sql")),
-    ])
+    Migrations::new(MIGRATIONS.iter().map(|sql| M::up(sql)).collect())
+}
+
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_init.sql"),
+    include_str!("../migrations/0002_unique_root_category.sql"),
+    include_str!("../migrations/0003_catalog_indexes.sql"),
+    include_str!("../migrations/0004_txn_indexes.sql"),
+    include_str!("../migrations/0005_allocation_names.sql"),
+];
+
+/// Versi skema terbaru (`user_version` setelah semua migrasi).
+pub fn latest_version() -> usize {
+    MIGRATIONS.len()
 }
 
 fn configure(conn: &Connection) -> Result<()> {
@@ -114,9 +133,8 @@ fn configure(conn: &Connection) -> Result<()> {
 
 /// Buka (atau buat) database di `path`, set PRAGMA, lalu jalankan migrasi.
 pub fn open(path: &Path) -> Result<Connection> {
-    let mut conn = Connection::open(path)?;
-    configure(&conn)?;
-    migrations().to_latest(&mut conn)?;
+    let mut conn = open_file(path)?;
+    migrate(&mut conn)?;
     Ok(conn)
 }
 
@@ -124,7 +142,7 @@ pub fn open(path: &Path) -> Result<Connection> {
 pub fn open_in_memory() -> Result<Connection> {
     let mut conn = Connection::open_in_memory()?;
     configure(&conn)?;
-    migrations().to_latest(&mut conn)?;
+    migrate(&mut conn)?;
     Ok(conn)
 }
 

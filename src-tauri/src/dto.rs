@@ -2,15 +2,16 @@
 
 use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
-    AllocationPoint, BucketFields, BucketRow, BudgetOverview, BudgetPeriod, BudgetRow,
-    CashflowPoint, CategoryAmount, CategoryFields, CategoryKind, CategoryRow, Date, Fee, FormBody,
-    Locale, NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PeriodStartDay,
+    AllocationPoint, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetOverview, BudgetPeriod,
+    BudgetRow, CashflowPoint, CategoryAmount, CategoryFields, CategoryKind, CategoryRow, Date, Fee,
+    FormBody, Locale, NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PeriodStartDay,
     PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery,
     UiSettings, Uuid, ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, IpcError};
+use crate::lifecycle::{IntegrityStatus, StartupReport};
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -1315,5 +1316,66 @@ mod tests {
         assert_eq!(v["accountDelta"], -206_500);
         assert_eq!(v["toAccountId"], a.to_string());
         assert_eq!(v["splitCount"], 0);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegrityStatusDto {
+    Skipped,
+    Ok,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupReportDto {
+    pub unclean_shutdown: bool,
+    pub integrity: IntegrityStatusDto,
+}
+
+impl From<StartupReport> for StartupReportDto {
+    fn from(r: StartupReport) -> Self {
+        Self {
+            unclean_shutdown: r.unclean_shutdown,
+            integrity: match r.integrity {
+                IntegrityStatus::Skipped => IntegrityStatusDto::Skipped,
+                IntegrityStatus::Ok => IntegrityStatusDto::Ok,
+                IntegrityStatus::Failed => IntegrityStatusDto::Failed,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum BackupKindDto {
+    Auto,
+    PreMigration,
+    PreRestore,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupDto {
+    pub file_name: String,
+    pub kind: BackupKindDto,
+    /// ISO-8601 UTC.
+    pub created_at: String,
+    pub size_bytes: i64,
+}
+
+impl From<BackupInfo> for BackupDto {
+    fn from(b: BackupInfo) -> Self {
+        Self {
+            file_name: b.file_name,
+            kind: match b.kind {
+                BackupKind::Auto => BackupKindDto::Auto,
+                BackupKind::PreMigration => BackupKindDto::PreMigration,
+                BackupKind::PreRestore => BackupKindDto::PreRestore,
+            },
+            created_at: nabungo_app::format_timestamp(b.created_at),
+            size_bytes: i64::try_from(b.size_bytes).unwrap_or(i64::MAX),
+        }
     }
 }

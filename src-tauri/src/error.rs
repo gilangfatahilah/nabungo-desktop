@@ -65,6 +65,10 @@ pub enum ErrorCode {
     AllocationDepth,
     AllocationLiability,
     AllocationDuplicateBucket,
+    BackupInvalid,
+    BackupTooNew,
+    BackupTargetInvalid,
+    FileIo,
     Internal,
 }
 
@@ -194,6 +198,13 @@ impl From<AppError> for IpcError {
             AppError::ValuationUnchanged => Self::code(ErrorCode::ValuationUnchanged),
             AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
             AppError::Allocation(err) => Self::code(err.into()),
+            AppError::InvalidBackup => Self::code(ErrorCode::BackupInvalid),
+            AppError::BackupTooNew => Self::code(ErrorCode::BackupTooNew),
+            AppError::BackupTargetInvalid => Self::code(ErrorCode::BackupTargetInvalid),
+            AppError::Io(err) => {
+                tracing::error!(error = %err, "io error");
+                Self::code(ErrorCode::FileIo)
+            }
         }
     }
 }
@@ -212,6 +223,24 @@ impl From<AmountParseError> for IpcError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backup_errors_map() {
+        assert_eq!(
+            IpcError::from(AppError::InvalidBackup).code,
+            ErrorCode::BackupInvalid
+        );
+        assert_eq!(
+            IpcError::from(AppError::BackupTooNew).code,
+            ErrorCode::BackupTooNew
+        );
+        assert_eq!(
+            IpcError::from(AppError::BackupTargetInvalid).code,
+            ErrorCode::BackupTargetInvalid
+        );
+        let io = AppError::Io(std::io::Error::other("disk penuh"));
+        assert_eq!(IpcError::from(io).code, ErrorCode::FileIo);
+    }
 
     #[test]
     fn not_found_maps_with_entity() {

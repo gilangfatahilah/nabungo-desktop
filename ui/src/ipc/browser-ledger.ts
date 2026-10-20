@@ -3,12 +3,12 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, BackupDto, BackupKindDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
-  ValuationPointDto,
+  StartupReportDto, ValuationPointDto,
 } from './bindings'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -543,7 +543,38 @@ function netWorthPoint(p: Period): NetWorthPointDto {
   return { period: browserPeriod.key(p), date, assets, liabilities, net: assets - liabilities }
 }
 
+// Backup di browser = snapshot state di memori; nama mengikuti pola Rust (`{kind}-{stamp}Z.db`).
+type Snapshot = { info: BackupDto; state: typeof state }
+const backups: Snapshot[] = []
+
+function snapshot(kind: BackupKindDto): BackupDto {
+  const now = new Date()
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const base = `${kind.replace('_', '-')}-${stamp}`
+  let fileName = `${base}.db`
+  for (let n = 2; backups.some((b) => b.info.fileName === fileName); n++) fileName = `${base}-${n}.db`
+  const info: BackupDto = { fileName, kind, createdAt: now.toISOString(), sizeBytes: 0 }
+  backups.unshift({ info, state: structuredClone(state) })
+  return info
+}
+
 export const browserLedger = {
+  startupReport: async (): Promise<StartupReportDto> => ({ uncleanShutdown: false, integrity: 'skipped' }),
+  listBackups: async (): Promise<Result<BackupDto[]>> => ok(backups.map((b) => ({ ...b.info }))),
+  backupNow: async (): Promise<Result<string | null>> => {
+    snapshot('auto')
+    return ok('browser://backup')
+  },
+  restoreBackup: async (fileName: string): Promise<Result<null>> => {
+    const src = backups.find((b) => b.info.fileName === fileName)
+    if (!src) return fail('backup_invalid')
+    snapshot('pre_restore')
+    Object.assign(state, structuredClone(src.state))
+    return ok(null)
+  },
+  restoreBackupFromFile: async (): Promise<Result<boolean>> => ok(false),
+  exportJson: async (): Promise<Result<string | null>> => ok('browser://export.json'),
+  exportCsv: async (): Promise<Result<string | null>> => ok('browser://nabungo-export'),
   getOnboardingStatus: async () => ok(state.onboarded),
   completeOnboarding: async (input: OnboardingDto): Promise<Result<string>> => {
     if (state.onboarded) return { status: 'error', error: { code: 'already_onboarded', entity: null } }

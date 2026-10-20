@@ -8,6 +8,7 @@ import {
   type AllocationOverviewDto,
   type AllocationPointDto,
   type AppInfo,
+  type BackupDto,
   type BucketFieldsDto,
   type BudgetOverviewDto,
   type CashflowPointDto,
@@ -27,6 +28,7 @@ import {
   type TxnQueryDto,
   type PayeeSuggestionDto,
   type ShareDto,
+  type StartupReportDto,
   type UiSettingsDto,
   type ValuationPointDto,
 } from './bindings'
@@ -41,6 +43,8 @@ export type {
   AllocationOverviewDto,
   AllocationPointDto,
   AppInfo,
+  BackupDto,
+  BackupKindDto,
   BucketActualDto,
   BucketBpDto,
   BucketDto,
@@ -60,6 +64,7 @@ export type {
   CategoryFieldsDto,
   CategoryKindDto,
   ErrorCode,
+  IntegrityStatusDto,
   IpcError,
   LocaleDto,
   NetWorthDto,
@@ -67,6 +72,7 @@ export type {
   PayeeSuggestionDto,
   PostingDto,
   SplitDto,
+  StartupReportDto,
   FeeDto,
   ThemeDto,
   TxnDetailDto,
@@ -334,4 +340,40 @@ export function categoryBreakdown(period: string, kind: CategoryKindDto): Promis
 /** Net worth per akhir periode, `count` periode (maks. 24) berakhir di `endPeriod`. */
 export function netWorthHistory(endPeriod: string, count: number): Promise<NetWorthPointDto[]> {
   return unwrap(api().netWorthHistory(endPeriod, count))
+}
+
+// --- Backup, pemulihan & ekspor ---
+
+/** Status sesi sebelumnya (shutdown tidak bersih, hasil integrity check). */
+export function startupReport(): Promise<StartupReportDto> {
+  return api().startupReport()
+}
+
+/** Backup otomatis/pra-migrasi/pra-restore, terbaru dulu. */
+export function listBackups(): Promise<BackupDto[]> {
+  return unwrap(api().listBackups())
+}
+
+/** Dialog simpan; `null` bila dibatalkan, path hasil bila sukses. */
+export function backupNow(): Promise<string | null> {
+  return unwrap(api().backupNow())
+}
+
+/** Setelah sukses, UI wajib memuat ulang semua data. */
+export async function restoreBackup(fileName: string): Promise<void> {
+  await unwrap(api().restoreBackup(fileName))
+}
+
+/** Dialog buka file; `false` bila dibatalkan. */
+export function restoreBackupFromFile(): Promise<boolean> {
+  return unwrap(api().restoreBackupFromFile())
+}
+
+export function exportJson(): Promise<string | null> {
+  return unwrap(api().exportJson())
+}
+
+/** Dialog pilih folder; mengembalikan subfolder ekspor yang dibuat. */
+export function exportCsv(): Promise<string | null> {
+  return unwrap(api().exportCsv())
 }

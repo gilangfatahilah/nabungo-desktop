@@ -16,6 +16,13 @@ export function formatDateInput(value: string, locale: LocaleDto): string {
     .format(new Date(y!, m! - 1, d!))
 }
 
+/** Timestamp ISO-8601 UTC → tanggal + jam lokal, mis. "20 Okt 2026 10.15" / "Oct 20, 2026, 10:15 AM". */
+export function formatTimestamp(value: string, locale: LocaleDto): string {
+  return new Intl.DateTimeFormat(intlLocale(locale), {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(value))
+}
+
 /** Kunci periode `YYYY-MM` → "Okt 2026" / "Oct 2026". */
 export function formatPeriod(key: string, locale: LocaleDto): string {
   const [y, m] = key.split('-').map(Number)
