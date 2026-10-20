@@ -169,9 +169,9 @@ fn write_unpruned(
     // Pra-restore menyalin DB apa adanya, termasuk yang rusak: justru saat itu restore dibutuhkan.
     // Jatahnya terpisah, jadi salinan rusak tidak menggeser backup otomatis.
     if kind == BackupKind::PreRestore {
-        nabungo_storage::backup_into_unverified(conn, &path)?;
+        nabungo_storage::backup_into_unverified(conn, &path, None)?;
     } else {
-        nabungo_storage::backup_into(conn, &path)?;
+        nabungo_storage::backup_into(conn, &path, None)?;
     }
     let size_bytes = std::fs::metadata(&path)?.len();
     Ok(BackupInfo {
@@ -219,7 +219,7 @@ impl Ledger {
         backup_dir: &Path,
         now: OffsetDateTime,
     ) -> Result<Self, AppError> {
-        let mut conn = nabungo_storage::open_file(path)?;
+        let mut conn = nabungo_storage::open_file(path, None)?;
         let version = nabungo_storage::schema_version(&conn)?;
         if version > 0 && version < nabungo_storage::latest_version() {
             write_backup(&conn, backup_dir, BackupKind::PreMigration, now)?;
@@ -256,7 +256,7 @@ impl Ledger {
     /// Backup manual ke path pilihan user (K3), tanpa retensi.
     pub fn backup_to(&self, dest: &Path) -> Result<(), AppError> {
         self.ensure_not_live(dest)?;
-        nabungo_storage::backup_into(&self.conn, dest)?;
+        nabungo_storage::backup_into(&self.conn, dest, None)?;
         Ok(())
     }
 
@@ -287,9 +287,9 @@ impl Ledger {
         now: OffsetDateTime,
     ) -> Result<(), AppError> {
         self.ensure_not_live(src)?;
-        nabungo_storage::inspect_backup(src).map_err(AppError::from_backup)?;
+        nabungo_storage::inspect_backup(src, None).map_err(AppError::from_backup)?;
         write_unpruned(&self.conn, backup_dir, BackupKind::PreRestore, now)?;
-        nabungo_storage::restore_from(&mut self.conn, src).map_err(AppError::from_backup)?;
+        nabungo_storage::restore_from(&mut self.conn, src, None).map_err(AppError::from_backup)?;
         nabungo_storage::migrate(&mut self.conn)?;
         // Retensi setelah restore: sumbernya bisa saja pre-restore tertua.
         prune_logged(backup_dir, BackupKind::PreRestore);
@@ -696,7 +696,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let old = dir.path().join("old.db");
             let expected = {
-                let mut conn = nabungo_storage::open_file(&old).unwrap();
+                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
                 nabungo_storage::migrate_to(&mut conn, 4).unwrap();
                 // 0005 hanya menambah index, jadi use case jalan di skema 4.
                 let mut l = Ledger { conn, path: None };
@@ -704,7 +704,7 @@ mod tests {
                 snapshot(&l)
             };
             assert_eq!(
-                nabungo_storage::schema_version(&nabungo_storage::open_file(&old).unwrap())
+                nabungo_storage::schema_version(&nabungo_storage::open_file(&old, None).unwrap())
                     .unwrap(),
                 4
             );
@@ -813,14 +813,14 @@ mod tests {
 
             let old = dir.path().join("old.db");
             {
-                let mut conn = nabungo_storage::open_file(&old).unwrap();
+                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
                 nabungo_storage::migrate_to(&mut conn, 4).unwrap();
             }
             let l = Ledger::open_with_backups(&old, &backups, NOW).unwrap();
             let list = backup_files(&backups);
             assert_eq!(list.len(), 1);
             assert!(list[0].starts_with("pre-migration-"), "{list:?}");
-            let b = nabungo_storage::open_file_read_only(&backups.join(&list[0])).unwrap();
+            let b = nabungo_storage::open_file_read_only(&backups.join(&list[0]), None).unwrap();
             assert_eq!(nabungo_storage::schema_version(&b).unwrap(), 4);
             assert_eq!(
                 nabungo_storage::schema_version(&l.conn).unwrap(),
@@ -861,7 +861,7 @@ mod tests {
         /// Rusak satu halaman b-tree `posting` (jumlah sel mustahil); DB harus tertutup.
         fn corrupt_posting_page(db: &Path) {
             let (root, page_size): (i64, i64) = {
-                let c = nabungo_storage::open_file_read_only(db).unwrap();
+                let c = nabungo_storage::open_file_read_only(db, None).unwrap();
                 let root = c
                     .query_row(
                         "SELECT rootpage FROM sqlite_schema WHERE name = 'posting'",

@@ -163,7 +163,7 @@ impl Ledger {
     /// Buka + migrasi tanpa backup pra-migrasi (test & alat).
     pub fn open(path: &Path) -> Result<Self, AppError> {
         Ok(Self {
-            conn: nabungo_storage::open(path)?,
+            conn: nabungo_storage::open(path, None)?,
             path: Some(path.to_path_buf()),
         })
     }
