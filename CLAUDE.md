@@ -29,7 +29,7 @@ Menambah komponen shadcn-vue: jalankan dari `ui/` → `CI=true pnpm dlx shadcn-v
 
 Binding TS `ui/src/ipc/bindings.ts` di-generate oleh tauri-specta — otomatis saat `pnpm dev` (debug build) atau lewat `cargo test -p nabungo-desktop export_bindings`. Jangan diedit manual; hasil generate **wajib di-commit** (CI memeriksa tidak ada diff).
 
-Folder data (DB `nabungo.db`, `logs/`, `backups/`, `session.lock` selama app berjalan): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
+Folder data (DB `nabungo.db`, `nabungo.key` bila terenkripsi, `logs/`, `backups/`, `session.lock` selama app berjalan): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
 
 Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
 
@@ -61,6 +61,15 @@ Cargo workspace + pnpm workspace. Arah dependensi wajib: `ui → src-tauri → n
 - Backup/restore memakai SQLite online backup API (`backup_into`, `restore_from`), bukan salin file. File backup memakai `journal_mode=DELETE` (satu file tanpa `-wal`).
 - Penamaan/retensi backup ada di `crates/app/src/backup.rs`; DB aktif (+ `-wal`/`-shm`/`-journal`) tidak boleh jadi sumber/tujuan (`BackupTargetInvalid`).
 - Dialog native (tauri-plugin-dialog) dipanggil dari command `async` lewat `spawn_blocking`; `Mutex<Ledger>` dikunci setelah dialog ditutup.
+
+### Enkripsi (SEC-01, SQLCipher)
+
+- rusqlite `bundled-sqlcipher` (OpenSSL sistem di Linux: `openssl-devel`/`libssl-dev`); Windows memakai `bundled-sqlcipher-vendored-openssl` (`[target.'cfg(windows)'.dependencies]` di `crates/storage/Cargo.toml`).
+- Kunci DB (DEK) acak 32 byte, dibungkus XChaCha20-Poly1305 dengan KEK Argon2id dari password, disimpan di `nabungo.key` di samping DB (`crates/app/src/vault.rs`). Recovery key = DEK dalam Crockford base32 (13×4). **Jangan hapus `nabungo.key`**: tanpa file itu DB hanya bisa dibuka dengan recovery key.
+- Header file DB adalah sumber kebenaran status enkripsi (`security::db_state`), bukan key file atau setting. Sisa crash (key file di samping DB plaintext, `nabungo.db.convert*`) dibersihkan di sana.
+- Aktif/nonaktif enkripsi = `convert_file` (`sqlcipher_export`, karena backup API tidak bisa lintas enkripsi) ke `nabungo.db.convert`, hapus `-wal`/`-shm`, lalu rename atomik. Backup di `backups/` ikut dikonversi (best-effort); restore menerima backup terenkripsi maupun plaintext dan DB aktif tetap pada status enkripsinya.
+- `AppState.ledger` = `None` saat terkunci: command yang butuh ledger mengembalikan `locked`, scheduler backup melewati tick, UI (`setLockedHandler` di `ipc/index.ts`) pindah ke `/unlock`. Command Argon2 (`unlock*`, `enable/disable_encryption`, `change_password`) berjalan di `spawn_blocking`.
+- Mode browser: `browser-ledger.ts` meniru enkripsi tanpa kripto (aturan error sama dengan Rust); kunci tidak memuat ulang halaman karena backend-nya in-memory.
 
 ### Migrasi
 
