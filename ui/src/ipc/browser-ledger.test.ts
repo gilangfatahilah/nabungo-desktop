@@ -370,3 +370,32 @@ describe('browser ledger laporan (paritas Rust)', () => {
     expect(after.every((p) => p.net === p.assets - p.liabilities)).toBe(true)
   })
 })
+
+describe('browser ledger backup', () => {
+  it('restore mengembalikan saldo dan membuat pre_restore', async () => {
+    const a = await account('Backup A', 500_000)
+    const c = await category('expense', 'Belanja backup')
+    expect(await data(L.backupNow())).toBe('browser://backup')
+    const [auto] = await data(L.listBackups())
+    await data(L.createTxn(form({ accountId: a, amount: 100_000, splits: [{ categoryId: c, amount: 100_000, memo: null }] })))
+    expect(await balance(a)).toBe(400_000)
+
+    await data(L.restoreBackup(auto!.fileName))
+    expect(await balance(a)).toBe(500_000)
+    const list = await data(L.listBackups())
+    expect(list.filter((b) => b.kind === 'pre_restore')).toHaveLength(1)
+    expect(list[0]!.kind).toBe('pre_restore')
+    expect([...list].sort((x, y) => y.createdAt.localeCompare(x.createdAt))).toEqual(list)
+  })
+
+  it('restore nama tak dikenal ditolak', async () => {
+    expect(await L.restoreBackup('auto-20260101T000000Z.db')).toEqual({
+      status: 'error', error: { code: 'backup_invalid', entity: null },
+    })
+  })
+
+  it('tanpa file di browser: restore dari file batal, laporan startup bersih', async () => {
+    expect(await data(L.restoreBackupFromFile())).toBe(false)
+    expect(await L.startupReport()).toEqual({ uncleanShutdown: false, integrity: 'skipped' })
+  })
+})
