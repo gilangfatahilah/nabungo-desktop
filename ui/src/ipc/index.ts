@@ -27,6 +27,7 @@ import {
   type TxnPageDto,
   type TxnQueryDto,
   type PayeeSuggestionDto,
+  type SecurityStatusDto,
   type ShareDto,
   type StartupReportDto,
   type UiSettingsDto,
@@ -71,6 +72,7 @@ export type {
   OnboardingDto,
   PayeeSuggestionDto,
   PostingDto,
+  SecurityStatusDto,
   SplitDto,
   StartupReportDto,
   FeeDto,
@@ -103,9 +105,19 @@ function api(): typeof browserCommands {
   return isTauri() ? commands : browserCommands
 }
 
+let lockedHandler: (() => void) | null = null
+
+/** Dipanggil setiap kali backend menjawab `locked` (DB terenkripsi belum dibuka). */
+export function setLockedHandler(fn: (() => void) | null): void {
+  lockedHandler = fn
+}
+
 async function unwrap<T>(p: Promise<Result<T>>): Promise<T> {
   const r = await p
-  if (r.status === 'error') throw new IpcFailure(r.error)
+  if (r.status === 'error') {
+    if (r.error.code === 'locked') lockedHandler?.()
+    throw new IpcFailure(r.error)
+  }
   return r.data
 }
 
@@ -376,4 +388,41 @@ export function exportJson(): Promise<string | null> {
 /** Dialog pilih folder; mengembalikan subfolder ekspor yang dibuat. */
 export function exportCsv(): Promise<string | null> {
   return unwrap(api().exportCsv())
+}
+
+// --- Keamanan (enkripsi DB) ---
+
+/** Bisa dipanggil saat terkunci. */
+export function securityStatus(): Promise<SecurityStatusDto> {
+  return unwrap(api().securityStatus())
+}
+
+export async function unlock(password: string): Promise<void> {
+  await unwrap(api().unlock(password))
+}
+
+/** Buka dengan recovery key lalu set password baru. */
+export async function unlockWithRecovery(recoveryKey: string, newPassword: string): Promise<void> {
+  await unwrap(api().unlockWithRecovery(recoveryKey, newPassword))
+}
+
+export async function lock(): Promise<void> {
+  await unwrap(api().lock())
+}
+
+/** Mengembalikan recovery key; hanya ditampilkan sekali. */
+export function enableEncryption(password: string): Promise<string> {
+  return unwrap(api().enableEncryption(password))
+}
+
+export async function disableEncryption(password: string): Promise<void> {
+  await unwrap(api().disableEncryption(password))
+}
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<void> {
+  await unwrap(api().changePassword(oldPassword, newPassword))
+}
+
+export async function setAutoLockMinutes(minutes: number): Promise<void> {
+  await unwrap(api().setAutoLockMinutes(minutes))
 }

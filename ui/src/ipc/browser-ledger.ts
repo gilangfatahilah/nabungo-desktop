@@ -8,7 +8,7 @@ import type {
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
-  StartupReportDto, ValuationPointDto,
+  SecurityStatusDto, StartupReportDto, ValuationPointDto,
 } from './bindings'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -837,5 +837,98 @@ export const browserLedger = {
   netWorthHistory: async (endPeriod: string, count: number): Promise<Result<NetWorthPointDto[]>> => {
     const end = browserPeriod.parse(endPeriod)
     return end ? ok(periodsEnding(end, count).map(netWorthPoint)) : fail('invalid_period')
+  },
+}
+
+// --- Keamanan (tanpa kripto): password & recovery key disimpan di memori. ---
+// Urutan pemeriksaan mengikuti `crates/app/src/security.rs` dan `vault.rs`.
+
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+const RECOVERY_CHARS = 52
+
+const security = {
+  password: null as string | null,
+  /** Recovery key ternormalisasi (52 karakter). */
+  recovery: null as string | null,
+  locked: false,
+}
+
+/** Panjang dalam code point, seperti `chars().count()` di Rust. */
+const passwordOk = (pw: string) => [...pw].length >= 8
+
+function crockford(bytes: Uint8Array): string {
+  let out = ''
+  let buf = 0
+  let bits = 0
+  for (const b of bytes) {
+    buf = (buf << 8) | b
+    bits += 8
+    while (bits >= 5) {
+      out += CROCKFORD[(buf >> (bits - 5)) & 31]
+      bits -= 5
+    }
+  }
+  if (bits > 0) out += CROCKFORD[(buf << (5 - bits)) & 31]
+  return out
+}
+
+/** Seperti `parse_recovery_key`: buang spasi/`-`, uppercase, O→0, I/L→1. */
+function normalizeRecovery(s: string): string | null {
+  const n = s.replace(/[\s-]/g, '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1')
+  return n.length === RECOVERY_CHARS && [...n].every((c) => CROCKFORD.includes(c)) ? n : null
+}
+
+const formatRecovery = (n: string) => n.match(/.{1,4}/g)!.join('-')
+
+/** Semua command lain menolak dengan `locked` selama terkunci. */
+export const isBrowserLocked = () => security.locked
+
+export const browserSecurity = {
+  securityStatus: async (): Promise<Result<SecurityStatusDto>> => {
+    const encrypted = security.password !== null
+    return ok({ encrypted, locked: security.locked, hasKeyfile: encrypted })
+  },
+  unlock: async (password: string): Promise<Result<null>> => {
+    if (!security.locked) return ok(null)
+    if (password !== security.password) return fail('wrong_password')
+    security.locked = false
+    return ok(null)
+  },
+  unlockWithRecovery: async (recoveryKey: string, newPassword: string): Promise<Result<null>> => {
+    if (!security.locked) return ok(null)
+    if (!passwordOk(newPassword)) return fail('password_too_short')
+    const n = normalizeRecovery(recoveryKey)
+    if (n === null || n !== security.recovery) return fail('invalid_recovery_key')
+    security.password = newPassword
+    security.locked = false
+    return ok(null)
+  },
+  lock: async (): Promise<Result<null>> => {
+    if (security.locked) return ok(null)
+    if (security.password === null) return fail('encryption_state')
+    security.locked = true
+    return ok(null)
+  },
+  enableEncryption: async (password: string): Promise<Result<string>> => {
+    if (security.password !== null) return fail('encryption_state')
+    if (!passwordOk(password)) return fail('password_too_short')
+    const n = crockford(crypto.getRandomValues(new Uint8Array(32)))
+    security.password = password
+    security.recovery = n
+    return ok(formatRecovery(n))
+  },
+  disableEncryption: async (password: string): Promise<Result<null>> => {
+    if (security.password === null) return fail('encryption_state')
+    if (password !== security.password) return fail('wrong_password')
+    security.password = null
+    security.recovery = null
+    return ok(null)
+  },
+  changePassword: async (oldPassword: string, newPassword: string): Promise<Result<null>> => {
+    if (security.password === null) return fail('encryption_state')
+    if (!passwordOk(newPassword)) return fail('password_too_short')
+    if (oldPassword !== security.password) return fail('wrong_password')
+    security.password = newPassword
+    return ok(null)
   },
 }
