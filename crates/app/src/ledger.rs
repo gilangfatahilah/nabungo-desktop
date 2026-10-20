@@ -51,6 +51,8 @@ pub enum AppError {
     NotEditable,
     #[error(transparent)]
     Allocation(#[from] AllocationError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl AppError {

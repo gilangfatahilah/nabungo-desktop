@@ -8,6 +8,7 @@ pub fn version() -> &'static str {
 
 mod accounts;
 mod allocation;
+mod backup;
 mod budget;
 mod categories;
 mod defaults;
@@ -23,6 +24,7 @@ mod valuation;
 
 pub use accounts::{AccountFields, AccountsOverview};
 pub use allocation::{AllocationOverview, AllocationPoint, BucketFields};
+pub use backup::{BackupInfo, BackupKind, is_auto_due, list_backups, parse_backup_name};
 pub use budget::{BudgetOverview, BudgetRow};
 pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
