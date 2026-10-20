@@ -5,7 +5,7 @@ import { browserLedger } from './browser-ledger'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
-const settings: UiSettingsDto = { theme: 'system', locale: 'id' }
+const settings: UiSettingsDto = { theme: 'system', locale: 'id', autoLockMinutes: 5 }
 
 const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })
 

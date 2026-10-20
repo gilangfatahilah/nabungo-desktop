@@ -46,6 +46,7 @@ pub use nabungo_core::{
     PeriodError, PeriodStartDay, SiblingWarning, SplitLine, TxnError, TxnKind, Unallocated,
     parse_amount,
 };
+pub use nabungo_storage::DbKey;
 pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::allocation::BucketRow;
@@ -56,7 +57,7 @@ pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
-pub use settings::{Locale, Theme, UiSettings};
+pub use settings::{AUTO_LOCK_CHOICES, Locale, Theme, UiSettings};
 pub use time::{Date, OffsetDateTime};
 pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;

@@ -77,6 +77,8 @@ pub enum AppError {
     /// Enable saat sudah terenkripsi / disable saat belum.
     #[error("encryption is already in that state")]
     EncryptionState,
+    #[error("invalid auto-lock duration")]
+    InvalidAutoLock,
 }
 
 impl From<StorageError> for AppError {

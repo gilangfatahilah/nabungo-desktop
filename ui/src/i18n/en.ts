@@ -350,6 +350,13 @@ export default {
     backup_too_new: 'This backup was made by a newer version of Nabungo',
     backup_target_invalid: 'The active database file cannot be used here',
     file_io: 'Could not read or write the file. Check the location and disk space.',
+    locked: 'The app is locked',
+    wrong_password: 'Wrong password',
+    invalid_recovery_key: 'Recovery key does not match',
+    password_too_short: 'Password must be at least 8 characters',
+    key_file_invalid: 'Key file is damaged or missing; use the recovery key',
+    encryption_state: 'Encryption state already changed; reload the page',
+    invalid_auto_lock: 'Invalid auto-lock duration',
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema

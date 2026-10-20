@@ -69,6 +69,13 @@ pub enum ErrorCode {
     BackupTooNew,
     BackupTargetInvalid,
     FileIo,
+    Locked,
+    WrongPassword,
+    InvalidRecoveryKey,
+    PasswordTooShort,
+    KeyFileInvalid,
+    EncryptionState,
+    InvalidAutoLock,
     Internal,
 }
 
@@ -205,13 +212,13 @@ impl From<AppError> for IpcError {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::FileIo)
             }
-            // Sementara (Fase 6b Task 2); ErrorCode khusus ditambahkan di Task 4.
-            AppError::Locked
-            | AppError::WrongPassword
-            | AppError::InvalidRecoveryKey
-            | AppError::PasswordTooShort
-            | AppError::KeyFileInvalid
-            | AppError::EncryptionState => Self::code(ErrorCode::Internal),
+            AppError::Locked => Self::code(ErrorCode::Locked),
+            AppError::WrongPassword => Self::code(ErrorCode::WrongPassword),
+            AppError::InvalidRecoveryKey => Self::code(ErrorCode::InvalidRecoveryKey),
+            AppError::PasswordTooShort => Self::code(ErrorCode::PasswordTooShort),
+            AppError::KeyFileInvalid => Self::code(ErrorCode::KeyFileInvalid),
+            AppError::EncryptionState => Self::code(ErrorCode::EncryptionState),
+            AppError::InvalidAutoLock => Self::code(ErrorCode::InvalidAutoLock),
         }
     }
 }
@@ -230,6 +237,21 @@ impl From<AmountParseError> for IpcError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn security_errors_map() {
+        for (e, code) in [
+            (AppError::Locked, ErrorCode::Locked),
+            (AppError::WrongPassword, ErrorCode::WrongPassword),
+            (AppError::InvalidRecoveryKey, ErrorCode::InvalidRecoveryKey),
+            (AppError::PasswordTooShort, ErrorCode::PasswordTooShort),
+            (AppError::KeyFileInvalid, ErrorCode::KeyFileInvalid),
+            (AppError::EncryptionState, ErrorCode::EncryptionState),
+            (AppError::InvalidAutoLock, ErrorCode::InvalidAutoLock),
+        ] {
+            assert_eq!(IpcError::from(e).code, code);
+        }
+    }
 
     #[test]
     fn backup_errors_map() {

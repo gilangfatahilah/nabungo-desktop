@@ -350,6 +350,13 @@ export default {
     backup_too_new: 'Backup dibuat oleh versi Nabungo yang lebih baru',
     backup_target_invalid: 'File database aktif tidak boleh dipakai di sini',
     file_io: 'Gagal membaca atau menulis file. Periksa lokasi dan ruang disk.',
+    locked: 'Aplikasi terkunci',
+    wrong_password: 'Password salah',
+    invalid_recovery_key: 'Recovery key tidak cocok',
+    password_too_short: 'Password minimal 8 karakter',
+    key_file_invalid: 'File kunci rusak atau hilang; pakai recovery key',
+    encryption_state: 'Status enkripsi sudah berubah; muat ulang halaman',
+    invalid_auto_lock: 'Durasi kunci otomatis tidak valid',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }
