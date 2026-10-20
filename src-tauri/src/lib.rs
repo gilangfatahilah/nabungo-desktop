@@ -131,7 +131,8 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
     app.manage(state::AppState {
         ledger: std::sync::Mutex::new(ledger),
         data_dir,
-        startup,
+        startup: std::sync::Mutex::new(startup),
+        scheduler_started: std::sync::atomic::AtomicBool::new(false),
     });
     if auto_backup {
         lifecycle::spawn_backup_scheduler(app.handle().clone());

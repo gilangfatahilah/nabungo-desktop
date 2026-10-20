@@ -1,6 +1,7 @@
 //! State yang di-manage Tauri.
 
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
 
 use nabungo_app::Ledger;
 
@@ -10,7 +11,9 @@ use crate::paths::DataDir;
 pub struct AppState {
     pub ledger: Mutex<Ledger>,
     pub data_dir: DataDir,
-    pub startup: StartupReport,
+    /// Laporan startup; diperbarui setelah restore sukses.
+    pub startup: Mutex<StartupReport>,
+    pub scheduler_started: AtomicBool,
 }
 
 /// Penahan `WorkerGuard` log selama app berjalan.

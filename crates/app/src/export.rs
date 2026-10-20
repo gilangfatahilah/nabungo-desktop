@@ -173,6 +173,25 @@ fn bool_cell(b: bool) -> &'static str {
 }
 
 impl Ledger {
+    /// Ekspor JSON ke file `dest`: tulis ke `dest.partial` lalu rename; DB aktif ditolak.
+    pub fn export_json_file(&self, dest: &Path, now: OffsetDateTime) -> Result<(), AppError> {
+        self.ensure_not_live(dest)?;
+        let mut partial = dest.as_os_str().to_owned();
+        partial.push(".partial");
+        let partial = PathBuf::from(partial);
+        let result = (|| {
+            let mut w = std::io::BufWriter::new(std::fs::File::create(&partial)?);
+            self.export_json(&mut w, now)?;
+            w.into_inner().map_err(|e| e.into_error())?.sync_all()?;
+            std::fs::rename(&partial, dest)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&partial);
+        }
+        result
+    }
+
     /// Ekspor lengkap ke satu dokumen JSON (K12). Hanya membaca DB.
     pub fn export_json(&self, w: &mut impl Write, now: OffsetDateTime) -> Result<(), AppError> {
         let accounts = account::list_accounts(&self.conn)?;

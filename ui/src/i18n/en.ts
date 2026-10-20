@@ -348,7 +348,7 @@ export default {
     allocation_duplicate_bucket: 'The same bucket is selected twice',
     backup_invalid: 'This file is not a valid Nabungo backup',
     backup_too_new: 'This backup was made by a newer version of Nabungo',
-    backup_target_invalid: 'That location cannot be used for a backup',
+    backup_target_invalid: 'The active database file cannot be used here',
     file_io: 'Could not read or write the file. Check the location and disk space.',
     internal: 'Something went wrong. See the app log for details.',
   },

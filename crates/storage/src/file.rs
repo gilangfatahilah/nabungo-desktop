@@ -81,6 +81,16 @@ fn quick_check(conn: &Connection) -> Result<bool> {
 /// Salin isi `conn` ke `dest`: tulis ke `dest.partial`, `quick_check`, lalu rename
 /// (menimpa `dest` bila ada). Gagal → tidak ada file yang tertinggal.
 pub fn backup_into(conn: &Connection, dest: &Path) -> Result<()> {
+    copy_into(conn, dest, true)
+}
+
+/// Seperti [`backup_into`] tanpa `quick_check`: salinan pengaman dari DB yang mungkin
+/// rusak (pra-restore) tetap harus bisa dibuat.
+pub fn backup_into_unverified(conn: &Connection, dest: &Path) -> Result<()> {
+    copy_into(conn, dest, false)
+}
+
+fn copy_into(conn: &Connection, dest: &Path, verify: bool) -> Result<()> {
     let partial = sibling(dest, ".partial");
     remove_partial(&partial);
     let result = (|| {
@@ -88,7 +98,7 @@ pub fn backup_into(conn: &Connection, dest: &Path) -> Result<()> {
         copy_all(&Backup::new(conn, &mut dst)?)?;
         // Header ikut sumber (WAL); jadikan file tunggal agar bisa disalin/dibuka apa adanya.
         dst.pragma_update(None, "journal_mode", "DELETE")?;
-        if !quick_check(&dst)? {
+        if verify && !quick_check(&dst)? {
             return Err(StorageError::Corrupt("backup failed quick_check".into()));
         }
         drop(dst);

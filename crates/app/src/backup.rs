@@ -134,7 +134,7 @@ pub(crate) fn write_backup(
     now: OffsetDateTime,
 ) -> Result<BackupInfo, AppError> {
     let info = write_unpruned(conn, dir, kind, now)?;
-    prune(dir, kind)?;
+    prune_logged(dir, kind);
     Ok(info)
 }
 
@@ -166,7 +166,13 @@ fn write_unpruned(
         seq += 1;
     };
     let path = dir.join(&file_name);
-    nabungo_storage::backup_into(conn, &path)?;
+    // Pra-restore menyalin DB apa adanya, termasuk yang rusak: justru saat itu restore dibutuhkan.
+    // Jatahnya terpisah, jadi salinan rusak tidak menggeser backup otomatis.
+    if kind == BackupKind::PreRestore {
+        nabungo_storage::backup_into_unverified(conn, &path)?;
+    } else {
+        nabungo_storage::backup_into(conn, &path)?;
+    }
     let size_bytes = std::fs::metadata(&path)?.len();
     Ok(BackupInfo {
         file_name,
@@ -183,6 +189,14 @@ pub(crate) fn prune(dir: &Path, kind: BackupKind) -> Result<(), AppError> {
         std::fs::remove_file(dir.join(&old.file_name))?;
     }
     Ok(())
+}
+
+/// Retensi yang gagal (mis. file terkunci di Windows) hanya dicatat: backup baru sudah
+/// tersimpan, dan setelah restore DB sudah berganti, jadi jangan dilaporkan sebagai gagal.
+fn prune_logged(dir: &Path, kind: BackupKind) {
+    if let Err(e) = prune(dir, kind) {
+        tracing::warn!(error = %e, kind = kind.as_str(), "retensi backup gagal");
+    }
 }
 
 /// `path` setelah symlink dan `.`/`..` di-resolve; file boleh belum ada.
@@ -218,7 +232,7 @@ impl Ledger {
     }
 
     /// Tolak `target` bila menunjuk DB utama atau file pendampingnya (K10).
-    fn ensure_not_live(&self, target: &Path) -> Result<(), AppError> {
+    pub(crate) fn ensure_not_live(&self, target: &Path) -> Result<(), AppError> {
         let Some(live) = &self.path else {
             return Ok(());
         };
@@ -252,9 +266,11 @@ impl Ledger {
         dir: &Path,
         now: OffsetDateTime,
     ) -> Result<Option<BackupInfo>, AppError> {
+        // Backup bertanggal masa depan (jam pernah maju) diabaikan; kalau tidak, setiap
+        // putaran jatuh tempo dan retensi menghapus riwayat harian.
         let last = list_backups(dir)?
             .into_iter()
-            .find(|b| b.kind == BackupKind::Auto)
+            .find(|b| b.kind == BackupKind::Auto && b.created_at <= now)
             .map(|b| b.created_at);
         if !is_auto_due(last, now) {
             return Ok(None);
@@ -276,7 +292,8 @@ impl Ledger {
         nabungo_storage::restore_from(&mut self.conn, src).map_err(AppError::from_backup)?;
         nabungo_storage::migrate(&mut self.conn)?;
         // Retensi setelah restore: sumbernya bisa saja pre-restore tertua.
-        prune(backup_dir, BackupKind::PreRestore)
+        prune_logged(backup_dir, BackupKind::PreRestore);
+        Ok(())
     }
 
     /// Pulihkan backup app-managed berdasarkan nama file (K11).
@@ -837,6 +854,98 @@ mod tests {
                 .unwrap();
             assert_eq!(b.kind, super::BackupKind::Auto);
             assert_eq!(backup_files(&dir).len(), 2);
+        }
+
+        /// Rusak satu halaman b-tree `posting` (jumlah sel mustahil); DB harus tertutup.
+        fn corrupt_posting_page(db: &Path) {
+            let (root, page_size): (i64, i64) = {
+                let c = nabungo_storage::open_file_read_only(db).unwrap();
+                let root = c
+                    .query_row(
+                        "SELECT rootpage FROM sqlite_schema WHERE name = 'posting'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap();
+                let size = c
+                    .pragma_query_value(None, "page_size", |r| r.get(0))
+                    .unwrap();
+                (root, size)
+            };
+            let mut bytes = std::fs::read(db).unwrap();
+            let at = usize::try_from((root - 1) * page_size).unwrap() + 3;
+            bytes[at..at + 2].copy_from_slice(&[0xFF, 0xFF]);
+            std::fs::write(db, bytes).unwrap();
+        }
+
+        #[test]
+        fn restore_works_when_live_db_is_corrupt() {
+            let f = Fixture::new();
+            let before = snapshot(&f.ledger);
+            let x = f.root.join("x.db");
+            f.ledger.backup_to(&x).unwrap();
+            let (db, backups) = (f.db(), f.backups());
+            let Fixture { _dir, ledger, .. } = f;
+            drop(ledger);
+            corrupt_posting_page(&db);
+
+            let mut ledger = Ledger::open(&db).unwrap();
+            assert!(!matches!(ledger.integrity_check(), Ok(p) if p.is_empty()));
+            ledger.restore_file(&x, &backups, NOW).unwrap();
+            assert_eq!(snapshot(&ledger), before);
+            assert!(ledger.integrity_check().unwrap().is_empty());
+            let list = backup_files(&backups);
+            assert_eq!(list.len(), 1);
+            assert!(list[0].starts_with("pre-restore-"), "{list:?}");
+        }
+
+        #[test]
+        fn future_dated_auto_does_not_force_hourly_backups() {
+            let f = Fixture::new();
+            let dir = f.backups();
+            // Jam sempat maju sebulan saat app terbuka.
+            f.ledger
+                .auto_backup_if_due(&dir, NOW + Duration::days(30))
+                .unwrap()
+                .unwrap();
+            assert!(f.ledger.auto_backup_if_due(&dir, NOW).unwrap().is_some());
+            assert!(
+                f.ledger
+                    .auto_backup_if_due(&dir, NOW + Duration::hours(1))
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(backup_files(&dir).len(), 2);
+        }
+
+        #[test]
+        fn export_json_file_rejects_live_db() {
+            let f = Fixture::new();
+            let before = snapshot(&f.ledger);
+            for target in [f.db(), f.root.join("nabungo.db-wal")] {
+                let err = f.ledger.export_json_file(&target, NOW).unwrap_err();
+                assert!(matches!(err, AppError::BackupTargetInvalid), "{err:?}");
+            }
+            assert_eq!(snapshot(&f.ledger), before);
+            assert_eq!(snapshot(&Ledger::open(&f.db()).unwrap()), before);
+        }
+
+        #[test]
+        fn export_json_file_writes_complete_file() {
+            let f = Fixture::new();
+            let dest = f.root.join("out.json");
+            std::fs::write(&dest, "lama").unwrap();
+            f.ledger.export_json_file(&dest, NOW).unwrap();
+            let v: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&dest).unwrap()).unwrap();
+            assert_eq!(v["format"], "nabungo-export");
+            assert_eq!(
+                files(&f.root)
+                    .iter()
+                    .filter(|n| n.ends_with(".partial"))
+                    .count(),
+                0
+            );
         }
 
         #[test]

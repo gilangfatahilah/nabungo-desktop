@@ -547,7 +547,7 @@ pub fn net_worth_history(
 #[tauri::command]
 #[specta::specta]
 pub fn startup_report(state: State<'_, AppState>) -> StartupReportDto {
-    state.startup.into()
+    (*state.startup.lock().unwrap_or_else(|e| e.into_inner())).into()
 }
 
 #[tauri::command]
@@ -616,9 +616,15 @@ pub async fn backup_now(
 
 #[tauri::command]
 #[specta::specta]
-pub fn restore_backup(state: State<'_, AppState>, file_name: String) -> Result<(), IpcError> {
+pub fn restore_backup(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file_name: String,
+) -> Result<(), IpcError> {
     let dir = state.data_dir.backups_path();
-    Ok(ledger(&state)?.restore_named(&dir, &file_name, OffsetDateTime::now_utc())?)
+    ledger(&state)?.restore_named(&dir, &file_name, OffsetDateTime::now_utc())?;
+    crate::lifecycle::on_restored(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -632,6 +638,7 @@ pub async fn restore_backup_from_file(
     };
     let dir = state.data_dir.backups_path();
     ledger(&state)?.restore_file(&src, &dir, OffsetDateTime::now_utc())?;
+    crate::lifecycle::on_restored(&app);
     Ok(true)
 }
 
@@ -648,9 +655,7 @@ pub async fn export_json(
     let Some(dest) = pick_path(&app, Dialog::Save { name, ext: "json" }).await? else {
         return Ok(None);
     };
-    let file = std::fs::File::create(&dest).map_err(nabungo_app::AppError::from)?;
-    let mut w = std::io::BufWriter::new(file);
-    ledger(&state)?.export_json(&mut w, OffsetDateTime::now_utc())?;
+    ledger(&state)?.export_json_file(&dest, OffsetDateTime::now_utc())?;
     Ok(Some(display(&dest)))
 }
 

@@ -20,8 +20,8 @@ pub mod txn;
 pub mod txn_list;
 
 pub use file::{
-    backup_into, inspect_backup, integrity_check, migrate, migrate_to, open_file,
-    open_file_read_only, restore_from, schema_version,
+    backup_into, backup_into_unverified, inspect_backup, integrity_check, migrate, migrate_to,
+    open_file, open_file_read_only, restore_from, schema_version,
 };
 pub use rusqlite;
 

@@ -45,6 +45,20 @@ pub struct StartupReport {
     pub integrity: IntegrityStatus,
 }
 
+impl StartupReport {
+    /// DB baru saja diganti backup yang lolos `quick_check`: status gagal tidak berlaku lagi.
+    pub fn after_restore(self) -> Self {
+        if self.integrity == IntegrityStatus::Failed {
+            Self {
+                integrity: IntegrityStatus::Ok,
+                ..self
+            }
+        } else {
+            self
+        }
+    }
+}
+
 /// DB yang gagal integrity check tidak di-backup otomatis: jangan sampai backup sehat
 /// tergeser retensi oleh salinan yang rusak.
 pub fn auto_backup_allowed(r: &StartupReport) -> bool {
@@ -75,8 +89,26 @@ pub fn run_auto_backup(ledger: &nabungo_app::Ledger, dir: &Path) {
     }
 }
 
-/// Thread latar: tiap jam cek apakah backup otomatis jatuh tempo.
+/// Setelah restore sukses: perbarui laporan startup dan hidupkan backup otomatis bila tadi
+/// dimatikan karena integrity check gagal.
+pub fn on_restored(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let mut startup = state.startup.lock().unwrap_or_else(|e| e.into_inner());
+    *startup = startup.after_restore();
+    if auto_backup_allowed(&startup) {
+        spawn_backup_scheduler(app.clone());
+    }
+}
+
+/// Thread latar: tiap jam cek apakah backup otomatis jatuh tempo. Hanya satu per proses.
 pub fn spawn_backup_scheduler(app: AppHandle) {
+    if app
+        .state::<AppState>()
+        .scheduler_started
+        .swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        return;
+    }
     let spawned = std::thread::Builder::new()
         .name("backup-scheduler".into())
         .spawn(move || {
@@ -98,6 +130,23 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restore_clears_failed_integrity() {
+        let failed = StartupReport {
+            unclean_shutdown: true,
+            integrity: IntegrityStatus::Failed,
+        };
+        let r = failed.after_restore();
+        assert_eq!(r.integrity, IntegrityStatus::Ok);
+        assert!(r.unclean_shutdown);
+        assert!(auto_backup_allowed(&r));
+        let skipped = StartupReport {
+            unclean_shutdown: false,
+            integrity: IntegrityStatus::Skipped,
+        };
+        assert_eq!(skipped.after_restore(), skipped);
+    }
 
     #[test]
     fn marker_detects_unclean_shutdown() {

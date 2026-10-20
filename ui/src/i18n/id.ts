@@ -348,7 +348,7 @@ export default {
     allocation_duplicate_bucket: 'Bucket yang sama dipilih dua kali',
     backup_invalid: 'File bukan backup Nabungo yang valid',
     backup_too_new: 'Backup dibuat oleh versi Nabungo yang lebih baru',
-    backup_target_invalid: 'Lokasi itu tidak boleh dipakai untuk backup',
+    backup_target_invalid: 'File database aktif tidak boleh dipakai di sini',
     file_io: 'Gagal membaca atau menulis file. Periksa lokasi dan ruang disk.',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
