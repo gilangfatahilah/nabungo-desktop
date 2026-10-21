@@ -33,7 +33,7 @@ Folder data (DB `nabungo.db`, `nabungo.key` bila terenkripsi, `logs/`, `backups/
 
 Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
 
-CI (`.github/workflows/ci.yml`) menjalankan fmt check, clippy `-D warnings`, test di Linux + Windows, serta typecheck/test/build UI.
+CI (`.github/workflows/ci.yml`) menjalankan fmt check, clippy `-D warnings`, test di Linux (Windows ditunda sampai Fase 8), serta typecheck/test/build UI.
 
 ## Arsitektur
 
