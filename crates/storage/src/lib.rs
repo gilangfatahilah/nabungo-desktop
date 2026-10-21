@@ -16,6 +16,7 @@ pub mod export;
 mod file;
 mod key;
 pub mod payee;
+pub mod recurring;
 pub mod report;
 pub mod setting;
 pub mod tag;
