@@ -152,7 +152,7 @@ describe('TxnForm', () => {
   })
 
   it('mode edit mengisi form dan memperbarui transaksi dengan id sama', async () => {
-    const txnId = await ipc.createTxn(expense())
+    const { id: txnId } = await ipc.createTxn(expense())
     const ui = await openSheet((u) => u.openEditTxn(txnId))
     expect($('#txn-amount').value).toBe('25000')
     expect($('#txn-category').value).toBe('Makan & Minum › Kopi & jajan')
@@ -164,7 +164,7 @@ describe('TxnForm', () => {
   })
 
   it('duplikasi memakai tanggal hari ini dan membuat transaksi baru', async () => {
-    const txnId = await ipc.createTxn(expense({ date: '2026-10-02', note: 'asli' }))
+    const { id: txnId } = await ipc.createTxn(expense({ date: '2026-10-02', note: 'asli' }))
     const before = (await txns()).total
     await openSheet((u) => u.openDuplicateTxn(txnId))
     expect($('#txn-date').value).toBe(formatDateInput(todayIso(), 'id'))

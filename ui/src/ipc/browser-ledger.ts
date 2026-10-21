@@ -4,12 +4,14 @@
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
   AllocationPointDto, BackupDto, BackupKindDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
   SecurityStatusDto, StartupReportDto, ValuationPointDto,
 } from './bindings'
+import { todayIso } from '@/lib/date'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
@@ -28,7 +30,7 @@ const state = {
   txns: [] as Txn[],
   payees: [] as { id: string; name: string }[],
   lastFeeCategoryId: null as string | null,
-  budgets: [] as { categoryId: string; period: string; amount: number }[],
+  budgets: [] as { categoryId: string; period: string; amount: number; rollover: boolean }[],
   buckets: [] as BucketDto[],
   mappings: [] as MappingDto[],
 }
@@ -355,41 +357,122 @@ function previousDay(iso: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-function budgetOverview(p: Period): BudgetOverviewDto {
-  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
-  const key = browserPeriod.key(p)
-  const cats = state.categories.filter((c) => c.kind === 'expense')
-  const direct = new Map<string, number>()
-  for (const t of activeTxns()) {
-    if (t.date < from || t.date >= toEx) continue
-    for (const x of t.postings) if (x.categoryId) direct.set(x.categoryId, (direct.get(x.categoryId) ?? 0) + x.amount)
-  }
+/** Realisasi per kategori expense dalam `[from, toEx)`; parent mencakup child (cermin `rollup_spent`). */
+function spentIn(from: string, toEx: string): Map<string, number> {
+  const direct = categoryTotals(from, toEx)
   const spent = new Map<string, number>()
   const add = (k: string, v: number) => spent.set(k, (spent.get(k) ?? 0) + v)
-  for (const c of cats) {
+  for (const c of state.categories.filter((x) => x.kind === 'expense')) {
     const own = -(direct.get(c.id) ?? 0)
     add(c.id, own)
     if (c.parentId) add(c.parentId, own)
   }
-  const budgetOf = (c: string) => state.budgets.find((b) => b.categoryId === c && b.period === key)?.amount ?? null
+  return spent
+}
+
+const budgetEntry = (c: string, key: string) => state.budgets.find((b) => b.categoryId === c && b.period === key)
+
+/** Carry (K2): Σ nominal rantai rollover yang berakhir di `p - 1` dikurangi realisasi rantai. */
+function carryOf(c: string, p: Period): number {
+  let sum = 0
+  let first: Period | null = null
+  for (let q = browserPeriod.shift(p, -1); ; q = browserPeriod.shift(q, -1)) {
+    const e = budgetEntry(c, browserPeriod.key(q))
+    if (!e?.rollover) break
+    sum += e.amount
+    first = q
+  }
+  if (!first) return 0
+  const from = browserPeriod.range(first, state.periodStartDay)[0]
+  const until = browserPeriod.range(p, state.periodStartDay)[0]
+  return sum - (spentIn(from, until).get(c) ?? 0)
+}
+
+/** Cermin core `budget_level`. */
+function budgetLevel(available: number, spent: number): BudgetLevelDto {
+  if (available > 0) return spent >= available ? 'exceeded' : spent * 100 >= available * 80 ? 'warning' : 'ok'
+  return spent > 0 || available < 0 ? 'exceeded' : 'ok'
+}
+
+const spentPercent = (available: number, spent: number) =>
+  available > 0 ? Math.floor((Math.max(spent, 0) * 100) / available) : null
+const perDay = (remaining: number, days: number) => Math.floor(Math.max(remaining, 0) / Math.max(days, 1))
+
+/** Hari tersisa termasuk `today` bila ada di `[from, last]` (cermin core `days_left`). */
+function daysLeft(today: string, from: string, last: string): number | null {
+  if (today < from || today > last) return null
+  return Math.round((Date.parse(`${last}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000) + 1
+}
+
+function budgetOverview(p: Period, today: string | null): BudgetOverviewDto {
+  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
+  const last = previousDay(toEx)
+  const key = browserPeriod.key(p)
+  const cats = state.categories.filter((c) => c.kind === 'expense')
+  const spent = spentIn(from, toEx)
+  const days = today === null ? null : daysLeft(today, from, last)
   const bySort = (a: CategoryDto, b: CategoryDto) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
   const rows: BudgetRowDto[] = []
   for (const root of cats.filter((c) => !c.parentId).sort(bySort)) {
     for (const c of [root, ...cats.filter((x) => x.parentId === root.id).sort(bySort)]) {
-      const budget = budgetOf(c.id)
+      const entry = budgetEntry(c.id, key)
+      const budget = entry?.amount ?? null
       const s = spent.get(c.id) ?? 0
       if (c.archived && budget === null && s === 0) continue
-      rows.push({ categoryId: c.id, parentId: c.parentId, budget, spent: s, remaining: budget === null ? null : budget - s })
+      const carry = entry ? carryOf(c.id, p) : 0
+      const available = budget === null ? null : budget + carry
+      rows.push({
+        categoryId: c.id, parentId: c.parentId, budget, rollover: entry?.rollover ?? false, carry, available,
+        spent: s, remaining: available === null ? null : available - s,
+        level: available === null ? null : budgetLevel(available, s),
+        percent: available === null ? null : spentPercent(available, s),
+        perDay: available === null || days === null ? null : perDay(available - s, days),
+      })
     }
   }
   // Total: baris berbudget yang parent-nya tidak berbudget (aturan K2).
   const top = rows.filter((r) => r.budget !== null && !(r.parentId && rows.some((x) => x.categoryId === r.parentId && x.budget !== null)))
-  const total = { budget: top.reduce((m, r) => m + r.budget!, 0), spent: top.reduce((m, r) => m + r.spent, 0), remaining: 0 }
-  total.remaining = total.budget - total.spent
+  const sum = (f: (r: BudgetRowDto) => number) => top.reduce((m, r) => m + f(r), 0)
+  const budget = sum((r) => r.budget!)
+  const carry = sum((r) => r.carry)
+  const totalSpent = sum((r) => r.spent)
+  const remaining = budget + carry - totalSpent
   return {
     period: key, prev: browserPeriod.key(browserPeriod.shift(p, -1)), next: browserPeriod.key(browserPeriod.shift(p, 1)),
-    from, to: previousDay(toEx), rows, total,
+    from, to: last, daysLeft: days, rows,
+    total: { budget, carry, available: budget + carry, spent: totalSpent, remaining, perDay: days === null ? null : perDay(remaining, days) },
   }
+}
+
+// --- Peringatan budget (cermin app `budget_alerts.rs`) ---
+
+const LEVEL_RANK: Record<BudgetLevelDto, number> = { ok: 0, warning: 1, exceeded: 2 }
+
+function periodsOf(dates: string[]): Period[] {
+  const keys = [...new Set(dates.map((d) => browserPeriod.key(browserPeriod.of(d, state.periodStartDay))))].sort()
+  return keys.map((k) => browserPeriod.parse(k)!)
+}
+
+function budgetLevels(periods: Period[]): Map<string, BudgetLevelDto> {
+  const out = new Map<string, BudgetLevelDto>()
+  for (const p of periods) {
+    for (const r of budgetOverview(p, null).rows) if (r.level) out.set(`${r.categoryId}|${browserPeriod.key(p)}`, r.level)
+  }
+  return out
+}
+
+/** Kategori ber-budget yang levelnya naik ke `warning`/`exceeded` dibanding `before`. */
+function budgetAlerts(periods: Period[], before: Map<string, BudgetLevelDto>): BudgetAlertDto[] {
+  const out: BudgetAlertDto[] = []
+  for (const p of periods) {
+    const period = browserPeriod.key(p)
+    for (const r of budgetOverview(p, null).rows) {
+      if (!r.level || r.level === 'ok') continue
+      const was = before.get(`${r.categoryId}|${period}`) ?? 'ok'
+      if (LEVEL_RANK[r.level] > LEVEL_RANK[was]) out.push({ categoryId: r.categoryId, period, level: r.level, percent: r.percent })
+    }
+  }
+  return out
 }
 
 // --- Alokasi modal (cermin core `allocation.rs` & app `allocation.rs`) ---
@@ -660,14 +743,21 @@ export const browserLedger = {
     state.categories = state.categories.filter((c) => c.id !== source)
     return ok(null)
   },
-  createTxn: async (form: TxnFormDto) => writeTxn(null, form),
-  updateTxn: async (i: string, form: TxnFormDto): Promise<Result<null>> => {
+  createTxn: async (form: TxnFormDto): Promise<Result<SavedTxnDto>> => {
+    const periods = periodsOf([form.date])
+    const before = budgetLevels(periods)
+    const r = writeTxn(null, form)
+    return r.status === 'ok' ? ok({ id: r.data, alerts: budgetAlerts(periods, before) }) : r
+  },
+  updateTxn: async (i: string, form: TxnFormDto): Promise<Result<BudgetAlertDto[]>> => {
     const t = activeTxns().find((x) => x.id === i)
     if (!t) return notFound('transaction')
     if (t.kind === 'opening') return fail('opening_not_allowed')
     if (t.kind === 'valuation' || t.kind === 'adjustment') return fail('txn_not_editable')
+    const periods = periodsOf([t.date, form.date])
+    const before = budgetLevels(periods)
     const r = writeTxn(t, form)
-    return r.status === 'ok' ? ok(null) : r
+    return r.status === 'ok' ? ok(budgetAlerts(periods, before)) : r
   },
   getTxn: async (i: string): Promise<Result<TxnDetailDto>> => {
     const t = activeTxns().find((x) => x.id === i)
@@ -710,7 +800,7 @@ export const browserLedger = {
     ok(browserPeriod.key(browserPeriod.of(date, state.periodStartDay))),
   budgetOverview: async (period: string): Promise<Result<BudgetOverviewDto>> => {
     const p = browserPeriod.parse(period)
-    return p ? ok(budgetOverview(p)) : fail('invalid_period')
+    return p ? ok(budgetOverview(p, todayIso())) : fail('invalid_period')
   },
   setBudget: async (categoryId: string, period: string, amount: number | null): Promise<Result<null>> => {
     if (!browserPeriod.parse(period)) return fail('invalid_period')
@@ -720,8 +810,21 @@ export const browserLedger = {
     if (c.kind !== 'expense') return fail('budget_income_category')
     if (amount !== null && amount < 0) return fail('budget_negative')
     if (amount !== null && amount > MAX_AMOUNT) return fail('budget_too_large')
-    state.budgets = state.budgets.filter((b) => !(b.categoryId === categoryId && b.period === period))
-    if (amount !== null) state.budgets.push({ categoryId, period, amount })
+    const existing = budgetEntry(categoryId, period)
+    if (amount === null) state.budgets = state.budgets.filter((b) => b !== existing)
+    else if (existing) existing.amount = amount
+    else state.budgets.push({ categoryId, period, amount, rollover: false })
+    return ok(null)
+  },
+  setBudgetRollover: async (categoryId: string, period: string, on: boolean): Promise<Result<null>> => {
+    if (!browserPeriod.parse(period)) return fail('invalid_period')
+    const c = state.categories.find((x) => x.id === categoryId)
+    if (!c) return notFound('category')
+    if (on && c.archived) return fail('archived', 'category')
+    if (c.kind !== 'expense') return fail('budget_income_category')
+    const b = budgetEntry(categoryId, period)
+    if (!b) return notFound('budget')
+    b.rollover = on
     return ok(null)
   },
   copyBudgets: async (period: string): Promise<Result<number>> => {
@@ -733,7 +836,7 @@ export const browserLedger = {
       const c = state.categories.find((x) => x.id === b.categoryId)
       if (!c || c.archived || c.kind !== 'expense') continue
       if (state.budgets.some((x) => x.categoryId === b.categoryId && x.period === period)) continue
-      state.budgets.push({ categoryId: b.categoryId, period, amount: b.amount })
+      state.budgets.push({ categoryId: b.categoryId, period, amount: b.amount, rollover: b.rollover })
       copied++
     }
     return ok(copied)

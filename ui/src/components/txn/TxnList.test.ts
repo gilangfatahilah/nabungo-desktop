@@ -22,11 +22,11 @@ beforeAll(async () => {
   dompet = await ipc.createAccount('cash', { name: 'Dompet', groupId: null, includeInNetWorth: true, creditLimit: null,
     statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01' })
   const cats = Object.fromEntries((await ipc.listCategories()).map((c) => [c.name, c.id]))
-  transferId = await ipc.createTxn({ kind: 'transfer', date: '2026-10-03', accountId: bca, toAccountId: dompet,
-    amount: 200_000, splits: [], fee: null, payee: null, note: null, tags: [] })
-  expenseId = await ipc.createTxn({ kind: 'expense', date: '2026-10-04', accountId: bca, toAccountId: null,
+  transferId = (await ipc.createTxn({ kind: 'transfer', date: '2026-10-03', accountId: bca, toAccountId: dompet,
+    amount: 200_000, splits: [], fee: null, payee: null, note: null, tags: [] })).id
+  expenseId = (await ipc.createTxn({ kind: 'expense', date: '2026-10-04', accountId: bca, toAccountId: null,
     amount: 25_000, splits: [{ categoryId: cats['Kopi & jajan']!, amount: 25_000, memo: null }], fee: null,
-    payee: 'Kopi Kenangan', note: null, tags: ['ngopi'] })
+    payee: 'Kopi Kenangan', note: null, tags: ['ngopi'] })).id
 })
 
 async function settle() {

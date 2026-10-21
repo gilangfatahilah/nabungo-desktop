@@ -10,6 +10,7 @@ import {
   type AppInfo,
   type BackupDto,
   type BucketFieldsDto,
+  type BudgetAlertDto,
   type BudgetOverviewDto,
   type CashflowPointDto,
   type CategoryAmountDto,
@@ -29,6 +30,7 @@ import {
   type PayeeSuggestionDto,
   type SecurityStatusDto,
   type ShareDto,
+  type SavedTxnDto,
   type StartupReportDto,
   type UiSettingsDto,
   type ValuationPointDto,
@@ -50,10 +52,13 @@ export type {
   BucketBpDto,
   BucketDto,
   BucketFieldsDto,
+  BudgetAlertDto,
+  BudgetLevelDto,
   BudgetOverviewDto,
   CashflowPointDto,
   CategoryAmountDto,
   MappingDto,
+  SavedTxnDto,
   NetWorthPointDto,
   ShareDto,
   UnallocatedDto,
@@ -238,12 +243,14 @@ export async function mergeCategory(source: string, target: string): Promise<voi
 
 // --- Transaksi ---
 
-export function createTxn(form: TxnFormDto): Promise<string> {
+/** Mengembalikan id transaksi baru dan peringatan budget yang baru terlewati. */
+export function createTxn(form: TxnFormDto): Promise<SavedTxnDto> {
   return unwrap(api().createTxn(form))
 }
 
-export async function updateTxn(id: string, form: TxnFormDto): Promise<void> {
-  await unwrap(api().updateTxn(id, form))
+/** Mengembalikan peringatan budget yang baru terlewati. */
+export function updateTxn(id: string, form: TxnFormDto): Promise<BudgetAlertDto[]> {
+  return unwrap(api().updateTxn(id, form))
 }
 
 export function getTxn(id: string): Promise<TxnDetailDto> {
@@ -292,6 +299,11 @@ export function budgetOverview(period: string): Promise<BudgetOverviewDto> {
 /** `amount = null` menghapus budget. */
 export async function setBudget(categoryId: string, period: string, amount: number | null): Promise<void> {
   await unwrap(api().setBudget(categoryId, period, amount))
+}
+
+/** Budget kategori × periode harus sudah ada. */
+export async function setBudgetRollover(categoryId: string, period: string, on: boolean): Promise<void> {
+  await unwrap(api().setBudgetRollover(categoryId, period, on))
 }
 
 /** Mengembalikan jumlah budget yang disalin dari periode sebelumnya. */

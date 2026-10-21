@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
 import * as ipc from '@/ipc'
-import type { TxnRowDto } from '@/ipc'
+import type { BudgetAlertDto, TxnRowDto } from '@/ipc'
 import type { TxnFilter } from '@/lib/txnFilter'
 import { withErrorToast } from '@/lib/notify'
 import { toDto, type TxnFormState } from '@/lib/txnForm'
@@ -27,6 +27,8 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const loading = ref(false)
   /** Naik setiap transaksi disimpan/dihapus/dipulihkan: layar turunan (budget, laporan, alokasi) memuat ulang. */
   const ledgerVersion = ref(0)
+  /** Peringatan budget dari penyimpanan terakhir. */
+  const lastAlerts = ref<BudgetAlertDto[]>([])
 
   /** `keepLoaded`: setelah aksi tulis, muat ulang sebanyak baris yang sudah dimuat agar posisi tidak hilang. */
   async function reload(keepLoaded = false) {
@@ -70,11 +72,17 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
   async function save(id: string | null, state: TxnFormState): Promise<string> {
     const dto = toDto(state)
-    let saved = id
-    if (id) await ipc.updateTxn(id, dto)
-    else saved = await ipc.createTxn(dto)
+    let saved: string
+    if (id) {
+      lastAlerts.value = await ipc.updateTxn(id, dto)
+      saved = id
+    } else {
+      const r = await ipc.createTxn(dto)
+      lastAlerts.value = r.alerts
+      saved = r.id
+    }
     await refresh()
-    return saved!
+    return saved
   }
 
   async function remove(id: string) {
@@ -92,5 +100,5 @@ export const useTransactionsStore = defineStore('transactions', () => {
     })
   }
 
-  return { query, rows, total, loading, ledgerVersion, reload, loadMore, setQuery, clear, save, remove }
+  return { query, rows, total, loading, ledgerVersion, lastAlerts, reload, loadMore, setQuery, clear, save, remove }
 })
