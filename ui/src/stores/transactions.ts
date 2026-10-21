@@ -82,17 +82,20 @@ export const useTransactionsStore = defineStore('transactions', () => {
       ({ id: saved, alerts } = await ipc.createTxn(dto))
     }
     await refresh()
-    if (alerts.length) {
-      // Transaksi sudah tersimpan: gagal memuat nama kategori tidak boleh membuat save tampak gagal.
-      try {
-        const categories = useCategoriesStore()
-        if (!categories.loaded) await categories.load()
-        showBudgetAlerts(alerts, new Map(categories.list.map((c) => [c.id, c.name])))
-      } catch (e) {
-        console.warn('gagal menampilkan peringatan budget', e)
-      }
-    }
+    await notifyAlerts(alerts)
     return saved
+  }
+
+  async function notifyAlerts(alerts: BudgetAlertDto[]) {
+    if (!alerts.length) return
+    // Transaksi sudah tersimpan: gagal memuat nama kategori tidak boleh membuat save tampak gagal.
+    try {
+      const categories = useCategoriesStore()
+      if (!categories.loaded) await categories.load()
+      showBudgetAlerts(alerts, new Map(categories.list.map((c) => [c.id, c.name])))
+    } catch (e) {
+      console.warn('gagal menampilkan peringatan budget', e)
+    }
   }
 
   async function remove(id: string) {
@@ -110,5 +113,5 @@ export const useTransactionsStore = defineStore('transactions', () => {
     })
   }
 
-  return { query, rows, total, loading, ledgerVersion, reload, loadMore, setQuery, clear, save, remove }
+  return { query, rows, total, loading, ledgerVersion, reload, refresh, loadMore, setQuery, clear, save, remove, notifyAlerts }
 })

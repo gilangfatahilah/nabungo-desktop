@@ -1,13 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
+import TxnForm from '@/components/txn/TxnForm.vue'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
 import type { TxnFormDto } from '@/ipc'
 import { formatDateInput, todayIso } from '@/lib/date'
+import { emptyForm } from '@/lib/txnForm'
 import { useUiStore } from '@/stores/ui'
 
 // Sheet di-teleport ke body: query lewat document.
@@ -214,5 +216,23 @@ describe('TxnForm', () => {
     const footer = $<HTMLElement>('[data-testid="txn-form-footer"]')
     expect(footer.querySelector('button[type="submit"]')).not.toBeNull()
     expect(footer.closest('[data-testid="txn-form-body"]')).toBeNull()
+  })
+
+  it('prop submit menggantikan simpan; slot extra dan dateLabel dirender', async () => {
+    const before = (await txns()).total
+    const submit = vi.fn(async () => 'rule-1')
+    const initial = { ...emptyForm('expense', { accountId: bca, feeCategoryId: null, today: '2026-10-02' }), amount: 25_000, categoryId: cats['Kopi & jajan']! }
+    const w = mount(TxnForm, {
+      props: { initial, id: null, submit, dateLabel: 'Mulai' },
+      slots: { extra: '<p data-testid="form-extra">ekstra</p>' },
+      global: { plugins: [i18n] }, attachTo: document.body,
+    })
+    await settle()
+    expect($('[data-testid="form-extra"]')).not.toBeNull()
+    expect($('label[for="txn-date"]').textContent).toBe('Mulai')
+    await key('#txn-amount', 'Enter', { ctrlKey: true })
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ amount: 25_000, date: '2026-10-02' }))
+    expect(w.emitted('saved')).toEqual([['rule-1']])
+    expect((await txns()).total).toBe(before)
   })
 })

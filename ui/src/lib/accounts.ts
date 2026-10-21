@@ -75,3 +75,10 @@ export function moveAccount(sections: GroupSection[], accountId: string, targetG
 export function balanceTone(a: AccountDto): 'neutral' | 'expense' {
   return a.balance < 0 ? 'expense' : 'neutral'
 }
+
+/** Akun default form transaksi: terakhir dipakai bila masih aktif, else aset aktif pertama. */
+export function defaultAccountId(accounts: AccountDto[], last: string | null): string | null {
+  const active = accounts.filter((a) => !a.archived)
+  if (last && active.some((a) => a.id === last)) return last
+  return (active.find((a) => !isLiability(a.kind)) ?? active[0])?.id ?? null
+}

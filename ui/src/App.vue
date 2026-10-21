@@ -7,6 +7,7 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import IntegrityAlert from '@/components/IntegrityAlert.vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
+import RuleSheet from '@/components/scheduled/RuleSheet.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useIdleLock } from '@/composables/useIdleLock'
 import { withErrorToast } from '@/lib/notify'
@@ -92,6 +93,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </SidebarInset>
     <CommandPalette />
     <NewTxnSheet />
+    <RuleSheet />
     <IntegrityAlert />
     <!-- Saat sheet transaksi (440px) terbuka, toast bergeser ke kiri agar tidak menutup tombol Simpan. -->
     <Toaster :visible-toasts="1" :offset="ui.txnEditor ? { right: 464, bottom: 24 } : undefined" />
