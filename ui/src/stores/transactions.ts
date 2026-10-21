@@ -4,10 +4,12 @@ import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
 import * as ipc from '@/ipc'
 import type { BudgetAlertDto, TxnRowDto } from '@/ipc'
+import { showBudgetAlerts } from '@/lib/budgetAlerts'
 import type { TxnFilter } from '@/lib/txnFilter'
 import { withErrorToast } from '@/lib/notify'
 import { toDto, type TxnFormState } from '@/lib/txnForm'
 import { useAccountsStore } from './accounts'
+import { useCategoriesStore } from './categories'
 
 export type { TxnFilter } from '@/lib/txnFilter'
 
@@ -28,7 +30,6 @@ export const useTransactionsStore = defineStore('transactions', () => {
   /** Naik setiap transaksi disimpan/dihapus/dipulihkan: layar turunan (budget, laporan, alokasi) memuat ulang. */
   const ledgerVersion = ref(0)
   /** Peringatan budget dari penyimpanan terakhir. */
-  const lastAlerts = ref<BudgetAlertDto[]>([])
 
   /** `keepLoaded`: setelah aksi tulis, muat ulang sebanyak baris yang sudah dimuat agar posisi tidak hilang. */
   async function reload(keepLoaded = false) {
@@ -73,15 +74,19 @@ export const useTransactionsStore = defineStore('transactions', () => {
   async function save(id: string | null, state: TxnFormState): Promise<string> {
     const dto = toDto(state)
     let saved: string
+    let alerts: BudgetAlertDto[]
     if (id) {
-      lastAlerts.value = await ipc.updateTxn(id, dto)
+      alerts = await ipc.updateTxn(id, dto)
       saved = id
     } else {
-      const r = await ipc.createTxn(dto)
-      lastAlerts.value = r.alerts
-      saved = r.id
+      ({ id: saved, alerts } = await ipc.createTxn(dto))
     }
     await refresh()
+    if (alerts.length) {
+      const categories = useCategoriesStore()
+      if (!categories.loaded) await categories.load()
+      showBudgetAlerts(alerts, new Map(categories.list.map((c) => [c.id, c.name])))
+    }
     return saved
   }
 
@@ -100,5 +105,5 @@ export const useTransactionsStore = defineStore('transactions', () => {
     })
   }
 
-  return { query, rows, total, loading, ledgerVersion, lastAlerts, reload, loadMore, setQuery, clear, save, remove }
+  return { query, rows, total, loading, ledgerVersion, reload, loadMore, setQuery, clear, save, remove }
 })

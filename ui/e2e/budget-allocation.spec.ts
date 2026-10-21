@@ -96,3 +96,29 @@ test('reports show current period', async ({ page }) => {
   await expect(current.getByRole('cell').nth(2)).toHaveText('25.000')
   await expect(page.getByTestId('breakdown-row')).toContainText('Makan & Minum')
 })
+
+test('budget alert and rollover', async ({ page }) => {
+  await onboard(page)
+  await go(page, '#/budget')
+  const editLabel = 'Ubah budget Makan & Minum'
+  await page.getByRole('button', { name: editLabel }).click()
+  await page.getByRole('textbox', { name: editLabel }).fill('27000')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('[data-testid^="budget-remaining-"]').first()).toHaveText('27.000')
+
+  // 25rb dari 27rb = 92% → toast waspada.
+  await quickExpense(page)
+  await expect(page.getByText('Budget Makan & Minum sudah 92% terpakai')).toBeVisible()
+
+  await go(page, '#/budget')
+  await page.getByRole('button', { name: 'Aksi untuk Makan & Minum' }).click()
+  await page.getByRole('menuitemcheckbox', { name: 'Bawa sisa ke periode berikutnya' }).click()
+  await page.getByRole('button', { name: 'Periode berikutnya' }).click()
+  // Bawaan hanya berlaku pada periode yang ber-budget.
+  await page.getByRole('button', { name: editLabel }).click()
+  await page.getByRole('textbox', { name: editLabel }).fill('10000')
+  await page.keyboard.press('Enter')
+  const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: editLabel }) })
+  await expect(row.locator('[data-testid^="budget-carry-"]')).toHaveText('+2.000')
+  await expect(row.locator('[data-testid^="budget-remaining-"]')).toHaveText('12.000')
+})

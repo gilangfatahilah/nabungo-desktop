@@ -6,7 +6,8 @@ import { useAccountsStore } from './accounts'
 import { useTransactionsStore } from './transactions'
 
 const toastMock = vi.hoisted(() => vi.fn())
-vi.mock('vue-sonner', () => ({ toast: Object.assign(toastMock, { error: vi.fn() }) }))
+const warningMock = vi.hoisted(() => vi.fn())
+vi.mock('vue-sonner', () => ({ toast: Object.assign(toastMock, { error: vi.fn(), warning: warningMock }) }))
 
 async function seed(n: number): Promise<string> {
   const acc = await ipc.createAccount('cash', {
@@ -27,6 +28,7 @@ describe('transactions store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     toastMock.mockClear()
+    warningMock.mockClear()
   })
 
   it('loadMore menambah halaman kedua tanpa dobel', async () => {
@@ -78,5 +80,18 @@ describe('transactions store', () => {
     expect(s.rows.map((r) => r.id)).toEqual([id])
     await s.save(id, { ...emptyForm('expense', { accountId: acc, feeCategoryId: null, today: '2026-10-17' }), amount: 7_000, categoryId: cat })
     expect(s.rows[0]!.amount).toBe(-7_000)
+  })
+
+  it('save memunculkan alert budget yang melewati ambang', async () => {
+    const acc = await seed(0)
+    const name = `Makan ${crypto.randomUUID()}`
+    const cat = await ipc.createCategory('expense', { name, parentId: null, icon: null, color: null })
+    await ipc.setBudget(cat, '2026-10', 100_000)
+    const s = useTransactionsStore()
+    const form = emptyForm('expense', { accountId: acc, feeCategoryId: null, today: '2026-10-17' })
+    await s.save(null, { ...form, amount: 85_000, categoryId: cat })
+    expect(warningMock).toHaveBeenCalledExactlyOnceWith(`Budget ${name} sudah 85% terpakai`)
+    await s.save(null, { ...form, amount: 1_000, categoryId: cat })
+    expect(warningMock).toHaveBeenCalledTimes(1)
   })
 })
