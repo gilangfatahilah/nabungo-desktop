@@ -10,7 +10,7 @@ import AccountsView from './AccountsView.vue'
 
 const bca: AccountDto = {
   id: 'bca', name: 'BCA', kind: 'bank', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-  icon: null, color: null, sortOrder: 0, archived: false, balance: 50_000, openingBalance: 50_000, openingDate: '2026-10-01',
+  icon: null, color: null, sortOrder: 0, archived: false, balance: 50_000, openingBalance: 50_000, openingDate: '2026-10-01', contact: null, reconciledThrough: null,
 }
 
 function clickButton(text: string) {

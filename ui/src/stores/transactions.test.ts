@@ -12,7 +12,7 @@ vi.mock('vue-sonner', () => ({ toast: Object.assign(toastMock, { error: vi.fn(),
 async function seed(n: number): Promise<string> {
   const acc = await ipc.createAccount('cash', {
     name: `Dompet ${crypto.randomUUID()}`, groupId: null, includeInNetWorth: true, creditLimit: null,
-    statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01',
+    statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: null,
   })
   const cat = await ipc.createCategory('expense', { name: `Jajan ${crypto.randomUUID()}`, parentId: null, icon: null, color: null })
   for (let i = 0; i < n; i++) {

@@ -25,6 +25,11 @@ export function isLiability(kind: AccountKindDto): boolean {
   return kind === 'credit_card' || kind === 'loan'
 }
 
+/** Sama dengan `AccountKind::counts_as_liability`: piutang/hutang bersaldo negatif = user berutang. */
+export function countsAsLiability(kind: AccountKindDto, balance: number): boolean {
+  return isLiability(kind) || (kind === 'receivable' && balance < 0)
+}
+
 /** Form meminta utang sebagai angka positif; saldo awal liabilitas disimpan negatif. */
 export const openingSign = (kind: AccountKindDto) => (isLiability(kind) ? -1 : 1)
 

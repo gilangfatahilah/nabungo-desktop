@@ -23,7 +23,7 @@ describe('allocation store', () => {
   it('aksi tulis memuat ulang dari backend', async () => {
     const acc = await ipc.createAccount('bank', {
       name: 'Store BCA', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 400_000, openingDate: '2026-10-01',
+      icon: null, color: null, openingBalance: 400_000, openingDate: '2026-10-01', contact: null,
     })
     const s = useAllocationStore()
     await s.load()

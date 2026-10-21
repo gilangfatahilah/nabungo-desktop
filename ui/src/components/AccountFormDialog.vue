@@ -37,6 +37,7 @@ const creditLimit = ref(0)
 const statementDay = ref('')
 const icon = ref<string | null>(null)
 const color = ref<string | null>(null)
+const contact = ref('')
 const error = ref<string | null>(null)
 const amountError = ref<string | null>(null)
 const busy = ref(false)
@@ -59,6 +60,7 @@ function reset() {
   statementDay.value = a?.statementDay ? String(a.statementDay) : ''
   icon.value = a?.icon ?? null
   color.value = a?.color ?? null
+  contact.value = a?.contact ?? ''
   error.value = null
   amountError.value = null
 }
@@ -76,6 +78,7 @@ function fields(): AccountFieldsDto {
     color: color.value,
     openingBalance: opening.value * openingSign(kind.value),
     openingDate: openingDate.value,
+    contact: contact.value.trim() || null,
   }
 }
 

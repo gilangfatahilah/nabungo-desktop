@@ -7,19 +7,18 @@ import type {
   BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
-  CategoryFieldsDto, CategoryKindDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
+  CategoryFieldsDto, CategoryKindDto, ContactDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
-  SecurityStatusDto, StartupReportDto, ValuationPointDto,
+  ReconciliationDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
 } from './bindings'
 import { todayIso } from '@/lib/date'
+import { countsAsLiability, isLiability } from '@/lib/accounts'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
 const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })
 const fail = (code: ErrorCode, entity: string | null = null): Result<never> => ({ status: 'error', error: { code, entity } })
 const notFound = (entity: string): Result<never> => fail('not_found', entity)
-
-const LIABILITIES: AccountKindDto[] = ['credit_card', 'loan']
 
 const state = {
   onboarded: false,
@@ -29,6 +28,7 @@ const state = {
   categories: [] as CategoryDto[],
   txns: [] as Txn[],
   payees: [] as { id: string; name: string }[],
+  contacts: [] as ContactDto[],
   lastFeeCategoryId: null as string | null,
   budgets: [] as { categoryId: string; period: string; amount: number; rollover: boolean }[],
   buckets: [] as BucketDto[],
@@ -44,6 +44,8 @@ type Txn = {
   note: string | null
   tags: string[]
   postings: PostingDto[]
+  /** Akun yang posting-nya sudah ditandai rekonsiliasi (ACC-04); edit mengosongkannya. */
+  reconciled: string[]
   deleted: boolean
 }
 
@@ -56,6 +58,16 @@ const id = () => crypto.randomUUID()
 
 function nextSort(items: { sortOrder: number }[]): number {
   return items.reduce((m, x) => Math.max(m, x.sortOrder), 0) + 1
+}
+
+/** Seperti `ensure_contact`: kontak hanya untuk akun piutang/hutang, dipakai ulang tanpa beda huruf. */
+function resolveContact(kind: AccountKindDto, name: string | null): string | null {
+  const n = kind === 'receivable' ? clean(name) : null
+  if (!n) return null
+  const found = state.contacts.find((c) => c.name.toLowerCase() === n.toLowerCase())
+  if (found) return found.name
+  state.contacts.push({ id: id(), name: n })
+  return n
 }
 
 function toAccount(kind: AccountKindDto, f: AccountFieldsDto, base: Pick<AccountDto, 'id' | 'sortOrder' | 'archived'>): AccountDto {
@@ -74,6 +86,9 @@ function toAccount(kind: AccountKindDto, f: AccountFieldsDto, base: Pick<Account
     balance: 0,
     openingBalance: f.openingBalance,
     openingDate: f.openingBalance !== 0 ? f.openingDate : null,
+    contact: resolveContact(kind, f.contact),
+    // Diisi ulang di `overview()`.
+    reconciledThrough: null,
   }
 }
 
@@ -89,24 +104,33 @@ function balanceOf(accountId: string, asOf: string | null = null): number {
   return sum
 }
 
+/** Seperti Rust: tanggal transaksi aktif terakhir yang posting akunnya sudah direkonsiliasi. */
+function reconciledThrough(accountId: string): string | null {
+  return activeTxns().filter((t) => t.reconciled.includes(accountId))
+    .reduce<string | null>((m, t) => (m === null || t.date > m ? t.date : m), null)
+}
+
 /** Seperti Rust: saldo awal ≠ 0 disimpan sebagai transaksi `opening`. */
 function syncOpening(a: AccountDto) {
   state.txns = state.txns.filter((t) => !(t.kind === 'opening' && t.postings[0]?.accountId === a.id))
   if (a.openingBalance === 0 || !a.openingDate) return
   state.txns.push({
     id: id(), seq: ++seq, kind: 'opening', date: a.openingDate, payeeId: null, note: null, tags: [],
-    postings: [{ accountId: a.id, categoryId: null, amount: a.openingBalance, memo: null }], deleted: false,
+    postings: [{ accountId: a.id, categoryId: null, amount: a.openingBalance, memo: null }], reconciled: [], deleted: false,
   })
 }
 
 function overview(): AccountsOverviewDto {
   let assets = 0
   let liabilities = 0
-  for (const a of state.accounts) a.balance = balanceOf(a.id)
+  for (const a of state.accounts) {
+    a.balance = balanceOf(a.id)
+    a.reconciledThrough = reconciledThrough(a.id)
+  }
   for (const a of state.accounts) {
     // Seperti Rust: akun diarsip tetap dihitung; hanya `includeInNetWorth` yang menyaring.
     if (!a.includeInNetWorth) continue
-    if (LIABILITIES.includes(a.kind)) liabilities += -a.balance
+    if (countsAsLiability(a.kind, a.balance)) liabilities += -a.balance
     else assets += a.balance
   }
   return {
@@ -228,10 +252,11 @@ function writeTxn(existing: Txn | null, f: TxnFormDto): Result<string> {
   }
   if (f.kind === 'transfer' && f.fee) state.lastFeeCategoryId = f.fee.categoryId
   if (existing) {
-    Object.assign(existing, fields)
+    // K8: isi berubah, tanda rekonsiliasi tidak lagi berlaku.
+    Object.assign(existing, fields, { reconciled: [] })
     return ok(existing.id)
   }
-  const t: Txn = { id: id(), seq: ++seq, deleted: false, ...fields }
+  const t: Txn = { id: id(), seq: ++seq, deleted: false, reconciled: [], ...fields }
   state.txns.push(t)
   return ok(t.id)
 }
@@ -272,7 +297,7 @@ function shapeRow(t: Txn, running: Map<string, number> | null, accountId: string
   const row: TxnRowDto = {
     id: t.id, kind: t.kind, date: t.date, payee: payeeName(t), note: t.note, amount: 0,
     accountId: t.postings[0]!.accountId, toAccountId: null, categoryId: null, splitCount: 0, fee: 0,
-    tags: [...t.tags], accountDelta: null, runningBalance: null,
+    tags: [...t.tags], accountDelta: null, runningBalance: null, reconciled: null,
   }
   if (t.kind === 'transfer') {
     for (const p of t.postings) {
@@ -292,6 +317,7 @@ function shapeRow(t: Txn, running: Map<string, number> | null, accountId: string
   if (accountId && running) {
     row.accountDelta = t.postings.filter((p) => p.accountId === accountId).reduce((m, p) => m + p.amount, 0)
     row.runningBalance = running.get(t.id) ?? null
+    row.reconciled = t.reconciled.includes(accountId)
   }
   return row
 }
@@ -514,7 +540,7 @@ function allocationReport(accounts: Balance[]) {
   let liabilities = 0
   const counted = new Map<string, number>()
   for (const a of accounts.filter((x) => x.includeInNetWorth)) {
-    if (LIABILITIES.includes(a.kind)) liabilities -= a.balance
+    if (countsAsLiability(a.kind, a.balance)) liabilities -= a.balance
     else {
       gross += a.balance
       counted.set(a.id, a.balance)
@@ -620,7 +646,7 @@ function netWorthPoint(p: Period): NetWorthPointDto {
   let liabilities = 0
   for (const b of balancesAsOf(date)) {
     if (!b.includeInNetWorth) continue
-    if (LIABILITIES.includes(b.kind)) liabilities -= b.balance
+    if (countsAsLiability(b.kind, b.balance)) liabilities -= b.balance
     else assets += b.balance
   }
   return { period: browserPeriod.key(p), date, assets, liabilities, net: assets - liabilities }
@@ -852,12 +878,40 @@ export const browserLedger = {
     if (Math.abs(change) > MAX_AMOUNT) return fail('txn_amount_too_large')
     if (a.kind !== 'investment') return fail('txn_valuation_non_investment')
     const t: Txn = {
-      id: id(), seq: ++seq, kind: 'valuation', date, payeeId: null, note: null, tags: [], deleted: false,
+      id: id(), seq: ++seq, kind: 'valuation', date, payeeId: null, note: null, tags: [], reconciled: [], deleted: false,
       postings: [{ accountId, categoryId: null, amount: change, memo: null }],
     }
     state.txns.push(t)
     return ok(t.id)
   },
+  // Seperti `Ledger::reconcile_account`: selisih jadi transaksi `adjustment`, lalu posting ≤ `date` ditandai.
+  reconcileAccount: async (accountId: string, date: string, balance: number): Promise<Result<ReconciliationDto>> => {
+    if (Math.abs(balance) > MAX_AMOUNT) return fail('txn_amount_too_large')
+    const a = state.accounts.find((x) => x.id === accountId)
+    if (!a) return notFound('account')
+    if (a.archived) return fail('archived', 'account')
+    const difference = balance - balanceOf(accountId, date)
+    if (Math.abs(difference) > MAX_AMOUNT) return fail('txn_amount_too_large')
+    let adjustmentId: string | null = null
+    if (difference !== 0) {
+      adjustmentId = id()
+      state.txns.push({
+        id: adjustmentId, seq: ++seq, kind: 'adjustment', date, payeeId: null, note: null, tags: [], reconciled: [], deleted: false,
+        postings: [{ accountId, categoryId: null, amount: difference, memo: null }],
+      })
+    }
+    let marked = 0
+    for (const t of activeTxns()) {
+      if (t.date > date) continue
+      const n = t.postings.filter((p) => p.accountId === accountId).length
+      if (n === 0) continue
+      if (!t.reconciled.includes(accountId)) t.reconciled.push(accountId)
+      marked += n
+    }
+    return ok({ adjustmentId, difference, marked })
+  },
+  listContacts: async (): Promise<Result<ContactDto[]>> =>
+    ok([...state.contacts].sort((x, y) => (x.name.toLowerCase() < y.name.toLowerCase() ? -1 : x.name.toLowerCase() > y.name.toLowerCase() ? 1 : 0))),
   valuationHistory: async (accountId: string): Promise<Result<ValuationPointDto[]>> => {
     return ok(activeTxns()
       .filter((t) => t.kind === 'valuation' && t.postings[0]?.accountId === accountId)
@@ -898,7 +952,7 @@ export const browserLedger = {
   setAccountAllocation: async (accountId: string, shares: ShareDto[]): Promise<Result<null>> => {
     const a = state.accounts.find((x) => x.id === accountId)
     if (!a) return notFound('account')
-    if (LIABILITIES.includes(a.kind)) return fail('allocation_liability')
+    if (isLiability(a.kind)) return fail('allocation_liability')
     const seen = new Set<string>()
     let total = 0
     for (const s of shares) {

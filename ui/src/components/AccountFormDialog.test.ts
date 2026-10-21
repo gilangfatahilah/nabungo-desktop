@@ -11,7 +11,7 @@ import AccountFormDialog from './AccountFormDialog.vue'
 function account(kind: AccountDto['kind']): AccountDto {
   return {
     id: 'a1', name: 'Kartu', kind, groupId: null, includeInNetWorth: true, creditLimit: 5_000_000, statementDay: 20,
-    icon: null, color: null, sortOrder: 1, archived: false, balance: -100_000, openingBalance: 0, openingDate: null,
+    icon: null, color: null, sortOrder: 1, archived: false, balance: -100_000, openingBalance: 0, openingDate: null, contact: null, reconciledThrough: null,
   }
 }
 

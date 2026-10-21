@@ -4,7 +4,7 @@ import { groupByDate } from './txnList'
 
 const row = (id: string, date: string): TxnRowDto => ({
   id, kind: 'expense', date, payee: null, note: null, amount: -1, accountId: 'a', toAccountId: null,
-  categoryId: null, splitCount: 1, fee: 0, tags: [], accountDelta: null, runningBalance: null,
+  categoryId: null, splitCount: 1, fee: 0, tags: [], accountDelta: null, runningBalance: null, reconciled: null,
 })
 
 describe('groupByDate', () => {

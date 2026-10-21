@@ -5,7 +5,7 @@ import { balanceTone, groupAccounts, moveAccount } from './accounts'
 function acc(id: string, groupId: string | null, balance: number, extra: Partial<AccountDto> = {}): AccountDto {
   return {
     id, name: id, kind: 'bank', groupId, includeInNetWorth: true, creditLimit: null, statementDay: null,
-    icon: null, color: null, sortOrder: 0, archived: false, balance, openingBalance: 0, openingDate: null, ...extra,
+    icon: null, color: null, sortOrder: 0, archived: false, balance, openingBalance: 0, openingDate: null, contact: null, reconciledThrough: null, ...extra,
   }
 }
 

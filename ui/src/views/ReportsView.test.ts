@@ -30,7 +30,7 @@ beforeAll(async () => {
   bca = await ipc.completeOnboarding({
     locale: 'id', periodStartDay: 1, accountKind: 'bank',
     account: { name: 'BCA', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-09-01' },
+      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-09-01', contact: null },
   })
   const cats = await ipc.listCategories()
   const cat = (name: string) => cats.find((c) => c.name === name)!.id

@@ -82,6 +82,7 @@ async function submit() {
         color: null,
         openingBalance: balance.value * openingSign(kind.value),
         openingDate: todayIso(),
+        contact: null,
       },
     })
     settings.periodStartDay = Number(day.value)

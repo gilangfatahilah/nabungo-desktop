@@ -22,7 +22,7 @@ async function investment(): Promise<AccountDto> {
   const store = useAccountsStore()
   const accId = await store.createAccount('investment', {
     name: 'Reksa Dana', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-    icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-01',
+    icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-01', contact: null,
   })
   return store.overview.accounts.find((a) => a.id === accId)!
 }
