@@ -82,6 +82,14 @@ pub enum AppError {
     /// Key sudah terverifikasi (key file terbuka) tapi file DB tidak cocok atau rusak.
     #[error("database file cannot be read with this key")]
     DatabaseUnreadable,
+    /// Lampiran hanya gambar JPEG/PNG/WebP atau PDF.
+    #[error("unsupported attachment type")]
+    AttachmentType,
+    #[error("attachment is too large")]
+    AttachmentTooLarge,
+    /// Baris lampiran ada, tapi filenya tidak ada di folder data.
+    #[error("attachment file is missing")]
+    AttachmentMissing,
 }
 
 impl From<StorageError> for AppError {
