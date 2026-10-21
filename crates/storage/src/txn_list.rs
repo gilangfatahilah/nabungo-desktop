@@ -55,6 +55,8 @@ pub struct TxnListRow {
     pub account_delta: Option<i64>,
     /// Hanya saat difilter per akun: saldo akun setelah transaksi ini (riwayat penuh).
     pub running_balance: Option<i64>,
+    /// Terisi hanya bila difilter per akun: semua posting akun itu sudah reconciled.
+    pub reconciled: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,9 +108,12 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
     let marks = vec!["?"; ids.len()].join(",");
     let postings = page_postings(conn, &ids, &marks)?;
     let tags = page_tags(conn, &ids, &marks)?;
-    let running = match q.account_id {
-        Some(acc) => running_balances(conn, acc, &ids, &marks)?,
-        None => HashMap::new(),
+    let (running, reconciled) = match q.account_id {
+        Some(acc) => (
+            running_balances(conn, acc, &ids, &marks)?,
+            reconciled_flags(conn, acc, &ids, &marks)?,
+        ),
+        None => (HashMap::new(), HashMap::new()),
     };
 
     let rows = headers
@@ -125,6 +130,7 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
             if let Some(acc) = q.account_id {
                 row.account_delta = Some(ps.iter().filter(|p| p.0 == acc).map(|p| p.2).sum());
                 row.running_balance = running.get(&id_s).copied();
+                row.reconciled = Some(reconciled.get(&id_s).copied().unwrap_or(false));
             }
             Ok(row)
         })
@@ -200,6 +206,26 @@ fn where_clause(q: &TxnQuery) -> (String, Vec<Value>) {
 }
 
 type PostingRow = (Uuid, Option<Uuid>, i64);
+
+/// Per txn di halaman: apakah semua posting `account_id` sudah reconciled.
+fn reconciled_flags(
+    conn: &Connection,
+    account_id: Uuid,
+    ids: &[Value],
+    marks: &str,
+) -> Result<HashMap<String, bool>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT txn_id, MIN(reconciled) FROM posting
+         WHERE account_id = ? AND txn_id IN ({marks}) GROUP BY txn_id"
+    ))?;
+    let args = std::iter::once(Value::Text(account_id.to_string())).chain(ids.iter().cloned());
+    let rows = stmt
+        .query_map(params_from_iter(args), |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+        })?
+        .collect::<rusqlite::Result<HashMap<_, _>>>()?;
+    Ok(rows)
+}
 
 fn page_postings(
     conn: &Connection,
@@ -307,6 +333,7 @@ fn shape_row(
         tags: vec![],
         account_delta: None,
         running_balance: None,
+        reconciled: None,
     };
     if kind == TxnKind::Transfer {
         for &(acc, cat, amount) in postings {
@@ -591,6 +618,36 @@ mod tests {
         assert_eq!(ids(&pb), vec![f.transfer_txn]);
         assert_eq!(pb.rows[0].account_delta, Some(200_000));
         assert_eq!(pb.rows[0].running_balance, Some(200_000));
+    }
+
+    #[test]
+    fn reconciled_only_with_account_filter() {
+        let mut f = fixture();
+        let tx = f.conn.transaction().unwrap();
+        crate::txn::mark_reconciled(&tx, f.a, date!(2026 - 10 - 02)).unwrap();
+        tx.commit().unwrap();
+        let by_a = list_txns(
+            &f.conn,
+            &TxnQuery {
+                account_id: Some(f.a),
+                ..q()
+            },
+        )
+        .unwrap();
+        assert_eq!(row(&by_a, f.opening_txn).reconciled, Some(true));
+        assert_eq!(row(&by_a, f.kopi_txn).reconciled, Some(true));
+        assert_eq!(row(&by_a, f.transfer_txn).reconciled, Some(false));
+        let by_b = list_txns(
+            &f.conn,
+            &TxnQuery {
+                account_id: Some(f.b),
+                ..q()
+            },
+        )
+        .unwrap();
+        assert_eq!(by_b.rows[0].reconciled, Some(false));
+        let all = list_txns(&f.conn, &q()).unwrap();
+        assert!(all.rows.iter().all(|r| r.reconciled.is_none()));
     }
 
     #[test]

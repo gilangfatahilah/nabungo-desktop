@@ -17,6 +17,8 @@ pub struct NewAccount {
     pub statement_day: Option<u8>,
     pub icon: Option<String>,
     pub color: Option<String>,
+    /// Hanya untuk `receivable` (D10).
+    pub contact_id: Option<Uuid>,
 }
 
 impl NewAccount {
@@ -32,6 +34,7 @@ impl NewAccount {
             statement_day: None,
             icon: None,
             color: None,
+            contact_id: None,
         }
     }
 }
@@ -46,6 +49,7 @@ pub struct AccountPatch {
     pub statement_day: Option<u8>,
     pub icon: Option<String>,
     pub color: Option<String>,
+    pub contact_id: Option<Uuid>,
 }
 
 /// Transaksi saldo awal aktif milik akun.
@@ -72,6 +76,10 @@ pub struct AccountRow {
     pub archived: bool,
     pub balance: i64,
     pub opening: Option<Opening>,
+    /// Nama kontak (akun piutang/hutang).
+    pub contact: Option<String>,
+    /// Tanggal txn terakhir yang posting akun ini sudah ditandai reconciled.
+    pub reconciled_through: Option<Date>,
 }
 
 fn parse_kind(id: &str, kind: &str) -> Result<AccountKind> {
@@ -88,10 +96,10 @@ pub fn insert_account(tx: &Transaction, new: &NewAccount, now: &str) -> Result<U
     tx.execute(
         "INSERT INTO account (id, group_id, name, kind, currency, include_in_net_worth,
                               credit_limit, statement_day, icon, color, sort_order,
-                              created_at, updated_at)
+                              created_at, updated_at, contact_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
                  COALESCE((SELECT MAX(sort_order) + 1 FROM account WHERE group_id IS ?2), 0),
-                 ?11, ?11)",
+                 ?11, ?11, ?12)",
         params![
             id.to_string(),
             new.group_id.map(|g| g.to_string()),
@@ -103,7 +111,8 @@ pub fn insert_account(tx: &Transaction, new: &NewAccount, now: &str) -> Result<U
             new.statement_day,
             new.icon,
             new.color,
-            now
+            now,
+            new.contact_id.map(|c| c.to_string())
         ],
     )?;
     Ok(id)
@@ -153,6 +162,8 @@ struct RawAccount {
     archived: bool,
     balance: i64,
     opening: Option<(String, i64, String)>,
+    contact: Option<String>,
+    reconciled_through: Option<String>,
 }
 
 impl RawAccount {
@@ -176,6 +187,8 @@ impl RawAccount {
                 Some(txn) => Some((txn, r.get(14)?, r.get(15)?)),
                 None => None,
             },
+            contact: r.get(16)?,
+            reconciled_through: r.get(17)?,
         })
     }
 
@@ -189,6 +202,18 @@ impl RawAccount {
             }),
             None => None,
         };
+        let reconciled_through = self
+            .reconciled_through
+            .as_deref()
+            .map(|d| {
+                parse_date(d).map_err(|e| {
+                    StorageError::Corrupt(format!(
+                        "account {}: reconciled date {d:?}: {e}",
+                        self.id
+                    ))
+                })
+            })
+            .transpose()?;
         Ok(AccountRow {
             id: parse_uuid("account", &self.id)?,
             kind: parse_kind(&self.id, &self.kind)?,
@@ -208,6 +233,8 @@ impl RawAccount {
             archived: self.archived,
             balance: self.balance,
             opening,
+            contact: self.contact,
+            reconciled_through,
         })
     }
 }
@@ -219,8 +246,12 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<AccountRow>> {
         "SELECT a.id, a.name, a.kind, a.currency, a.group_id, a.include_in_net_worth,
                 a.credit_limit, a.statement_day, a.icon, a.color, a.sort_order,
                 a.archived_at IS NOT NULL, COALESCE(b.balance, 0),
-                o.txn_id, o.amount, o.date
+                o.txn_id, o.amount, o.date, c.name,
+                (SELECT MAX(t.date) FROM posting p JOIN txn t ON t.id = p.txn_id
+                 WHERE p.account_id = a.id AND p.reconciled = 1
+                   AND t.deleted_at IS NULL AND t.status = 'posted')
          FROM account a
+         LEFT JOIN contact c ON c.id = a.contact_id
          LEFT JOIN (SELECT p.account_id, SUM(p.amount) AS balance
                     FROM posting p JOIN txn t ON t.id = p.txn_id
                     WHERE t.deleted_at IS NULL AND t.status = 'posted'
@@ -240,7 +271,7 @@ pub fn update_account(tx: &Transaction, id: Uuid, patch: &AccountPatch, now: &st
     let changed = tx.execute(
         "UPDATE account SET name = ?2, group_id = ?3, include_in_net_worth = ?4,
                             credit_limit = ?5, statement_day = ?6, icon = ?7, color = ?8,
-                            updated_at = ?9
+                            updated_at = ?9, contact_id = ?10
          WHERE id = ?1",
         params![
             id.to_string(),
@@ -251,7 +282,8 @@ pub fn update_account(tx: &Transaction, id: Uuid, patch: &AccountPatch, now: &st
             patch.statement_day,
             patch.icon,
             patch.color,
-            now
+            now,
+            patch.contact_id.map(|c| c.to_string())
         ],
     )?;
     Ok(changed == 1)
@@ -323,7 +355,8 @@ pub fn delete_account(tx: &Transaction, id: Uuid) -> Result<bool> {
 mod tests {
     use super::*;
     use crate::account_group::insert_group;
-    use crate::txn::{insert_txn, soft_delete};
+    use crate::contact::ensure_contact;
+    use crate::txn::{insert_txn, mark_reconciled, replace_txn, soft_delete};
     use crate::{now_utc, open_in_memory};
     use nabungo_core::{PostingDraft, TxnDraft, TxnKind, ValidTxn};
     use time::Date;
@@ -393,6 +426,88 @@ mod tests {
         assert_eq!(row(&tx, c.id).balance, 0);
     }
 
+    fn draft(kind: TxnKind, on: Date, postings: &[(AccountRef, i64)]) -> ValidTxn {
+        ValidTxn::new(TxnDraft {
+            kind,
+            date: on,
+            note: None,
+            postings: postings
+                .iter()
+                .map(|&(account, amount)| PostingDraft {
+                    account,
+                    category: None,
+                    amount,
+                    memo: None,
+                })
+                .collect(),
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn contact_roundtrip() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let c = ensure_contact(&tx, "Budi", &now_utc()).unwrap();
+        let new = NewAccount {
+            contact_id: Some(c),
+            ..NewAccount::new("Pinjaman Budi", AccountKind::Receivable, CurrencyCode::IDR)
+        };
+        let id = insert_account(&tx, &new, &now_utc()).unwrap();
+        assert_eq!(row(&tx, id).contact.as_deref(), Some("Budi"));
+        let patch = AccountPatch {
+            name: "Pinjaman Budi".into(),
+            group_id: None,
+            include_in_net_worth: true,
+            credit_limit: None,
+            statement_day: None,
+            icon: None,
+            color: None,
+            contact_id: None,
+        };
+        assert!(update_account(&tx, id, &patch, &now_utc()).unwrap());
+        assert_eq!(row(&tx, id).contact, None);
+    }
+
+    #[test]
+    fn mark_reconciled_respects_date_and_account() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let (a, b) = (bank(&tx, "A"), bank(&tx, "B"));
+        record(&tx, TxnKind::Opening, date!(2026 - 10 - 01), &[(a, 100)]);
+        record(&tx, TxnKind::Opening, date!(2026 - 10 - 01), &[(b, 100)]);
+        let gone = record(&tx, TxnKind::Adjustment, date!(2026 - 10 - 03), &[(a, -1)]);
+        soft_delete(&tx, gone, &now_utc()).unwrap();
+        record(&tx, TxnKind::Adjustment, date!(2026 - 10 - 05), &[(a, -2)]);
+        record(&tx, TxnKind::Adjustment, date!(2026 - 10 - 09), &[(a, -3)]);
+        assert_eq!(row(&tx, a.id).reconciled_through, None);
+        assert_eq!(
+            mark_reconciled(&tx, a.id, date!(2026 - 10 - 05)).unwrap(),
+            2
+        );
+        assert_eq!(
+            row(&tx, a.id).reconciled_through,
+            Some(date!(2026 - 10 - 05))
+        );
+        assert_eq!(row(&tx, b.id).reconciled_through, None);
+    }
+
+    #[test]
+    fn replace_txn_clears_reconciled() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let a = bank(&tx, "A");
+        record(&tx, TxnKind::Opening, date!(2026 - 10 - 01), &[(a, 100)]);
+        let later = record(&tx, TxnKind::Adjustment, date!(2026 - 10 - 05), &[(a, -2)]);
+        mark_reconciled(&tx, a.id, date!(2026 - 10 - 05)).unwrap();
+        let edited = draft(TxnKind::Adjustment, date!(2026 - 10 - 05), &[(a, -4)]);
+        assert!(replace_txn(&tx, later, &edited, None, &now_utc()).unwrap());
+        assert_eq!(
+            row(&tx, a.id).reconciled_through,
+            Some(date!(2026 - 10 - 01))
+        );
+    }
+
     #[test]
     fn update_and_archive_roundtrip() {
         let mut conn = open_in_memory().unwrap();
@@ -407,6 +522,7 @@ mod tests {
             statement_day: None,
             icon: Some("banknote".into()),
             color: Some("blue".into()),
+            contact_id: None,
         };
         assert!(update_account(&tx, a.id, &patch, &now_utc()).unwrap());
         let r = row(&tx, a.id);

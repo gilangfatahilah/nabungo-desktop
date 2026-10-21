@@ -79,6 +79,7 @@ fn to_patch(
         statement_day,
         icon: f.icon.clone(),
         color: f.color.clone(),
+        contact_id: None,
     })
 }
 
@@ -125,6 +126,7 @@ pub(crate) fn insert_account_tx(
         statement_day: p.statement_day,
         icon: p.icon,
         color: p.color,
+        contact_id: p.contact_id,
     };
     let id = account::insert_account(tx, &new, now)?;
     let account = AccountRef {
