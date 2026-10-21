@@ -51,6 +51,7 @@ Cargo workspace + pnpm workspace. Arah dependensi wajib: `ui → src-tauri → n
 - Transaksi = header `txn` + ≥1 `posting` (double-entry ringan, D3). Transfer = 2 posting tanpa kategori yang berjumlah 0 (+ opsional posting biaya dengan kategori expense). Transfer tidak pernah dihitung sebagai income/expense atau masuk budget.
 - Invariant (PRD §6) ditegakkan di layer domain Rust, bukan trigger SQL dan bukan hanya di UI.
 - Form (income/expense/transfer, split, biaya) diubah menjadi postings oleh `form_postings` di `nabungo-core`; UI hanya mengirim `TxnFormDto`, tidak pernah menyusun postings sendiri.
+- Transaksi terjadwal (`recurring_rule`): template `TxnForm` JSON + subset RRULE (`nabungo-core::recurrence`, anchor = tanggal mulai, clamp akhir bulan). Kejadian tidak dimaterialisasi: hanya `next_date` yang disimpan, kejadian ditangani berurutan (`occurrence_stale` bila tidak), dan transaksi yang tercatat selalu `status = posted`. `ui/src/ipc/browser-recurrence.ts` adalah port `crates/core/src/recurrence.rs` — ubah keduanya bersamaan.
 - Uang: `i64` satuan minor (IDR decimals = 0). Di UI pun angka uang diperlakukan sebagai integer; format pakai `ui/src/lib/money.ts`. Persentase alokasi dalam basis point (`target_bp`, `share_bp`; 10000 = 100%).
 - Tanggal transaksi `TEXT` `YYYY-MM-DD` tanpa jam; timestamp audit ISO-8601 UTC. ID UUIDv7 sebagai TEXT. Soft delete via `deleted_at`.
 - v1 hanya IDR (D4), tapi kolom `currency` tetap diisi agar multi-currency v2 tidak butuh migrasi besar.
