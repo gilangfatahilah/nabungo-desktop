@@ -151,6 +151,22 @@ describe('TxnForm', () => {
     expect($('#txn-category').value).toBe('Makan & Minum › Restoran')
   })
 
+  it('mode buat: seksi lampiran hanya berisi petunjuk simpan dulu', async () => {
+    await openSheet((u) => u.openNewTxn())
+    await click('[data-testid="txn-more"]')
+    expect($('[data-testid="txn-attachments"]').textContent).toContain(id.txn.attachments.saveFirst)
+  })
+
+  it('mode edit: transaksi berlampiran membuka seksi lampiran otomatis', async () => {
+    const { id: txnId } = await ipc.createTxn(expense())
+    await ipc.addAttachments(txnId)
+    await openSheet((u) => u.openEditTxn(txnId))
+    const section = $('[data-testid="txn-attachments"]')
+    expect(section).not.toBeNull()
+    expect(section.textContent).toContain('struk-contoh.jpg')
+    expect($('[data-testid="txn-more"]')).toBeNull()
+  })
+
   it('mode edit mengisi form dan memperbarui transaksi dengan id sama', async () => {
     const { id: txnId } = await ipc.createTxn(expense())
     const ui = await openSheet((u) => u.openEditTxn(txnId))
