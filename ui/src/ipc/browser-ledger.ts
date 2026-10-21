@@ -111,7 +111,12 @@ function reconciledThrough(accountId: string): string | null {
 }
 
 /** Seperti Rust: saldo awal ≠ 0 disimpan sebagai transaksi `opening`. */
+// Seperti Rust: saldo awal hanya ditulis ulang bila nominal/tanggal berubah, agar tanda reconciled tetap.
 function syncOpening(a: AccountDto) {
+  const cur = state.txns.find((t) => t.kind === 'opening' && !t.deleted && t.postings[0]?.accountId === a.id)
+  const wanted = a.openingBalance !== 0 && a.openingDate
+  if (cur && wanted && cur.postings[0]!.amount === a.openingBalance && cur.date === a.openingDate) return
+  if (!cur && !wanted) return
   state.txns = state.txns.filter((t) => !(t.kind === 'opening' && t.postings[0]?.accountId === a.id))
   if (a.openingBalance === 0 || !a.openingDate) return
   state.txns.push({

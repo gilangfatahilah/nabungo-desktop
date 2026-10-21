@@ -157,6 +157,30 @@ mod tests {
     }
 
     #[test]
+    fn update_account_keeps_opening_reconciled() {
+        let mut k = kit();
+        let opening = date!(2026 - 10 - 01);
+        let id = k
+            .ledger
+            .create_account(
+                AccountKind::Cash,
+                &AccountFields::new("Laci", 50_000, opening),
+            )
+            .unwrap();
+        k.ledger.reconcile_account(id, D, 50_000).unwrap();
+        assert_eq!(through(&k, id), Some(opening));
+        let mut f = AccountFields::new("Laci meja", 50_000, opening);
+        f.icon = Some("wallet".into());
+        k.ledger.update_account(id, &f).unwrap();
+        assert_eq!(through(&k, id), Some(opening));
+        // Saldo awal yang benar-benar berubah tetap menghapus tanda (K8).
+        k.ledger
+            .update_account(id, &AccountFields::new("Laci meja", 60_000, opening))
+            .unwrap();
+        assert_eq!(through(&k, id), None);
+    }
+
+    #[test]
     fn liability_reconcile_uses_signed_balance() {
         let mut k = kit();
         let mut f = AccountFields::new("Kartu", -100_000, date!(2026 - 10 - 01));

@@ -170,7 +170,8 @@ impl Ledger {
         Ok(id)
     }
 
-    /// Ubah akun; saldo awal ditulis ulang (dibuat, diganti, atau dihapus bila 0).
+    /// Ubah akun; saldo awal ditulis ulang (dibuat, diganti, atau dihapus bila 0) hanya bila
+    /// nominal/tanggalnya berubah, agar tanda reconciled-nya tidak hilang karena ganti nama dsb.
     pub fn update_account(&mut self, id: Uuid, fields: &AccountFields) -> Result<(), AppError> {
         let now = now_utc();
         let tx = self.conn.transaction()?;
@@ -179,8 +180,12 @@ impl Ledger {
             .value;
         let patch = to_patch(&tx, account.kind, fields, &now)?;
         account::update_account(&tx, id, &patch, &now)?;
-        account::delete_opening(&tx, id)?;
-        insert_opening(&tx, account, fields, &now)?;
+        let wanted =
+            (fields.opening_balance != 0).then_some((fields.opening_balance, fields.opening_date));
+        if account::opening_of(&tx, id)? != wanted {
+            account::delete_opening(&tx, id)?;
+            insert_opening(&tx, account, fields, &now)?;
+        }
         tx.commit()?;
         Ok(())
     }

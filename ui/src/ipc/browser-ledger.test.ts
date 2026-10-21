@@ -545,6 +545,21 @@ describe('browser ledger piutang/hutang & rekonsiliasi (paritas Rust)', () => {
     expect(allocAfter.gross).toBe(allocBefore.gross)
   })
 
+  it('ubah akun tanpa ganti saldo awal mempertahankan tanda reconciled', async () => {
+    const fields = (name: string, openingBalance: number) => ({
+      name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance, openingDate: '2026-10-01', contact: null,
+    })
+    const throughOf = async (i: string) => (await data(L.accountsOverview())).accounts.find((a) => a.id === i)!.reconciledThrough
+    const laci = await data(L.createAccount('cash', fields('Laci', 50_000)))
+    await data(L.reconcileAccount(laci, '2026-10-10', 50_000))
+    expect(await throughOf(laci)).toBe('2026-10-01')
+    await data(L.updateAccount(laci, { ...fields('Laci meja', 50_000), icon: 'wallet' }))
+    expect(await throughOf(laci)).toBe('2026-10-01')
+    await data(L.updateAccount(laci, fields('Laci meja', 60_000)))
+    expect(await throughOf(laci)).toBeNull()
+  })
+
   it('kontak dipakai ulang tanpa beda huruf', async () => {
     const a = await receivable('Piutang Budi 1', 10_000, 'Budi')
     const b = await receivable('Piutang Budi 2', 10_000, ' budi')

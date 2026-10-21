@@ -328,6 +328,24 @@ pub fn has_non_opening_postings(conn: &Connection, id: Uuid) -> Result<bool> {
     )?)
 }
 
+/// Saldo awal aktif akun: `(nominal, tanggal)`, `None` bila tidak ada.
+pub fn opening_of(conn: &Connection, id: Uuid) -> Result<Option<(i64, Date)>> {
+    let row: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT p.amount, t.date FROM posting p JOIN txn t ON t.id = p.txn_id
+             WHERE p.account_id = ?1 AND t.kind = 'opening' AND t.deleted_at IS NULL",
+            [id.to_string()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(amount, date)| {
+        parse_date(&date)
+            .map(|d| (amount, d))
+            .map_err(|e| StorageError::Corrupt(format!("opening {id}: {e}")))
+    })
+    .transpose()
+}
+
 /// Hard-delete transaksi saldo awal akun (postings ikut via CASCADE). Saldo awal bukan
 /// transaksi user, jadi tidak lewat soft delete/undo.
 pub fn delete_opening(tx: &Transaction, id: Uuid) -> Result<()> {
