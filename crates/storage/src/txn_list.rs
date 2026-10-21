@@ -57,6 +57,7 @@ pub struct TxnListRow {
     pub running_balance: Option<i64>,
     /// Terisi hanya bila difilter per akun: semua posting akun itu sudah reconciled.
     pub reconciled: Option<bool>,
+    pub attachment_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +83,8 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
     page_args.push(Value::Integer(q.limit.into()));
     page_args.push(Value::Integer(q.offset.into()));
     let mut stmt = conn.prepare(&format!(
-        "SELECT t.id, t.kind, t.date, py.name, t.note
+        "SELECT t.id, t.kind, t.date, py.name, t.note,
+                (SELECT COUNT(*) FROM attachment a WHERE a.txn_id = t.id)
          FROM txn t LEFT JOIN payee py ON py.id = t.payee_id {filter}
          ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?"
     ))?;
@@ -94,6 +96,7 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
                 r.get::<_, String>(2)?,
                 r.get::<_, Option<String>>(3)?,
                 r.get::<_, Option<String>>(4)?,
+                r.get::<_, u32>(5)?,
             ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -118,7 +121,7 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
 
     let rows = headers
         .into_iter()
-        .map(|(id_s, kind, date, payee, note)| {
+        .map(|(id_s, kind, date, payee, note, attachment_count)| {
             let id = parse_uuid("txn", &id_s)?;
             let kind = TxnKind::parse(&kind)
                 .ok_or_else(|| StorageError::Corrupt(format!("txn kind {kind:?}")))?;
@@ -127,6 +130,7 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
             let ps = postings.get(&id_s).map(Vec::as_slice).unwrap_or_default();
             let mut row = shape_row(id, kind, date, payee, note, ps)?;
             row.tags = tags.get(&id_s).cloned().unwrap_or_default();
+            row.attachment_count = attachment_count;
             if let Some(acc) = q.account_id {
                 row.account_delta = Some(ps.iter().filter(|p| p.0 == acc).map(|p| p.2).sum());
                 row.running_balance = running.get(&id_s).copied();
@@ -334,6 +338,7 @@ fn shape_row(
         account_delta: None,
         running_balance: None,
         reconciled: None,
+        attachment_count: 0,
     };
     if kind == TxnKind::Transfer {
         for &(acc, cat, amount) in postings {
@@ -520,6 +525,31 @@ mod tests {
 
     fn row(page: &TxnPage, id: Uuid) -> &TxnListRow {
         page.rows.iter().find(|r| r.id == id).unwrap()
+    }
+
+    #[test]
+    fn attachment_count_on_rows() {
+        let mut f = fixture();
+        let tx = f.conn.transaction().unwrap();
+        for _ in 0..2 {
+            crate::attachment::insert_attachment(
+                &tx,
+                &crate::attachment::AttachmentRecord {
+                    id: Uuid::now_v7(),
+                    txn_id: f.kopi_txn,
+                    file_name: "s.png".into(),
+                    sha256: "aa".into(),
+                    mime: "image/png".into(),
+                    size_bytes: 1,
+                    created_at: "x".into(),
+                },
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+        let page = list_txns(&f.conn, &q()).unwrap();
+        assert_eq!(row(&page, f.kopi_txn).attachment_count, 2);
+        assert_eq!(row(&page, f.income_txn).attachment_count, 0);
     }
 
     #[test]

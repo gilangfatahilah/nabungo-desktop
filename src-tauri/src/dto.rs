@@ -1502,6 +1502,7 @@ mod tests {
             account_delta: Some(-206_500),
             running_balance: Some(5_768_500),
             reconciled: None,
+            attachment_count: 0,
         };
         let v = serde_json::to_value(TxnRowDto::from(row)).unwrap();
         assert_eq!(v["kind"], "transfer");

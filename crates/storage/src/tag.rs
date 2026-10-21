@@ -61,6 +61,77 @@ pub fn list_tags(conn: &Connection) -> Result<Vec<String>> {
     Ok(names)
 }
 
+/// Tag beserta jumlah transaksi aktif yang memakainya.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagUsage {
+    pub id: Uuid,
+    pub name: String,
+    pub txn_count: u32,
+}
+
+/// Semua tag dengan jumlah pemakaian (transaksi aktif), urut nama (NOCASE).
+pub fn list_tag_usage(conn: &Connection) -> Result<Vec<TagUsage>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT g.id, g.name, COUNT(t.id) FROM tag g
+         LEFT JOIN txn_tag tt ON tt.tag_id = g.id
+         LEFT JOIN txn t ON t.id = tt.txn_id AND t.deleted_at IS NULL
+         GROUP BY g.id ORDER BY g.name COLLATE NOCASE",
+    )?;
+    let raw = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<Vec<(String, String, u32)>>>()?;
+    raw.into_iter()
+        .map(|(id, name, txn_count)| {
+            Ok(TagUsage {
+                id: parse_uuid("tag", &id)?,
+                name,
+                txn_count,
+            })
+        })
+        .collect()
+}
+
+/// Sisipkan tag baru; nama yang sudah ada (NOCASE) → `Duplicate`.
+pub fn insert_tag(tx: &Transaction, name: &str) -> Result<Uuid> {
+    let id = Uuid::now_v7();
+    tx.execute(
+        "INSERT INTO tag (id, name) VALUES (?1, ?2)",
+        params![id.to_string(), name],
+    )
+    .map_err(map_unique)?;
+    Ok(id)
+}
+
+/// `false` bila tag tidak ada.
+pub fn rename_tag(tx: &Transaction, id: Uuid, name: &str) -> Result<bool> {
+    let n = tx
+        .execute(
+            "UPDATE tag SET name = ?2 WHERE id = ?1",
+            params![id.to_string(), name],
+        )
+        .map_err(map_unique)?;
+    Ok(n > 0)
+}
+
+/// Pindahkan semua pemakaian `source` ke `target` (tanpa duplikat), lalu hapus `source`.
+pub fn merge_tag(tx: &Transaction, source: Uuid, target: Uuid) -> Result<()> {
+    let (source, target) = (source.to_string(), target.to_string());
+    tx.execute(
+        "INSERT OR IGNORE INTO txn_tag (txn_id, tag_id)
+         SELECT txn_id, ?2 FROM txn_tag WHERE tag_id = ?1",
+        params![source, target],
+    )?;
+    tx.execute("DELETE FROM txn_tag WHERE tag_id = ?1", [&source])?;
+    tx.execute("DELETE FROM tag WHERE id = ?1", [&source])?;
+    Ok(())
+}
+
+/// Lepas tag dari semua transaksi (termasuk yang terhapus), lalu hapus. `false` bila tidak ada.
+pub fn delete_tag(tx: &Transaction, id: Uuid) -> Result<bool> {
+    tx.execute("DELETE FROM txn_tag WHERE tag_id = ?1", [id.to_string()])?;
+    Ok(tx.execute("DELETE FROM tag WHERE id = ?1", [id.to_string()])? > 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +170,60 @@ mod tests {
         set_txn_tags(&tx, t, &[b]).unwrap();
         assert_eq!(txn_tags(&tx, t).unwrap(), vec!["b"]);
         assert_eq!(list_tags(&tx).unwrap(), vec!["a", "b"]);
+    }
+
+    fn delete_txn(tx: &Transaction, id: Uuid) {
+        tx.execute(
+            "UPDATE txn SET deleted_at = 'x' WHERE id = ?1",
+            [id.to_string()],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn tag_usage_counts_active_txns_only() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let kantor = find_or_insert_tag(&tx, "kantor").unwrap();
+        find_or_insert_tag(&tx, "kosong").unwrap();
+        let (t1, t2) = (raw_txn(&tx), raw_txn(&tx));
+        set_txn_tags(&tx, t1, &[kantor]).unwrap();
+        set_txn_tags(&tx, t2, &[kantor]).unwrap();
+        delete_txn(&tx, t2);
+        let usage: Vec<_> = list_tag_usage(&tx)
+            .unwrap()
+            .into_iter()
+            .map(|u| (u.name, u.txn_count))
+            .collect();
+        assert_eq!(
+            usage,
+            vec![("kantor".to_owned(), 1), ("kosong".to_owned(), 0)]
+        );
+    }
+
+    #[test]
+    fn rename_merge_delete_tag() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let a = insert_tag(&tx, "kantor").unwrap();
+        let b = insert_tag(&tx, "kerja").unwrap();
+        assert!(rename_tag(&tx, a, "Kantor").unwrap());
+        assert!(!rename_tag(&tx, Uuid::now_v7(), "x").unwrap());
+        assert!(matches!(
+            insert_tag(&tx, "KANTOR"),
+            Err(crate::StorageError::Duplicate)
+        ));
+        let t = raw_txn(&tx);
+        let only_a = raw_txn(&tx);
+        set_txn_tags(&tx, t, &[a, b]).unwrap();
+        set_txn_tags(&tx, only_a, &[a]).unwrap();
+        merge_tag(&tx, a, b).unwrap();
+        assert_eq!(txn_tags(&tx, t).unwrap(), vec!["kerja"]);
+        assert_eq!(txn_tags(&tx, only_a).unwrap(), vec!["kerja"]);
+        assert_eq!(list_tags(&tx).unwrap(), vec!["kerja"]);
+        assert!(delete_tag(&tx, b).unwrap());
+        assert!(!delete_tag(&tx, b).unwrap());
+        assert!(txn_tags(&tx, t).unwrap().is_empty());
+        assert!(list_tags(&tx).unwrap().is_empty());
     }
 }
