@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use nabungo_core::{BudgetLevel, BudgetPeriod};
+use time::Date;
 use uuid::Uuid;
 
 use crate::TxnForm;
@@ -29,6 +30,19 @@ impl Ledger {
         let before = self.budget_levels(&periods);
         let id = self.create_txn(form)?;
         Ok((id, self.alerts_after_save(&periods, before)))
+    }
+
+    /// Periode = tanggal form (bila diedit) atau tanggal kejadian.
+    pub fn confirm_occurrence_with_alerts(
+        &mut self,
+        id: Uuid,
+        date: Date,
+        form: Option<&TxnForm>,
+    ) -> Result<(Uuid, Vec<BudgetAlert>), AppError> {
+        let periods = vec![self.period_of(form.map_or(date, |f| f.date))?];
+        let before = self.budget_levels(&periods);
+        let txn = self.confirm_occurrence(id, date, form)?;
+        Ok((txn, self.alerts_after_save(&periods, before)))
     }
 
     /// Memeriksa periode tanggal lama dan tanggal baru; periode yang realisasinya
@@ -109,7 +123,6 @@ mod tests {
     use super::*;
     use crate::testkit::Kit;
     use nabungo_core::{FormBody, SplitLine};
-    use time::Date;
     use time::macros::date;
 
     fn period(key: &str) -> BudgetPeriod {

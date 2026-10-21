@@ -5,13 +5,14 @@ use std::collections::HashSet;
 
 use nabungo_core::recurrence::{Freq, Recurrence};
 use nabungo_core::{Fee, FormBody, SplitLine, ValidTxn};
+use nabungo_storage::now_utc;
 use nabungo_storage::recurring::{self as repo, RuleRecord, RuleWrite};
 use serde::{Deserialize, Serialize};
 use time::Date;
 use uuid::Uuid;
 
 use crate::ledger::{AppError, Ledger, resolve};
-use crate::transactions::{TxnForm, form_input, normalize_tag};
+use crate::transactions::{TxnForm, form_input, normalize_tag, write_txn};
 
 /// Batas kejadian jatuh tempo per jadwal per panggilan (daftar & konfirmasi semua).
 pub const MAX_CATCH_UP: usize = 366;
@@ -271,6 +272,116 @@ impl Ledger {
     }
 }
 
+/// Jadwal aktif dengan `next_date == date`; selain itu [`AppError::OccurrenceStale`].
+fn pending(
+    tx: &nabungo_storage::rusqlite::Transaction,
+    id: Uuid,
+    date: Date,
+) -> Result<(RuleRecord, Recurrence), AppError> {
+    let rec = repo::get_rule(tx, id)?.ok_or(AppError::NotFound("recurring_rule"))?;
+    if rec.ended_at.is_some() || rec.next_date != date {
+        return Err(AppError::OccurrenceStale);
+    }
+    let rule = parse_rule(&rec)?;
+    Ok((rec, rule))
+}
+
+/// Catat kejadian `date` (form diedit atau template) lalu majukan jadwal.
+fn post_occurrence(
+    tx: &nabungo_storage::rusqlite::Transaction,
+    id: Uuid,
+    date: Date,
+    form: Option<&TxnForm>,
+) -> Result<Uuid, AppError> {
+    let (rec, rule) = pending(tx, id, date)?;
+    let form = match form {
+        Some(f) => f.clone(),
+        None => template_form(&rec, date)?,
+    };
+    let txn = write_txn(tx, None, &form_input(&form)?, &HashSet::new())?;
+    repo::link_txn(tx, txn, id)?;
+    repo::advance_rule(tx, id, rule.next_after(date), &now_utc())?;
+    Ok(txn)
+}
+
+impl Ledger {
+    /// `form = None` → template dengan `date`. Mensyaratkan jadwal aktif dan `date == next_date`.
+    pub fn confirm_occurrence(
+        &mut self,
+        id: Uuid,
+        date: Date,
+        form: Option<&TxnForm>,
+    ) -> Result<Uuid, AppError> {
+        let tx = self.conn.transaction()?;
+        let txn = post_occurrence(&tx, id, date, form)?;
+        tx.commit()?;
+        Ok(txn)
+    }
+
+    pub fn skip_occurrence(&mut self, id: Uuid, date: Date) -> Result<(), AppError> {
+        let tx = self.conn.transaction()?;
+        let (_, rule) = pending(&tx, id, date)?;
+        repo::advance_rule(&tx, id, rule.next_after(date), &now_utc())?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Semua kejadian ≤ `today` (maks [`MAX_CATCH_UP`]) dalam satu transaction: gagal satu, batal semua.
+    pub fn confirm_all_due(&mut self, id: Uuid, today: Date) -> Result<u32, AppError> {
+        let tx = self.conn.transaction()?;
+        let n = post_all_due(&tx, id, today)?;
+        tx.commit()?;
+        Ok(n)
+    }
+
+    /// Satu transaction per jadwal; jadwal yang gagal di-log dan dilewati.
+    pub fn post_auto_due(&mut self, today: Date) -> u32 {
+        let rules = match repo::list_rules(&self.conn) {
+            Ok(rules) => rules,
+            Err(e) => {
+                tracing::warn!(error = %e, "gagal memuat jadwal auto-post");
+                return 0;
+            }
+        };
+        let mut total = 0;
+        for rec in rules
+            .into_iter()
+            .filter(|r| r.auto_post && r.ended_at.is_none() && r.next_date <= today)
+        {
+            let res = self
+                .conn
+                .transaction()
+                .map_err(AppError::from)
+                .and_then(|tx| {
+                    let n = post_all_due(&tx, rec.id, today)?;
+                    tx.commit()?;
+                    Ok(n)
+                });
+            match res {
+                Ok(n) => total += n,
+                Err(e) => tracing::warn!(rule = %rec.id, error = %e, "auto-post jadwal gagal"),
+            }
+        }
+        total
+    }
+}
+
+fn post_all_due(
+    tx: &nabungo_storage::rusqlite::Transaction,
+    id: Uuid,
+    today: Date,
+) -> Result<u32, AppError> {
+    let rec = repo::get_rule(tx, id)?.ok_or(AppError::NotFound("recurring_rule"))?;
+    if rec.ended_at.is_some() {
+        return Ok(0);
+    }
+    let dates = due_dates(&parse_rule(&rec)?, rec.next_date, today);
+    for &d in &dates {
+        post_occurrence(tx, id, d, None)?;
+    }
+    Ok(dates.len() as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -457,5 +568,225 @@ mod tests {
         let id = kit.ledger.create_rule(&input).unwrap();
         kit.ledger.delete_rule(id).unwrap();
         assert!(kit.ledger.list_rules(TODAY).unwrap().is_empty());
+    }
+
+    fn rule_txns(kit: &Kit, id: Uuid) -> Vec<Date> {
+        let mut stmt = kit
+            .ledger
+            .conn
+            .prepare(
+                "SELECT date FROM txn WHERE recurring_rule_id = ?1 AND deleted_at IS NULL ORDER BY date",
+            )
+            .unwrap();
+        stmt.query_map([id.to_string()], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(|d| crate::parse_date(&d.unwrap()).unwrap())
+            .collect()
+    }
+
+    fn row(kit: &Kit, id: Uuid) -> RuleRow {
+        kit.ledger
+            .list_rules(TODAY)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == id)
+            .unwrap()
+    }
+
+    #[test]
+    fn confirm_posts_and_advances() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let before = kit.ledger.balance(kit.bca).unwrap();
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 150_000)))
+            .unwrap();
+        let txn = kit
+            .ledger
+            .confirm_occurrence(id, date!(2026 - 09 - 25), None)
+            .unwrap();
+        assert_eq!(kit.ledger.get_txn(txn).unwrap().date, date!(2026 - 09 - 25));
+        assert_eq!(rule_txns(&kit, id), vec![date!(2026 - 09 - 25)]);
+        assert_eq!(kit.ledger.balance(kit.bca).unwrap(), before - 150_000);
+        let r = row(&kit, id);
+        assert!(r.due.is_empty());
+        assert_eq!(r.form.date, date!(2026 - 10 - 25));
+    }
+
+    #[test]
+    fn confirm_twice_is_stale() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 10_000)))
+            .unwrap();
+        kit.ledger
+            .confirm_occurrence(id, date!(2026 - 09 - 25), None)
+            .unwrap();
+        assert!(matches!(
+            kit.ledger
+                .confirm_occurrence(id, date!(2026 - 09 - 25), None),
+            Err(AppError::OccurrenceStale)
+        ));
+        assert_eq!(rule_txns(&kit, id).len(), 1);
+    }
+
+    #[test]
+    fn confirm_edited_form() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let before = kit.ledger.balance(kit.bca).unwrap();
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 150_000)))
+            .unwrap();
+        let edited = expense_form(&kit, date!(2026 - 09 - 27), 175_000);
+        let txn = kit
+            .ledger
+            .confirm_occurrence(id, date!(2026 - 09 - 25), Some(&edited))
+            .unwrap();
+        assert_eq!(kit.ledger.get_txn(txn).unwrap().date, date!(2026 - 09 - 27));
+        assert_eq!(kit.ledger.balance(kit.bca).unwrap(), before - 175_000);
+        let r = row(&kit, id);
+        assert_eq!(r.form.date, date!(2026 - 10 - 25));
+        assert_eq!(
+            r.form,
+            expense_form(&kit, date!(2026 - 10 - 25), 150_000),
+            "template unchanged"
+        );
+    }
+
+    #[test]
+    fn skip_advances_without_txn() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 10_000)))
+            .unwrap();
+        assert!(matches!(
+            kit.ledger.skip_occurrence(id, date!(2026 - 09 - 26)),
+            Err(AppError::OccurrenceStale)
+        ));
+        kit.ledger
+            .skip_occurrence(id, date!(2026 - 09 - 25))
+            .unwrap();
+        assert!(rule_txns(&kit, id).is_empty());
+        assert_eq!(row(&kit, id).form.date, date!(2026 - 10 - 25));
+    }
+
+    #[test]
+    fn confirm_with_archived_account_keeps_next_date() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 10_000)))
+            .unwrap();
+        kit.ledger.archive_account(kit.bca).unwrap();
+        assert!(matches!(
+            kit.ledger
+                .confirm_occurrence(id, date!(2026 - 09 - 25), None),
+            Err(AppError::Archived("account"))
+        ));
+        assert!(rule_txns(&kit, id).is_empty());
+        assert_eq!(row(&kit, id).form.date, date!(2026 - 09 - 25));
+    }
+
+    #[test]
+    fn last_occurrence_ends_rule() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let mut input = monthly(expense_form(&kit, date!(2026 - 09 - 25), 10_000));
+        input.until = Some(date!(2026 - 10 - 25));
+        let id = kit.ledger.create_rule(&input).unwrap();
+        for d in [date!(2026 - 09 - 25), date!(2026 - 10 - 25)] {
+            kit.ledger.confirm_occurrence(id, d, None).unwrap();
+        }
+        let r = row(&kit, id);
+        assert!(r.ended);
+        assert!(r.due.is_empty());
+        assert!(matches!(
+            kit.ledger
+                .confirm_occurrence(id, date!(2026 - 11 - 25), None),
+            Err(AppError::OccurrenceStale)
+        ));
+    }
+
+    #[test]
+    fn confirm_all_caps_and_continues() {
+        let mut kit = Kit::new(1, date!(2025 - 01 - 01));
+        let mut input = monthly(expense_form(&kit, date!(2025 - 01 - 01), 1_000));
+        input.freq = Freq::Daily;
+        let id = kit.ledger.create_rule(&input).unwrap();
+        assert_eq!(kit.ledger.confirm_all_due(id, TODAY).unwrap(), 366);
+        assert!(!row(&kit, id).due.is_empty());
+        let rest = kit.ledger.confirm_all_due(id, TODAY).unwrap();
+        let days = (TODAY - date!(2025 - 01 - 01)).whole_days() + 1;
+        assert_eq!(i64::from(366 + rest), days);
+        assert_eq!(rule_txns(&kit, id).len() as i64, days);
+        assert_eq!(kit.ledger.confirm_all_due(id, TODAY).unwrap(), 0);
+    }
+
+    #[test]
+    fn confirm_all_is_atomic() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 07 - 25), 10_000)))
+            .unwrap();
+        kit.ledger.archive_category(kit.cat("Listrik")).unwrap();
+        assert!(kit.ledger.confirm_all_due(id, TODAY).is_err());
+        assert!(rule_txns(&kit, id).is_empty());
+        assert_eq!(row(&kit, id).due.len(), 3);
+    }
+
+    #[test]
+    fn auto_post_skips_failing_rule() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let mut a = monthly(expense_form(&kit, date!(2026 - 08 - 25), 10_000));
+        a.auto_post = true;
+        let a = kit.ledger.create_rule(&a).unwrap();
+        let mut b_form = expense_form(&kit, date!(2026 - 08 - 25), 10_000);
+        b_form.body = FormBody::Expense {
+            account_id: kit.dompet,
+            amount: 10_000,
+            splits: vec![SplitLine {
+                category_id: kit.cat("Listrik"),
+                amount: 10_000,
+                memo: None,
+            }],
+        };
+        let mut b = monthly(b_form);
+        b.auto_post = true;
+        let b = kit.ledger.create_rule(&b).unwrap();
+        let c = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 08 - 25), 10_000)))
+            .unwrap();
+        kit.ledger.archive_account(kit.dompet).unwrap();
+        assert_eq!(kit.ledger.post_auto_due(TODAY), 2);
+        assert_eq!(rule_txns(&kit, a).len(), 2);
+        assert!(row(&kit, a).due.is_empty());
+        assert_eq!(row(&kit, b).due.len(), 2);
+        assert_eq!(row(&kit, c).due.len(), 2);
+    }
+
+    #[test]
+    fn confirm_alerts() {
+        let mut kit = Kit::new(1, date!(2026 - 01 - 01));
+        let listrik = kit.cat("Listrik");
+        kit.ledger
+            .set_budget(
+                listrik,
+                nabungo_core::BudgetPeriod::parse("2026-09").unwrap(),
+                Some(100_000),
+            )
+            .unwrap();
+        let id = kit
+            .ledger
+            .create_rule(&monthly(expense_form(&kit, date!(2026 - 09 - 25), 150_000)))
+            .unwrap();
+        let (_, alerts) = kit
+            .ledger
+            .confirm_occurrence_with_alerts(id, date!(2026 - 09 - 25), None)
+            .unwrap();
+        assert!(!alerts.is_empty());
     }
 }
