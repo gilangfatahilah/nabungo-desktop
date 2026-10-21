@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use nabungo_core::recurrence::RecurrenceError;
 use nabungo_core::{
     AllocationError, BudgetError, CatalogError, MoneyError, PeriodError, PostingDraft, TxnDraft,
     TxnError, TxnKind,
@@ -90,6 +91,11 @@ pub enum AppError {
     /// Baris lampiran ada, tapi filenya tidak ada di folder data.
     #[error("attachment file is missing")]
     AttachmentMissing,
+    /// Kejadian terjadwal sudah ditangani (bukan `next_date`) atau jadwal sudah selesai.
+    #[error("scheduled occurrence was already handled")]
+    OccurrenceStale,
+    #[error(transparent)]
+    Recurrence(#[from] RecurrenceError),
 }
 
 impl From<StorageError> for AppError {

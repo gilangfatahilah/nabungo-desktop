@@ -92,6 +92,21 @@ export function fromDetail(d: TxnDetailDto): TxnFormState {
   return s
 }
 
+/** Kebalikan `toDto`, untuk template jadwal. */
+export function fromDto(f: TxnFormDto): TxnFormState {
+  const s = emptyForm(f.kind, { accountId: f.accountId || null, feeCategoryId: null, today: f.date })
+  Object.assign(s, { amount: f.amount, payee: f.payee ?? '', note: f.note ?? '', tags: [...f.tags] })
+  if (f.kind === 'transfer') {
+    s.toAccountId = f.toAccountId
+    if (f.fee) Object.assign(s, { feeEnabled: true, fee: f.fee.amount, feeCategoryId: f.fee.categoryId })
+    return s
+  }
+  const rows = f.splits.map((x) => ({ categoryId: x.categoryId, amount: x.amount, memo: x.memo ?? '' }))
+  if (rows.length > 1) Object.assign(s, { split: true, splits: rows })
+  else s.categoryId = rows[0]?.categoryId ?? null
+  return s
+}
+
 export function duplicateOf(d: TxnDetailDto, today: string): TxnFormState {
   return { ...fromDetail(d), date: today }
 }

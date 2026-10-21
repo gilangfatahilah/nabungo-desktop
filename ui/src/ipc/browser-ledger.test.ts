@@ -731,3 +731,102 @@ describe('browser ledger lampiran simulasi (TRX-08)', () => {
     expect(await L.addAttachments('tidak-ada')).toEqual({ status: 'error', error: { code: 'not_found', entity: 'transaction' } })
   })
 })
+
+describe('browser ledger transaksi terjadwal (TRX-06, paritas Rust)', () => {
+  afterEach(() => vi.useRealTimers())
+  const today = () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 21, 10))
+  }
+  const monthly = { freq: 'monthly' as const, interval: 1, until: null }
+
+  async function setup(tag: string) {
+    const a = await account(`R ${tag}`, 1_000_000)
+    const c = await category('expense', `Listrik ${tag}`)
+    const tmpl = (date: string, amount = 10_000) => form({ date, accountId: a, amount, splits: [{ categoryId: c, amount, memo: null }] })
+    const rule = async (id: string) => (await data(L.listRules())).find((r) => r.id === id)!
+    const count = async () => (await data(L.listTxns({ ...q, accountId: a }))).rows.filter((r) => r.kind === 'expense').length
+    return { a, c, tmpl, rule, count }
+  }
+
+  it('kejadian lampau jatuh tempo; konfirmasi dua kali → occurrence_stale', async () => {
+    today()
+    const { tmpl, rule, count } = await setup('R1')
+    const id = await data(L.createRule({ form: tmpl('2026-07-25'), recurrence: monthly, autoPost: false }))
+    expect((await rule(id)).due).toEqual(['2026-07-25', '2026-08-25', '2026-09-25'])
+    await data(L.confirmOccurrence(id, '2026-07-25', null))
+    expect(await L.confirmOccurrence(id, '2026-07-25', null)).toEqual({ status: 'error', error: { code: 'occurrence_stale', entity: null } })
+    expect(await count()).toBe(1)
+    expect((await rule(id)).form.date).toBe('2026-08-25')
+  })
+
+  it('lewati dengan tanggal salah → occurrence_stale; lewati tidak membuat transaksi', async () => {
+    today()
+    const { tmpl, rule, count } = await setup('R2')
+    const id = await data(L.createRule({ form: tmpl('2026-09-25'), recurrence: monthly, autoPost: false }))
+    expect(await L.skipOccurrence(id, '2026-09-26')).toEqual({ status: 'error', error: { code: 'occurrence_stale', entity: null } })
+    await data(L.skipOccurrence(id, '2026-09-25'))
+    expect(await count()).toBe(0)
+    expect((await rule(id)).due).toEqual([])
+  })
+
+  it('validasi interval dan until', async () => {
+    const { tmpl } = await setup('R3')
+    expect(await L.createRule({ form: tmpl('2026-11-01'), recurrence: { ...monthly, interval: 0 }, autoPost: false }))
+      .toEqual({ status: 'error', error: { code: 'recurrence_interval', entity: null } })
+    expect(await L.createRule({ form: tmpl('2026-11-01'), recurrence: { ...monthly, until: '2026-10-31' }, autoPost: false }))
+      .toEqual({ status: 'error', error: { code: 'recurrence_until', entity: null } })
+  })
+
+  it('auto-post dicatat saat daftar dimuat', async () => {
+    today()
+    const { tmpl, rule, count } = await setup('R4')
+    const id = await data(L.createRule({ form: tmpl('2026-09-25'), recurrence: monthly, autoPost: true }))
+    expect((await rule(id)).due).toEqual([])
+    expect(await count()).toBe(1)
+  })
+
+  it('ubah jadwal selesai tidak memunculkan lagi kejadian terakhir', async () => {
+    today()
+    const { tmpl, rule, count } = await setup('R6')
+    const until = { ...monthly, until: '2026-09-25' }
+    const id = await data(L.createRule({ form: tmpl('2026-08-25'), recurrence: until, autoPost: false }))
+    expect(await data(L.confirmAllDue(id))).toBe(2)
+    const r = await rule(id)
+    expect(r.ended).toBe(true)
+    await data(L.updateRule(id, { form: r.form, recurrence: until, autoPost: true }))
+    expect((await rule(id)).ended).toBe(true)
+    await data(L.updateRule(id, { form: r.form, recurrence: { ...monthly, until: '2026-12-31' }, autoPost: true }))
+    const after = await rule(id)
+    expect(after.ended).toBe(false)
+    expect(after.form.date).toBe('2026-10-25')
+    expect(after.due).toEqual([])
+    expect(await count()).toBe(2)
+  })
+
+  it('ubah jadwal di tanggal akhir bulan yang ter-clamp mempertahankan tgl 31', async () => {
+    today()
+    const { tmpl, rule } = await setup('R7')
+    const id = await data(L.createRule({ form: tmpl('2026-01-31'), recurrence: monthly, autoPost: false }))
+    await data(L.skipOccurrence(id, '2026-01-31'))
+    expect((await rule(id)).form.date).toBe('2026-02-28')
+    await data(L.updateRule(id, { form: tmpl('2026-02-28', 12_000), recurrence: monthly, autoPost: false }))
+    await data(L.skipOccurrence(id, '2026-02-28'))
+    expect((await rule(id)).form.date).toBe('2026-03-31')
+    await data(L.updateRule(id, { form: tmpl('2026-04-15', 12_000), recurrence: monthly, autoPost: false }))
+    await data(L.skipOccurrence(id, '2026-04-15'))
+    expect((await rule(id)).form.date).toBe('2026-05-15')
+  })
+
+  it('hapus jadwal membiarkan transaksi; konfirmasi semua mengembalikan jumlah', async () => {
+    today()
+    const { tmpl, count } = await setup('R5')
+    const id = await data(L.createRule({ form: tmpl('2026-08-25'), recurrence: monthly, autoPost: false }))
+    expect(await data(L.confirmAllDue(id))).toBe(2)
+    expect(await data(L.confirmAllDue(id))).toBe(0)
+    await data(L.deleteRule(id))
+    expect(await count()).toBe(2)
+    expect((await data(L.listRules())).some((r) => r.id === id)).toBe(false)
+    expect(await L.deleteRule(id)).toEqual({ status: 'error', error: { code: 'not_found', entity: 'recurring_rule' } })
+  })
+})

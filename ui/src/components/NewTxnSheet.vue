@@ -5,7 +5,7 @@ import { toast } from 'vue-sonner'
 import TxnForm from '@/components/txn/TxnForm.vue'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import * as ipc from '@/ipc'
-import { isLiability } from '@/lib/accounts'
+import { defaultAccountId } from '@/lib/accounts'
 import { todayIso } from '@/lib/date'
 import { duplicateOf, emptyForm, fromDetail, type TxnFormState } from '@/lib/txnForm'
 import { withErrorToast } from '@/lib/notify'
@@ -30,12 +30,6 @@ const open = computed({
 
 const title = computed(() => t(`txn.title.${ui.txnEditor?.mode ?? 'create'}`))
 
-function defaultAccount(last: string | null): string | null {
-  const active = accounts.overview.accounts.filter((a) => !a.archived)
-  if (last && active.some((a) => a.id === last)) return last
-  return (active.find((a) => !isLiability(a.kind)) ?? active[0])?.id ?? null
-}
-
 async function prepare() {
   const ed = ui.txnEditor
   if (!ed) return
@@ -43,7 +37,7 @@ async function prepare() {
   const defaults = await ipc.txnFormDefaults()
   let state: TxnFormState
   if (ed.mode === 'create' || !ed.id) {
-    state = emptyForm('expense', { accountId: defaultAccount(defaults.lastAccountId), feeCategoryId: defaults.feeCategoryId, today: todayIso() })
+    state = emptyForm('expense', { accountId: defaultAccountId(accounts.overview.accounts, defaults.lastAccountId), feeCategoryId: defaults.feeCategoryId, today: todayIso() })
   } else {
     const d = await ipc.getTxn(ed.id)
     state = ed.mode === 'edit' ? fromDetail(d) : duplicateOf(d, todayIso())

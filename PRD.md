@@ -364,7 +364,7 @@ kasku/
 | Error        | `thiserror` (lib), `anyhow` (bin)                               | Error domain bertipe, dipetakan ke pesan UI                       |
 | Serialisasi  | `serde`, `serde_json`                                           | DTO dan template recurring                                        |
 | Tipe TS      | `specta` + `tauri-specta`                                       | Generate tipe TypeScript dari command Rust, satu sumber kebenaran |
-| Recurring    | `rrule`                                                         | Parsing aturan RFC 5545                                           |
+| Recurring    | subset RRULE di `nabungo-core::recurrence` (tanpa crate; clamp akhir bulan, lihat plan 7d K1) | Parsing aturan RFC 5545                                           |
 | CSV          | `csv`                                                           | Import/export                                                     |
 | Lokasi data  | `directories`                                                   | Linux: `~/.local/share/kasku/`, Windows: `%APPDATA%\kasku\`       |
 | Logging      | `tracing`, `tracing-appender`                                   | Log lokal berputar, tanpa telemetry                               |

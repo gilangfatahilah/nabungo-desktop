@@ -349,6 +349,15 @@ Segmented control horizontal **Pengeluaran | Pemasukan** di header (mengganti ta
 
 Segmented control **Tag | Payee** di header (tab disimpan di query `?tab=payee`) + tombol `+ Tag baru` / `+ Payee baru`. Daftar baris 48px: nama (tag berawalan `#`), meta jumlah transaksi (payee: `· kategori default`), `⋯` saat hover berisi Ubah, Gabungkan…, Lihat transaksi, Hapus. "Lihat transaksi" mereset filter lain lalu membuka Transaksi dengan chip `#tag` / `Payee: nama`. Hapus memakai dialog konfirmasi yang menyebut jumlah transaksi terdampak (tanpa undo; saldo tidak berubah).
 
+### 9.4b Terjadwal (Fase 7d)
+
+Header **Terjadwal** + tombol `+ Jadwal baru`. Dua seksi berjudul kecil (meta, pudar):
+
+- **Jatuh tempo** (hanya bila ada): satu baris 48px per kejadian, urut tanggal — tanggal, nama, akun, nominal bertanda. Kejadian tertua tiap jadwal punya `Catat` (primer kecil), `Lewati` (ghost) dan `⋯` (Edit lalu catat…, Konfirmasi semua (n) bila n > 1). Kejadian berikutnya dari jadwal yang sama dinonaktifkan dengan tooltip "Tangani kejadian sebelumnya dulu": kejadian ditangani berurutan.
+- **Jadwal**: nama + deskripsi pengulangan ("Tiap bulan, tgl 25"), badge `Otomatis` / `Selesai`, "Berikutnya: tanggal", nominal, `⋯` (Ubah, Hapus). Hapus memakai dialog konfirmasi; transaksi yang sudah tercatat tetap ada.
+
+Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Terjadwal memakai badge jumlah kejadian jatuh tempo (disembunyikan saat 0). Form jadwal memakai sheet kanan yang sama dengan form transaksi (`RuleSheet`): field transaksi + seksi pengulangan (Frekuensi, Setiap n, Berakhir, switch Catat otomatis, pratinjau 3 tanggal berikutnya). "Jadikan berulang…" ada di menu `⋯` baris transaksi.
+
 ### 9.5 Budget (Fase 5)
 
 ```

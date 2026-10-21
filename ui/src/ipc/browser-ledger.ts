@@ -11,7 +11,9 @@ import type {
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
   ReconciliationDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
   AttachmentDto, PayeeUsageDto, TagUsageDto,
+  RecurrenceDto, RuleDto, RuleInputDto,
 } from './bindings'
+import { keepDay, nextAfter, occurrences } from './browser-recurrence'
 import { todayIso } from '@/lib/date'
 import { countsAsLiability, isLiability } from '@/lib/accounts'
 
@@ -38,7 +40,23 @@ const state = {
   budgets: [] as { categoryId: string; period: string; amount: number; rollover: boolean }[],
   buckets: [] as BucketDto[],
   mappings: [] as MappingDto[],
+  rules: [] as Rule[],
 }
+
+/** Seperti `recurring_rule`: `anchor` = tanggal mulai (sumber BYMONTHDAY/BYDAY di rrule Rust). */
+type Rule = {
+  id: string
+  form: TxnFormDto
+  recurrence: RecurrenceDto
+  autoPost: boolean
+  anchor: string
+  next: string
+  ended: boolean
+}
+
+// Sama dengan `MAX_CATCH_UP` / `MAX_INTERVAL` di Rust.
+const MAX_CATCH_UP = 366
+const MAX_INTERVAL = 99
 
 type Txn = {
   id: string
@@ -311,6 +329,71 @@ function writeTxn(existing: Txn | null, f: TxnFormDto): Result<string> {
   state.txns.push(t)
   return ok(t.id)
 }
+
+/** Cermin `rule_write`: aturan + template divalidasi seperti mencatat di tanggal mulai, tanpa menyimpan. */
+function checkRule(input: RuleInputDto): Result<null> {
+  const r = input.recurrence
+  if (!Number.isInteger(r.interval) || r.interval < 1 || r.interval > MAX_INTERVAL) return fail('recurrence_interval')
+  if (r.until !== null && r.until < input.form.date) return fail('recurrence_until')
+  const built = formPostings(input.form)
+  if (built.status === 'error') return built
+  const valid = validatePostings(input.form.kind, built.data, new Set())
+  if (valid.status === 'error') return valid
+  for (const t of input.form.tags) {
+    const n = tagName(t)
+    if (n.status === 'error') return n
+  }
+  return ok(null)
+}
+
+/** Seperti `due_dates`: dari `next` selama ≤ hari ini, maksimal MAX_CATCH_UP. */
+function dueDates(r: Rule, today: string): string[] {
+  const out: string[] = []
+  let cur: string | null = r.ended ? null : r.next
+  while (cur !== null && cur <= today && out.length < MAX_CATCH_UP) {
+    out.push(cur)
+    cur = nextAfter(r.recurrence, r.anchor, cur)
+  }
+  return out
+}
+
+/** Catat satu kejadian lalu majukan jadwal; gagal → jadwal tidak berubah. */
+function postOccurrence(r: Rule, date: string, form: TxnFormDto | null): Result<string> {
+  const w = writeTxn(null, form ?? { ...r.form, date })
+  if (w.status === 'error') return w
+  const next = nextAfter(r.recurrence, r.anchor, date)
+  if (next === null) r.ended = true
+  else r.next = next
+  return w
+}
+
+function postAllDue(r: Rule, today: string): Result<number> {
+  const dates = dueDates(r, today)
+  // Atomik seperti satu SQLite transaction: template sama untuk semua tanggal, cukup validasi sekali.
+  if (dates.length) {
+    const built = formPostings(r.form)
+    if (built.status === 'error') return built
+    const valid = validatePostings(r.form.kind, built.data, new Set())
+    if (valid.status === 'error') return valid
+  }
+  for (const d of dates) {
+    const w = postOccurrence(r, d, null)
+    if (w.status === 'error') return w
+  }
+  return ok(dates.length)
+}
+
+function pendingRule(id: string, date: string): Result<Rule> {
+  const r = state.rules.find((x) => x.id === id)
+  if (!r) return notFound('recurring_rule')
+  if (r.ended || r.next !== date) return fail('occurrence_stale')
+  return ok(r)
+}
+
+const ruleDto = (r: Rule, today: string): RuleDto => ({
+  id: r.id, form: { ...r.form, date: r.next, tags: [...r.form.tags] }, recurrence: { ...r.recurrence },
+  autoPost: r.autoPost, ended: r.ended, due: dueDates(r, today),
+})
 
 const byNewest = (a: Txn, b: Txn) => b.date.localeCompare(a.date) || b.seq - a.seq
 const attachmentDto = ({ txnId: _, ...a }: AttachmentDto & { txnId: string }): AttachmentDto => a
@@ -838,6 +921,68 @@ export const browserLedger = {
     const before = budgetLevels(periods)
     const r = writeTxn(t, form)
     return r.status === 'ok' ? ok(budgetAlerts(periods, before)) : r
+  },
+  listRules: async (): Promise<Result<RuleDto[]>> => {
+    const today = todayIso()
+    // Seperti `post_auto_due` saat startup/scheduler; jadwal yang gagal dilewati.
+    for (const r of state.rules) if (r.autoPost) postAllDue(r, today)
+    return ok([...state.rules].sort((a, b) => Number(a.ended) - Number(b.ended) || a.next.localeCompare(b.next) || a.id.localeCompare(b.id)).map((r) => ruleDto(r, today)))
+  },
+  createRule: async (input: RuleInputDto): Promise<Result<string>> => {
+    const c = checkRule(input)
+    if (c.status === 'error') return c
+    const r: Rule = {
+      id: id(), form: { ...input.form, tags: [...input.form.tags] }, recurrence: { ...input.recurrence },
+      autoPost: input.autoPost, anchor: input.form.date, next: input.form.date, ended: false,
+    }
+    state.rules.push(r)
+    return ok(r.id)
+  },
+  updateRule: async (i: string, input: RuleInputDto): Promise<Result<null>> => {
+    const r = state.rules.find((x) => x.id === i)
+    if (!r) return notFound('recurring_rule')
+    const c = checkRule(input)
+    if (c.status === 'error') return c
+    // Seperti `update_rule`: anchor lama dipertahankan di tanggal ter-clamp; jadwal selesai
+    // mulai dari kejadian sesudah yang terakhir ditangani.
+    const anchor = keepDay(input.recurrence, input.form.date, r.recurrence, r.anchor)
+    const next = r.ended && input.form.date === r.next ? nextAfter(input.recurrence, anchor, r.next) : input.form.date
+    Object.assign(r, {
+      form: { ...input.form, tags: [...input.form.tags] }, recurrence: { ...input.recurrence },
+      autoPost: input.autoPost, anchor, next: next ?? input.form.date, ended: next === null,
+    })
+    return ok(null)
+  },
+  deleteRule: async (i: string): Promise<Result<null>> => {
+    if (!state.rules.some((x) => x.id === i)) return notFound('recurring_rule')
+    state.rules = state.rules.filter((x) => x.id !== i)
+    return ok(null)
+  },
+  confirmOccurrence: async (i: string, date: string, form: TxnFormDto | null): Promise<Result<SavedTxnDto>> => {
+    const p = pendingRule(i, date)
+    if (p.status === 'error') return p
+    const periods = periodsOf([form?.date ?? date])
+    const before = budgetLevels(periods)
+    const w = postOccurrence(p.data, date, form)
+    return w.status === 'ok' ? ok({ id: w.data, alerts: budgetAlerts(periods, before) }) : w
+  },
+  skipOccurrence: async (i: string, date: string): Promise<Result<null>> => {
+    const p = pendingRule(i, date)
+    if (p.status === 'error') return p
+    const next = nextAfter(p.data.recurrence, p.data.anchor, date)
+    if (next === null) p.data.ended = true
+    else p.data.next = next
+    return ok(null)
+  },
+  confirmAllDue: async (i: string): Promise<Result<number>> => {
+    const r = state.rules.find((x) => x.id === i)
+    if (!r) return notFound('recurring_rule')
+    return postAllDue(r, todayIso())
+  },
+  previewRecurrence: async (recurrence: RecurrenceDto, start: string, count: number): Promise<Result<string[]>> => {
+    if (recurrence.interval < 1 || recurrence.interval > MAX_INTERVAL) return fail('recurrence_interval')
+    if (recurrence.until !== null && recurrence.until < start) return fail('recurrence_until')
+    return ok(occurrences(recurrence, start, Math.min(count, 12)))
   },
   getTxn: async (i: string): Promise<Result<TxnDetailDto>> => {
     const t = activeTxns().find((x) => x.id === i)

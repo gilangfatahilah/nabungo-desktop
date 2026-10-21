@@ -33,6 +33,33 @@ export const commands = {
 	deleteCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_category", { id })),
 	mergeCategory: (source: string, target: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_category", { source, target })),
 	createTxn: (form: TxnFormDto) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("create_txn", { form })),
+	listRules: () => typedError<RuleDto[], IpcError>(__TAURI_INVOKE("list_rules")),
+	createRule: (input: RuleInputDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_rule", { input })),
+	updateRule: (id: string, input: RuleInputDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_rule", { id, input })),
+	deleteRule: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_rule", { id })),
+	/**  `form` = form yang diedit user; `None` → template apa adanya. */
+	confirmOccurrence: (id: string, date: string, form: {
+	kind: TxnFormKindDto,
+	/**  `YYYY-MM-DD` */
+	date: string,
+	/**  Transfer: akun asal. */
+	accountId: string,
+	/**  Wajib untuk transfer. */
+	toAccountId: string | null,
+	/**  Income/expense: total split (negatif = refund). Transfer: positif. */
+	amount: number,
+	/**  Income/expense; diabaikan untuk transfer. */
+	splits: SplitDto[],
+	/**  Transfer saja. */
+	fee: FeeDto | null,
+	payee: string | null,
+	note: string | null,
+	tags: string[],
+} | null) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("confirm_occurrence", { id, date, form })),
+	skipOccurrence: (id: string, date: string) => typedError<null, IpcError>(__TAURI_INVOKE("skip_occurrence", { id, date })),
+	confirmAllDue: (id: string) => typedError<number, IpcError>(__TAURI_INVOKE("confirm_all_due", { id })),
+	/**  Pratinjau kejadian (maks 12) untuk form jadwal. */
+	previewRecurrence: (recurrence: RecurrenceDto, start: string, count: number) => typedError<string[], IpcError>(__TAURI_INVOKE("preview_recurrence", { recurrence, start, count })),
 	updateTxn: (id: string, form: TxnFormDto) => typedError<BudgetAlertDto[], IpcError>(__TAURI_INVOKE("update_txn", { id, form })),
 	getTxn: (id: string) => typedError<TxnDetailDto, IpcError>(__TAURI_INVOKE("get_txn", { id })),
 	listTxns: (query: TxnQueryDto) => typedError<TxnPageDto, IpcError>(__TAURI_INVOKE("list_txns", { query })),
@@ -335,13 +362,15 @@ export type ContactDto = {
 	name: string,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
 
 export type FeeDto = {
 	amount: number,
 	/**  `None` saat user menyalakan biaya tanpa memilih kategori → `txn_missing_category`. */
 	categoryId: string | null,
 };
+
+export type FreqDto = "daily" | "weekly" | "monthly" | "yearly";
 
 export type IntegrityStatusDto = "skipped" | "ok" | "failed";
 
@@ -405,6 +434,32 @@ export type ReconciliationDto = {
 	adjustmentId: string | null,
 	difference: number,
 	marked: number,
+};
+
+/**  Anchor (hari/tanggal) diambil dari tanggal mulai/kejadian berikutnya. */
+export type RecurrenceDto = {
+	freq: FreqDto,
+	interval: number,
+	/**  `YYYY-MM-DD`, inklusif. */
+	until: string | null,
+};
+
+export type RuleDto = {
+	id: string,
+	/**  Template; `date` = kejadian berikutnya. */
+	form: TxnFormDto,
+	recurrence: RecurrenceDto,
+	autoPost: boolean,
+	ended: boolean,
+	/**  Kejadian jatuh tempo (≤ hari ini), urut naik. */
+	due: string[],
+};
+
+export type RuleInputDto = {
+	/**  `date` = tanggal mulai (buat) atau kejadian berikutnya (ubah). */
+	form: TxnFormDto,
+	recurrence: RecurrenceDto,
+	autoPost: boolean,
 };
 
 /**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */

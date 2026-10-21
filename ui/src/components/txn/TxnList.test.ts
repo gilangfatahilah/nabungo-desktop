@@ -171,4 +171,24 @@ describe('TxnList', () => {
     expect(el.querySelector('[data-testid="txn-tag"]')!.textContent).toBe('#ngopi')
     expect(rowEl(transferId).querySelector('[data-testid="txn-icon"]')!.className).toContain('bg-muted')
   })
+
+  it('menu "Jadikan berulang": membuka RuleSheet mode fromTxn; nonaktif untuk opening', async () => {
+    await mountList()
+    const menu = async (id: string) => {
+      rowEl(id).querySelector<HTMLElement>('[data-testid="txn-menu"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      await settle()
+      return document.body.querySelector<HTMLElement>('[data-testid="txn-menu-recurring"]')!
+    }
+    const opening = useTransactionsStore().rows.find((r) => r.kind === 'opening' && r.accountId === bca)!
+    expect((await menu(opening.id)).hasAttribute('data-disabled')).toBe(true)
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await settle()
+    for (const id of [expenseId, transferId]) {
+      const item = await menu(id)
+      expect(item.hasAttribute('data-disabled')).toBe(false)
+      item.click()
+      await settle()
+      expect(useUiStore().ruleEditor).toEqual({ mode: 'fromTxn', txnId: id })
+    }
+  })
 })

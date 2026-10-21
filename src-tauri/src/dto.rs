@@ -4,10 +4,11 @@ use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
     AllocationPoint, AttachmentRow, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert,
     BudgetLevel, BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount,
-    CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Locale, NetWorth,
-    NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay, PostingRecord,
-    Reconciliation, SplitLine, TagUsage, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage,
-    TxnQuery, UiSettings, Uuid, ValuationPoint, format_date, parse_date,
+    CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Freq, Locale,
+    NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay,
+    PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Theme, TxnDetail,
+    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
+    parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -512,6 +513,74 @@ impl TryFrom<TxnFormDto> for TxnForm {
             note: d.note,
             tags: d.tags,
         })
+    }
+}
+
+impl From<&TxnForm> for TxnFormDto {
+    fn from(f: &TxnForm) -> Self {
+        let splits = |s: &[SplitLine]| {
+            s.iter()
+                .map(|l| SplitDto {
+                    category_id: l.category_id.to_string(),
+                    amount: l.amount,
+                    memo: l.memo.clone(),
+                })
+                .collect()
+        };
+        let (kind, account_id, to_account_id, amount, splits, fee) = match &f.body {
+            FormBody::Income {
+                account_id,
+                amount,
+                splits: s,
+            } => (
+                TxnFormKindDto::Income,
+                *account_id,
+                None,
+                *amount,
+                splits(s),
+                None,
+            ),
+            FormBody::Expense {
+                account_id,
+                amount,
+                splits: s,
+            } => (
+                TxnFormKindDto::Expense,
+                *account_id,
+                None,
+                *amount,
+                splits(s),
+                None,
+            ),
+            FormBody::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => (
+                TxnFormKindDto::Transfer,
+                *from,
+                Some(to.to_string()),
+                *amount,
+                vec![],
+                fee.as_ref().map(|x| FeeDto {
+                    amount: x.amount,
+                    category_id: Some(x.category_id.to_string()),
+                }),
+            ),
+        };
+        Self {
+            kind,
+            date: format_date(f.date),
+            account_id: account_id.to_string(),
+            to_account_id,
+            amount,
+            splits,
+            fee,
+            payee: f.payee.clone(),
+            note: f.note.clone(),
+            tags: f.tags.clone(),
+        }
     }
 }
 
@@ -1213,9 +1282,165 @@ impl From<NetWorthPoint> for NetWorthPointDto {
     }
 }
 
+// --- Transaksi terjadwal ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum FreqDto {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+impl From<Freq> for FreqDto {
+    fn from(f: Freq) -> Self {
+        match f {
+            Freq::Daily => Self::Daily,
+            Freq::Weekly => Self::Weekly,
+            Freq::Monthly => Self::Monthly,
+            Freq::Yearly => Self::Yearly,
+        }
+    }
+}
+
+impl From<FreqDto> for Freq {
+    fn from(f: FreqDto) -> Self {
+        match f {
+            FreqDto::Daily => Self::Daily,
+            FreqDto::Weekly => Self::Weekly,
+            FreqDto::Monthly => Self::Monthly,
+            FreqDto::Yearly => Self::Yearly,
+        }
+    }
+}
+
+/// Anchor (hari/tanggal) diambil dari tanggal mulai/kejadian berikutnya.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RecurrenceDto {
+    pub freq: FreqDto,
+    pub interval: u8,
+    /// `YYYY-MM-DD`, inklusif.
+    pub until: Option<String>,
+}
+
+impl RecurrenceDto {
+    pub fn until(&self) -> Result<Option<Date>, IpcError> {
+        self.until.as_deref().map(parse_day).transpose()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleInputDto {
+    /// `date` = tanggal mulai (buat) atau kejadian berikutnya (ubah).
+    pub form: TxnFormDto,
+    pub recurrence: RecurrenceDto,
+    pub auto_post: bool,
+}
+
+impl TryFrom<RuleInputDto> for RuleInput {
+    type Error = IpcError;
+
+    fn try_from(d: RuleInputDto) -> Result<Self, IpcError> {
+        Ok(Self {
+            until: d.recurrence.until()?,
+            freq: d.recurrence.freq.into(),
+            interval: d.recurrence.interval,
+            form: d.form.try_into()?,
+            auto_post: d.auto_post,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleDto {
+    pub id: String,
+    /// Template; `date` = kejadian berikutnya.
+    pub form: TxnFormDto,
+    pub recurrence: RecurrenceDto,
+    pub auto_post: bool,
+    pub ended: bool,
+    /// Kejadian jatuh tempo (≤ hari ini), urut naik.
+    pub due: Vec<String>,
+}
+
+impl From<RuleRow> for RuleDto {
+    fn from(r: RuleRow) -> Self {
+        Self {
+            id: r.id.to_string(),
+            form: (&r.form).into(),
+            recurrence: RecurrenceDto {
+                freq: r.freq.into(),
+                interval: r.interval,
+                until: r.until.map(format_date),
+            },
+            auto_post: r.auto_post,
+            ended: r.ended,
+            due: r.due.into_iter().map(format_date).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn txn_form_dto_round_trip() {
+        let (a, b, c, d) = (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        );
+        let date = parse_date("2026-10-21").unwrap();
+        let forms = [
+            TxnForm {
+                body: FormBody::Expense {
+                    account_id: a,
+                    amount: 150_000,
+                    splits: vec![
+                        SplitLine {
+                            category_id: c,
+                            amount: 100_000,
+                            memo: Some("listrik".into()),
+                        },
+                        SplitLine {
+                            category_id: d,
+                            amount: 50_000,
+                            memo: None,
+                        },
+                    ],
+                },
+                date,
+                payee: Some("PLN".into()),
+                note: Some("bulanan".into()),
+                tags: vec!["rumah".into()],
+            },
+            TxnForm {
+                body: FormBody::Transfer {
+                    from: a,
+                    to: b,
+                    amount: 200_000,
+                    fee: Some(Fee {
+                        amount: 2_500,
+                        category_id: c,
+                    }),
+                },
+                date,
+                payee: None,
+                note: None,
+                tags: vec![],
+            },
+        ];
+        for form in forms {
+            let back = TxnForm::try_from(TxnFormDto::from(&form)).unwrap();
+            assert_eq!(back, form);
+        }
+    }
 
     fn fields() -> AccountFieldsDto {
         AccountFieldsDto {

@@ -89,13 +89,21 @@ pub fn run_auto_backup(ledger: &nabungo_app::Ledger, dir: &Path) {
     }
 }
 
+/// Catat kejadian terjadwal ber-auto-post yang jatuh tempo; kegagalan per jadwal hanya dicatat.
+pub fn run_auto_post(ledger: &mut Ledger) {
+    let n = ledger.post_auto_due(nabungo_app::local_today());
+    if n > 0 {
+        tracing::info!(count = n, "transaksi terjadwal dicatat otomatis");
+    }
+}
+
 /// Buka DB (plaintext: `key = None`) dan pasang ke state. Integrity check penuh
 /// dijalankan sekali per proses bila sesi sebelumnya tidak berakhir normal — untuk DB
 /// terenkripsi baru bisa saat unlock pertama.
 pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError> {
     let state = app.state::<AppState>();
     let backups = state.data_dir.backups_path();
-    let ledger = Ledger::open_with_backups(
+    let mut ledger = Ledger::open_with_backups(
         &state.data_dir.db_path(),
         &backups,
         key.as_ref(),
@@ -111,6 +119,7 @@ pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError
     let auto_backup = auto_backup_allowed(&startup);
     if auto_backup {
         run_auto_backup(&ledger, &backups);
+        run_auto_post(&mut ledger);
     } else {
         tracing::warn!("backup otomatis dimatikan untuk sesi ini");
     }
@@ -149,10 +158,11 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
                 let state = app.state::<AppState>();
                 let dir = state.data_dir.backups_path();
                 match state.ledger.lock() {
-                    Ok(slot) => {
+                    Ok(mut slot) => {
                         // Terkunci: tidak ada yang bisa di-backup sampai unlock.
-                        if let Some(ledger) = slot.as_ref() {
+                        if let Some(ledger) = slot.as_mut() {
                             run_auto_backup(ledger, &dir);
+                            run_auto_post(ledger);
                         }
                     }
                     Err(_) => tracing::warn!("mutex ledger poisoned; backup otomatis dilewati"),

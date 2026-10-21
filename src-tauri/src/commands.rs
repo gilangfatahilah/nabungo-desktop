@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use nabungo_app::security::{self, DbState};
 use nabungo_app::vault::KdfParams;
-use nabungo_app::{AppError, OffsetDateTime, PeriodStartDay, Uuid};
+use nabungo_app::{AppError, OffsetDateTime, PeriodStartDay, Recurrence, Uuid};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
@@ -14,9 +14,10 @@ use crate::dto::{
     AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BucketFieldsDto, BudgetAlertDto,
     BudgetOverviewDto, CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto,
     CategoryKindDto, ContactDto, LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto,
-    PayeeUsageDto, ReconciliationDto, SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto,
-    TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto,
-    UiSettingsDto, ValuationPointDto, parse_day, parse_id, parse_period,
+    PayeeUsageDto, ReconciliationDto, RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto,
+    SecurityStatusDto, ShareDto, StartupReportDto, TagUsageDto, ThemeDto, TxnDetailDto,
+    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
@@ -1036,4 +1037,125 @@ pub async fn change_password(
         Ok(ledger(&state)?.change_password(&old_password, &new_password, KdfParams::DEFAULT)?)
     })
     .await
+}
+
+// --- Transaksi terjadwal ---
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_rules(state: State<'_, AppState>) -> Result<Vec<RuleDto>, IpcError> {
+    let rows = ledger(&state)?.list_rules(nabungo_app::local_today())?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_rule(state: State<'_, AppState>, input: RuleInputDto) -> Result<String, IpcError> {
+    let input = input.try_into()?;
+    Ok(ledger(&state)?.create_rule(&input)?.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_rule(
+    state: State<'_, AppState>,
+    id: String,
+    input: RuleInputDto,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "recurring_rule")?;
+    let input = input.try_into()?;
+    Ok(ledger(&state)?.update_rule(id, &input)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_rule(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "recurring_rule")?;
+    Ok(ledger(&state)?.delete_rule(id)?)
+}
+
+/// `form` = form yang diedit user; `None` → template apa adanya.
+#[tauri::command]
+#[specta::specta]
+pub fn confirm_occurrence(
+    state: State<'_, AppState>,
+    id: String,
+    date: String,
+    form: Option<TxnFormDto>,
+) -> Result<SavedTxnDto, IpcError> {
+    let id = parse_id(&id, "recurring_rule")?;
+    let date = parse_day(&date)?;
+    let form = form.map(TryInto::try_into).transpose()?;
+    let (txn, alerts) = ledger(&state)?.confirm_occurrence_with_alerts(id, date, form.as_ref())?;
+    Ok(SavedTxnDto {
+        id: txn.to_string(),
+        alerts: alerts.into_iter().map(Into::into).collect(),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn skip_occurrence(
+    state: State<'_, AppState>,
+    id: String,
+    date: String,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "recurring_rule")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?.skip_occurrence(id, date)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn confirm_all_due(state: State<'_, AppState>, id: String) -> Result<u32, IpcError> {
+    let id = parse_id(&id, "recurring_rule")?;
+    Ok(ledger(&state)?.confirm_all_due(id, nabungo_app::local_today())?)
+}
+
+/// Pratinjau kejadian (maks 12) untuk form jadwal.
+#[tauri::command]
+#[specta::specta]
+pub fn preview_recurrence(
+    recurrence: RecurrenceDto,
+    start: String,
+    count: u32,
+) -> Result<Vec<String>, IpcError> {
+    let start = parse_day(&start)?;
+    let rule = Recurrence::new(
+        recurrence.freq.into(),
+        recurrence.interval,
+        start,
+        recurrence.until()?,
+    )
+    .map_err(AppError::from)?;
+    Ok(rule
+        .occurrences(start, count.min(12) as usize)
+        .into_iter()
+        .map(nabungo_app::format_date)
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::FreqDto;
+
+    #[test]
+    fn preview_recurrence_monthly_31() {
+        let rec = RecurrenceDto {
+            freq: FreqDto::Monthly,
+            interval: 1,
+            until: None,
+        };
+        assert_eq!(
+            preview_recurrence(rec.clone(), "2026-01-31".into(), 3).unwrap(),
+            vec!["2026-01-31", "2026-02-28", "2026-03-31"]
+        );
+        assert!(
+            preview_recurrence(rec, "2026-01-31".into(), 50)
+                .unwrap()
+                .len()
+                <= 12
+        );
+    }
 }

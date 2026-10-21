@@ -23,7 +23,13 @@ import PayeeCombobox from './PayeeCombobox.vue'
 import SplitEditor from './SplitEditor.vue'
 import TagInput from './TagInput.vue'
 
-const props = defineProps<{ initial: TxnFormState; id: string | null }>()
+// `submit` (K15): simpan alternatif, mis. jadwal berulang; tanpa prop memakai `store.save`.
+const props = defineProps<{
+  initial: TxnFormState
+  id: string | null
+  submit?: (s: TxnFormState) => Promise<string>
+  dateLabel?: string
+}>()
 const emit = defineEmits<{ saved: [id: string]; cancel: [] }>()
 
 const { t } = useI18n()
@@ -91,7 +97,7 @@ async function onPayee(name: string) {
   if (!touched.account && acc && !acc.archived) s.accountId = acc.id
 }
 
-async function submit() {
+async function onSubmit() {
   if (busy.value) return
   const refs = [dateInput.value, amountInput.value, transfer.value && s.feeEnabled ? feeInput.value : null, s.split && !transfer.value ? splitEditor.value : null]
   const ok = await Promise.all(refs.map((r) => r?.commit() ?? true))
@@ -99,7 +105,7 @@ async function submit() {
   busy.value = true
   error.value = null
   try {
-    emit('saved', await store.save(props.id, s))
+    emit('saved', await (props.submit ? props.submit(s) : store.save(props.id, s)))
   } catch (e) {
     error.value = errorMessage(e, t as unknown as Translate)
   } finally {
@@ -110,7 +116,7 @@ async function submit() {
 </script>
 
 <template>
-  <form class="flex min-h-0 flex-1 flex-col" novalidate @submit.prevent="submit" @keydown.ctrl.enter.prevent="submit" @keydown.meta.enter.prevent="submit">
+  <form class="flex min-h-0 flex-1 flex-col" novalidate @submit.prevent="onSubmit" @keydown.ctrl.enter.prevent="onSubmit" @keydown.meta.enter.prevent="onSubmit">
     <div data-testid="txn-form-body" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-1 pb-4">
       <Tabs v-model="s.kind">
         <TabsList class="w-full">
@@ -159,7 +165,7 @@ async function submit() {
           </Select>
         </div>
         <div class="flex flex-col gap-2">
-          <Label for="txn-date">{{ t('txn.date') }}</Label>
+          <Label for="txn-date">{{ dateLabel ?? t('txn.date') }}</Label>
           <DateInput id="txn-date" ref="dateInput" v-model="s.date" />
         </div>
       </div>
@@ -193,7 +199,9 @@ async function submit() {
       <Button v-else type="button" variant="ghost" size="sm" class="self-start text-muted-foreground" data-testid="txn-more" @click="showMore = true">
         <PlusIcon /> {{ t('txn.addDetails') }}
       </Button>
-      <AttachmentList v-show="showMore" :txn-id="id" @loaded="(n) => { if (n > 0) showMore = true }" />
+      <!-- Template jadwal tidak punya lampiran. -->
+      <AttachmentList v-if="!submit" v-show="showMore" :txn-id="id" @loaded="(n) => { if (n > 0) showMore = true }" />
+      <slot name="extra" :state="s" />
 
       <p v-if="error" class="text-meta text-destructive" role="alert">{{ error }}</p>
     </div>
