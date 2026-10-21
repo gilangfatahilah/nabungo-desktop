@@ -36,5 +36,6 @@ export const useAccountsStore = defineStore('accounts', () => {
     deleteAccountGroup: (id: string) => then(ipc.deleteAccountGroup(id)),
     reorderAccountGroups: (ids: string[]) => then(ipc.reorderAccountGroups(ids)),
     recordValuation: (id: string, date: string, value: number) => then(ipc.recordValuation(id, date, value)),
+    reconcile: (id: string, date: string, balance: number) => then(ipc.reconcileAccount(id, date, balance)),
   }
 })

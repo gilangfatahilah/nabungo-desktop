@@ -442,7 +442,7 @@ mod tests {
         assert_eq!(schema_version(&conn).unwrap(), 3);
         migrate(&mut conn).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), latest_version());
-        assert_eq!(latest_version(), 5);
+        assert_eq!(latest_version(), 6);
     }
 
     fn key(b: u8) -> DbKey {

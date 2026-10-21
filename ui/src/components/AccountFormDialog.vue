@@ -3,6 +3,7 @@ import { computed, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AmountInput from '@/components/AmountInput.vue'
 import DateInput from '@/components/DateInput.vue'
+import DebtDirection from '@/components/DebtDirection.vue'
 import IconColorPicker from '@/components/IconColorPicker.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import * as ipc from '@/ipc'
 import type { AccountDto, AccountFieldsDto, AccountKindDto } from '@/ipc'
 import { ACCOUNT_KINDS, isLiability, KIND_ICONS, openingSign } from '@/lib/accounts'
 import { todayIso } from '@/lib/date'
@@ -37,6 +39,9 @@ const creditLimit = ref(0)
 const statementDay = ref('')
 const icon = ref<string | null>(null)
 const color = ref<string | null>(null)
+const contact = ref('')
+const iOwe = ref(false)
+const contacts = ref<string[]>([])
 const error = ref<string | null>(null)
 const amountError = ref<string | null>(null)
 const busy = ref(false)
@@ -46,24 +51,35 @@ const amountInputs = [useTemplateRef<{ commit(): Promise<boolean> }>('openingInp
 
 const editing = computed(() => props.account !== undefined)
 const isCredit = computed(() => kind.value === 'credit_card')
+const isReceivable = computed(() => kind.value === 'receivable')
 
 function reset() {
   const a = props.account
   kind.value = a?.kind ?? 'bank'
   name.value = a?.name ?? ''
   group.value = (a ? a.groupId : props.groupId) ?? NO_GROUP
-  opening.value = a ? a.openingBalance * openingSign(a.kind) : 0
+  iOwe.value = a?.kind === 'receivable' && a.openingBalance < 0
+  opening.value = a ? a.openingBalance * openingSign(a.kind, iOwe.value) : 0
   openingDate.value = a?.openingDate ?? todayIso()
   includeInNetWorth.value = a?.includeInNetWorth ?? true
   creditLimit.value = a?.creditLimit ?? 0
   statementDay.value = a?.statementDay ? String(a.statementDay) : ''
   icon.value = a?.icon ?? null
   color.value = a?.color ?? null
+  contact.value = a?.contact ?? ''
   error.value = null
   amountError.value = null
 }
 
-watch(open, (v) => v && reset(), { immediate: true })
+async function loadContacts() {
+  contacts.value = (await ipc.listContacts()).map((c) => c.name)
+}
+
+watch(open, (v) => {
+  if (!v) return
+  reset()
+  void loadContacts()
+}, { immediate: true })
 
 function fields(): AccountFieldsDto {
   return {
@@ -74,8 +90,9 @@ function fields(): AccountFieldsDto {
     statementDay: isCredit.value && statementDay.value !== '' ? Number(statementDay.value) : null,
     icon: icon.value,
     color: color.value,
-    openingBalance: opening.value * openingSign(kind.value),
+    openingBalance: opening.value * openingSign(kind.value, iOwe.value),
     openingDate: openingDate.value,
+    contact: isReceivable.value ? contact.value.trim() || null : null,
   }
 }
 
@@ -138,6 +155,16 @@ async function submit() {
               </SelectContent>
             </Select>
           </div>
+          <template v-if="isReceivable">
+            <div class="col-span-2 flex flex-col gap-2">
+              <Label for="acc-contact">{{ t('accounts.contact') }}</Label>
+              <Input id="acc-contact" v-model="contact" list="acc-contacts" maxlength="80" />
+              <datalist id="acc-contacts">
+                <option v-for="c in contacts" :key="c" :value="c" />
+              </datalist>
+            </div>
+            <DebtDirection v-model="iOwe" class="col-span-2" />
+          </template>
           <div class="flex flex-col gap-2">
             <Label for="acc-opening">{{ isLiability(kind) ? t('accounts.openingDebt') : t('accounts.openingBalance') }}</Label>
             <AmountInput id="acc-opening" ref="openingInput" v-model="opening" @error="amountError = $event" />

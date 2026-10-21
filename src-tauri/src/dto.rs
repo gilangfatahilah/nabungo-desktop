@@ -4,10 +4,10 @@ use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
     AllocationPoint, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert, BudgetLevel,
     BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount, CategoryFields,
-    CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth, NetWorthPoint,
-    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail,
-    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
-    parse_date,
+    CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Locale, NetWorth, NetWorthPoint,
+    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, Reconciliation, SplitLine,
+    Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid,
+    ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -180,6 +180,8 @@ pub struct AccountFieldsDto {
     pub opening_balance: i64,
     /// `YYYY-MM-DD`
     pub opening_date: String,
+    /// Hanya untuk akun piutang/hutang.
+    pub contact: Option<String>,
 }
 
 impl TryFrom<AccountFieldsDto> for AccountFields {
@@ -196,6 +198,7 @@ impl TryFrom<AccountFieldsDto> for AccountFields {
             icon: d.icon,
             color: d.color,
             opening_balance: d.opening_balance,
+            contact: d.contact,
         })
     }
 }
@@ -218,6 +221,9 @@ pub struct AccountDto {
     /// 0 bila akun tidak punya saldo awal.
     pub opening_balance: i64,
     pub opening_date: Option<String>,
+    pub contact: Option<String>,
+    /// `YYYY-MM-DD` txn terakhir yang sudah direkonsiliasi.
+    pub reconciled_through: Option<String>,
 }
 
 impl From<AccountRow> for AccountDto {
@@ -237,6 +243,8 @@ impl From<AccountRow> for AccountDto {
             balance: a.balance,
             opening_balance: a.opening.as_ref().map_or(0, |o| o.amount),
             opening_date: a.opening.map(|o| format_date(o.date)),
+            contact: a.contact,
+            reconciled_through: a.reconciled_through.map(format_date),
         }
     }
 }
@@ -607,6 +615,8 @@ pub struct TxnRowDto {
     pub tags: Vec<String>,
     pub account_delta: Option<i64>,
     pub running_balance: Option<i64>,
+    /// Hanya saat difilter per akun.
+    pub reconciled: Option<bool>,
 }
 
 impl From<TxnListRow> for TxnRowDto {
@@ -626,6 +636,7 @@ impl From<TxnListRow> for TxnRowDto {
             tags: r.tags,
             account_delta: r.account_delta,
             running_balance: r.running_balance,
+            reconciled: r.reconciled,
         }
     }
 }
@@ -832,6 +843,41 @@ impl From<ValuationPoint> for ValuationPointDto {
             date: format_date(p.date),
             change: p.change,
             value: p.value,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconciliationDto {
+    pub adjustment_id: Option<String>,
+    pub difference: i64,
+    // u32 → number: jumlah posting satu akun jauh di bawah 2^32.
+    pub marked: u32,
+}
+
+impl From<Reconciliation> for ReconciliationDto {
+    fn from(r: Reconciliation) -> Self {
+        Self {
+            adjustment_id: r.adjustment.map(|a| a.to_string()),
+            difference: r.difference,
+            marked: u32::try_from(r.marked).unwrap_or(u32::MAX),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactDto {
+    pub id: String,
+    pub name: String,
+}
+
+impl From<ContactRow> for ContactDto {
+    fn from(c: ContactRow) -> Self {
+        Self {
+            id: c.id.to_string(),
+            name: c.name,
         }
     }
 }
@@ -1115,7 +1161,30 @@ mod tests {
             color: None,
             opening_balance: 1_000,
             opening_date: "2026-10-17".into(),
+            contact: Some("Budi".into()),
         }
+    }
+
+    #[test]
+    fn reconciliation_and_contact_dto_serialize_camel_case() {
+        let id = Uuid::now_v7();
+        let dto = ReconciliationDto::from(Reconciliation {
+            adjustment: Some(id),
+            difference: -15_000,
+            marked: 3,
+        });
+        assert_eq!(
+            serde_json::to_value(&dto).unwrap(),
+            serde_json::json!({ "adjustmentId": id.to_string(), "difference": -15_000, "marked": 3 })
+        );
+        let c = ContactDto::from(ContactRow {
+            id,
+            name: "Budi".into(),
+        });
+        assert_eq!(
+            serde_json::to_value(&c).unwrap(),
+            serde_json::json!({ "id": id.to_string(), "name": "Budi" })
+        );
     }
 
     #[test]
@@ -1293,6 +1362,7 @@ mod tests {
         assert_eq!(f.group_id, Some(g));
         assert_eq!(format_date(f.opening_date), "2026-10-17");
         assert_eq!(f.opening_balance, 1_000);
+        assert_eq!(f.contact.as_deref(), Some("Budi"));
     }
 
     #[test]
@@ -1431,6 +1501,7 @@ mod tests {
             tags: vec![],
             account_delta: Some(-206_500),
             running_balance: Some(5_768_500),
+            reconciled: None,
         };
         let v = serde_json::to_value(TxnRowDto::from(row)).unwrap();
         assert_eq!(v["kind"], "transfer");

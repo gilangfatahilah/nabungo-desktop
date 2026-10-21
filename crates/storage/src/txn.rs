@@ -194,6 +194,17 @@ pub fn last_fee_category(conn: &Connection) -> Result<Option<Uuid>> {
 }
 
 /// Soft delete transaksi aktif. `false` bila ID tidak ada atau sudah terhapus.
+/// Tandai posting `account_id` milik txn aktif bertanggal ≤ `through` sebagai reconciled
+/// (ACC-04). Mengembalikan jumlah posting yang cocok.
+pub fn mark_reconciled(tx: &Transaction, account_id: Uuid, through: Date) -> Result<usize> {
+    Ok(tx.execute(
+        "UPDATE posting SET reconciled = 1
+         WHERE account_id = ?1 AND txn_id IN
+               (SELECT id FROM txn WHERE deleted_at IS NULL AND status = 'posted' AND date <= ?2)",
+        params![account_id.to_string(), format_date(through)],
+    )?)
+}
+
 pub fn soft_delete(tx: &Transaction, id: Uuid, now: &str) -> Result<bool> {
     let changed = tx.execute(
         "UPDATE txn SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",

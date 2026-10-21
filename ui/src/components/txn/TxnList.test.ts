@@ -17,10 +17,10 @@ beforeAll(async () => {
   bca = await ipc.completeOnboarding({
     locale: 'id', periodStartDay: 1, accountKind: 'bank',
     account: { name: 'BCA', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-01' },
+      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-01', contact: null },
   })
   dompet = await ipc.createAccount('cash', { name: 'Dompet', groupId: null, includeInNetWorth: true, creditLimit: null,
-    statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01' })
+    statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: null })
   const cats = Object.fromEntries((await ipc.listCategories()).map((c) => [c.name, c.id]))
   transferId = (await ipc.createTxn({ kind: 'transfer', date: '2026-10-03', accountId: bca, toAccountId: dompet,
     amount: 200_000, splits: [], fee: null, payee: null, note: null, tags: [] })).id
@@ -72,6 +72,17 @@ describe('TxnList', () => {
     expect(running).not.toBeNull()
     // 1.000.000 − 200.000 − 25.000
     expect(running!.textContent).toContain('775.000')
+  })
+
+  it('ikon reconciled hanya pada baris yang sudah direkonsiliasi', async () => {
+    // Saldo BCA per 3 Okt = 1.000.000 − 200.000: cocok, menandai opening + transfer saja.
+    await ipc.reconcileAccount(bca, '2026-10-03', 800_000)
+    await mountList()
+    expect(document.body.querySelector('[data-testid="txn-reconciled"]')).toBeNull()
+    await useTransactionsStore().setQuery({ accountId: bca })
+    await settle()
+    expect(rowEl(transferId).querySelector('[data-testid="txn-reconciled"]')).not.toBeNull()
+    expect(rowEl(expenseId).querySelector('[data-testid="txn-reconciled"]')).toBeNull()
   })
 
   it('Delete pada baris fokus memanggil store.remove', async () => {

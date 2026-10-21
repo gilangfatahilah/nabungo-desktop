@@ -44,6 +44,12 @@ impl AccountKind {
     pub fn is_liability(self) -> bool {
         matches!(self, Self::CreditCard | Self::Loan)
     }
+
+    /// Klasifikasi saldo untuk net worth & alokasi: piutang/hutang bersaldo negatif
+    /// berarti user berutang, jadi dihitung sebagai liabilitas (D10).
+    pub fn counts_as_liability(self, balance: i64) -> bool {
+        self.is_liability() || (self == Self::Receivable && balance < 0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -137,6 +143,16 @@ mod tests {
             .filter(|k| k.is_liability())
             .collect();
         assert_eq!(liabilities, [AccountKind::CreditCard, AccountKind::Loan]);
+    }
+
+    #[test]
+    fn counts_as_liability_by_kind_and_sign() {
+        assert!(AccountKind::Loan.counts_as_liability(100));
+        assert!(AccountKind::CreditCard.counts_as_liability(0));
+        assert!(AccountKind::Receivable.counts_as_liability(-1));
+        assert!(!AccountKind::Receivable.counts_as_liability(0));
+        assert!(!AccountKind::Receivable.counts_as_liability(5));
+        assert!(!AccountKind::Bank.counts_as_liability(-5));
     }
 
     #[test]

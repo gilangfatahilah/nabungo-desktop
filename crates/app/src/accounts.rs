@@ -6,6 +6,7 @@ use nabungo_core::{
 };
 use nabungo_storage::account::{self, AccountPatch, AccountRow, NewAccount};
 use nabungo_storage::account_group::{self, AccountGroupRow};
+use nabungo_storage::contact::{self, ContactRow};
 use nabungo_storage::rusqlite::{Connection, Transaction};
 use nabungo_storage::{now_utc, txn};
 use time::Date;
@@ -25,6 +26,8 @@ pub struct AccountFields {
     pub color: Option<String>,
     pub opening_balance: i64,
     pub opening_date: Date,
+    /// Nama kontak; hanya dipakai untuk `receivable` (piutang/hutang), jenis lain diabaikan.
+    pub contact: Option<String>,
 }
 
 impl AccountFields {
@@ -40,6 +43,7 @@ impl AccountFields {
             color: None,
             opening_balance,
             opening_date,
+            contact: None,
         }
     }
 }
@@ -51,12 +55,15 @@ pub struct AccountsOverview {
     pub net_worth: NetWorth,
 }
 
-/// Validasi isian form akun → patch storage. Limit & tanggal tagihan hanya untuk kartu kredit.
+/// Validasi isian form akun → patch storage. Limit & tanggal tagihan hanya untuk kartu kredit;
+/// kontak hanya untuk piutang/hutang (dibuat bila belum ada, tanpa membedakan huruf).
 fn to_patch(
-    conn: &Connection,
+    tx: &Transaction,
     kind: AccountKind,
     f: &AccountFields,
+    now: &str,
 ) -> Result<AccountPatch, AppError> {
+    let conn: &Connection = tx;
     let name = normalize_name(&f.name)?;
     let (credit_limit, statement_day) = if kind == AccountKind::CreditCard {
         (
@@ -79,6 +86,12 @@ fn to_patch(
         statement_day,
         icon: f.icon.clone(),
         color: f.color.clone(),
+        contact_id: match f.contact.as_deref().map(str::trim) {
+            Some(c) if kind == AccountKind::Receivable && !c.is_empty() => {
+                Some(contact::ensure_contact(tx, &normalize_name(c)?, now)?)
+            }
+            _ => None,
+        },
     })
 }
 
@@ -114,7 +127,7 @@ pub(crate) fn insert_account_tx(
     f: &AccountFields,
     now: &str,
 ) -> Result<Uuid, AppError> {
-    let p = to_patch(tx, kind, f)?;
+    let p = to_patch(tx, kind, f, now)?;
     let new = NewAccount {
         name: p.name,
         kind,
@@ -125,6 +138,7 @@ pub(crate) fn insert_account_tx(
         statement_day: p.statement_day,
         icon: p.icon,
         color: p.color,
+        contact_id: p.contact_id,
     };
     let id = account::insert_account(tx, &new, now)?;
     let account = AccountRef {
@@ -156,17 +170,22 @@ impl Ledger {
         Ok(id)
     }
 
-    /// Ubah akun; saldo awal ditulis ulang (dibuat, diganti, atau dihapus bila 0).
+    /// Ubah akun; saldo awal ditulis ulang (dibuat, diganti, atau dihapus bila 0) hanya bila
+    /// nominal/tanggalnya berubah, agar tanda reconciled-nya tidak hilang karena ganti nama dsb.
     pub fn update_account(&mut self, id: Uuid, fields: &AccountFields) -> Result<(), AppError> {
         let now = now_utc();
         let tx = self.conn.transaction()?;
         let account = account::get_account_ref(&tx, id)?
             .ok_or(AppError::NotFound("account"))?
             .value;
-        let patch = to_patch(&tx, account.kind, fields)?;
+        let patch = to_patch(&tx, account.kind, fields, &now)?;
         account::update_account(&tx, id, &patch, &now)?;
-        account::delete_opening(&tx, id)?;
-        insert_opening(&tx, account, fields, &now)?;
+        let wanted =
+            (fields.opening_balance != 0).then_some((fields.opening_balance, fields.opening_date));
+        if account::opening_of(&tx, id)? != wanted {
+            account::delete_opening(&tx, id)?;
+            insert_opening(&tx, account, fields, &now)?;
+        }
         tx.commit()?;
         Ok(())
     }
@@ -269,6 +288,11 @@ impl Ledger {
 
     /// Group, akun (termasuk diarsip) beserta saldo, dan net worth akun
     /// `include_in_net_worth` — arsip tidak mengeluarkan akun dari net worth.
+    /// Kontak untuk saran nama di form akun piutang/hutang.
+    pub fn list_contacts(&self) -> Result<Vec<ContactRow>, AppError> {
+        Ok(contact::list_contacts(&self.conn)?)
+    }
+
     pub fn accounts_overview(&self) -> Result<AccountsOverview, AppError> {
         let groups = account_group::list_groups(&self.conn)?;
         let accounts = account::list_accounts(&self.conn)?;
@@ -316,6 +340,75 @@ mod tests {
                 r.get(0)
             })
             .unwrap()
+    }
+
+    fn receivable(ledger: &mut Ledger, name: &str, contact: Option<&str>, opening: i64) -> Uuid {
+        let mut f = fields(name, opening);
+        f.contact = contact.map(str::to_owned);
+        ledger.create_account(AccountKind::Receivable, &f).unwrap()
+    }
+
+    fn contact_names(ledger: &Ledger) -> Vec<String> {
+        ledger
+            .list_contacts()
+            .unwrap()
+            .into_iter()
+            .map(|c| c.name)
+            .collect()
+    }
+
+    #[test]
+    fn receivable_contact_created_and_listed() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let id = receivable(&mut ledger, "Pinjaman Budi", Some(" Budi "), 0);
+        assert_eq!(find(&ledger, id).contact.as_deref(), Some("Budi"));
+        assert_eq!(contact_names(&ledger), ["Budi"]);
+    }
+
+    #[test]
+    fn contact_reused_case_insensitively() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        receivable(&mut ledger, "Pinjaman Budi", Some("Budi"), 0);
+        let second = receivable(&mut ledger, "Utang ke Budi", Some("budi"), 0);
+        assert_eq!(contact_names(&ledger), ["Budi"]);
+        assert_eq!(find(&ledger, second).contact.as_deref(), Some("Budi"));
+    }
+
+    #[test]
+    fn contact_ignored_for_non_receivable() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let mut f = fields("BCA", 0);
+        f.contact = Some("Budi".into());
+        let id = ledger.create_account(AccountKind::Bank, &f).unwrap();
+        assert_eq!(find(&ledger, id).contact, None);
+        assert!(contact_names(&ledger).is_empty());
+    }
+
+    #[test]
+    fn empty_contact_is_none_and_long_rejected() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let id = receivable(&mut ledger, "Pinjaman", Some("  "), 0);
+        assert_eq!(find(&ledger, id).contact, None);
+        let mut f = fields("Pinjaman 2", 0);
+        f.contact = Some("x".repeat(nabungo_core::MAX_NAME_LEN + 1));
+        assert!(matches!(
+            ledger.create_account(AccountKind::Receivable, &f),
+            Err(AppError::Catalog(CatalogError::NameTooLong))
+        ));
+        let mut patch = fields("Pinjaman", 0);
+        patch.contact = Some("Ani".into());
+        ledger.update_account(id, &patch).unwrap();
+        assert_eq!(find(&ledger, id).contact.as_deref(), Some("Ani"));
+    }
+
+    #[test]
+    fn receivable_payable_opening_counts_in_net_worth() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let before = ledger.accounts_overview().unwrap().net_worth;
+        receivable(&mut ledger, "Utang ke Ani", Some("Ani"), -50_000);
+        let after = ledger.accounts_overview().unwrap().net_worth;
+        assert_eq!(after.liabilities, before.liabilities + 50_000);
+        assert_eq!(after.assets, before.assets);
     }
 
     #[test]

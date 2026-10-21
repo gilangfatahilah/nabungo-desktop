@@ -592,6 +592,44 @@ mod tests {
             );
         }
 
+        /// Salin semua baris `src` ke `conn` (skema lebih lama), hanya kolom yang
+        /// ada di skema lama.
+        fn copy_into_old_schema(
+            conn: &nabungo_storage::rusqlite::Connection,
+            src: &std::path::Path,
+        ) {
+            conn.execute_batch("PRAGMA foreign_keys = OFF").unwrap();
+            conn.execute("ATTACH DATABASE ?1 AS src", [src.to_str().unwrap()])
+                .unwrap();
+            let tables: Vec<String> = conn
+                .prepare(
+                    "SELECT name FROM main.sqlite_master WHERE type = 'table'
+                     AND name NOT LIKE 'sqlite_%'",
+                )
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            for t in tables {
+                let cols: Vec<String> = conn
+                    .prepare(&format!("SELECT name FROM pragma_table_info('{t}')"))
+                    .unwrap()
+                    .query_map([], |r| r.get(0))
+                    .unwrap()
+                    .collect::<Result<_, _>>()
+                    .unwrap();
+                let cols = cols.join(", ");
+                conn.execute(
+                    &format!("INSERT OR REPLACE INTO main.{t} ({cols}) SELECT {cols} FROM src.{t}"),
+                    [],
+                )
+                .unwrap();
+            }
+            conn.execute_batch("DETACH DATABASE src; PRAGMA foreign_keys = ON")
+                .unwrap();
+        }
+
         /// Onboarding + Dompet + investasi; kembalikan id BCA.
         fn seed(l: &mut Ledger) -> crate::Uuid {
             let opening = date!(2026 - 10 - 01);
@@ -734,16 +772,21 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let old = dir.path().join("old.db");
             let expected = {
-                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
-                nabungo_storage::migrate_to(&mut conn, 4).unwrap();
-                // 0005 hanya menambah index, jadi use case jalan di skema 4.
+                // Seed di skema terbaru, lalu salin kolom yang dikenal skema 4
+                // ke DB lama (use case menulis kolom yang belum ada di skema 4).
+                let src = dir.path().join("src.db");
                 let mut l = Ledger {
-                    conn,
+                    conn: nabungo_storage::open(&src, None).unwrap(),
                     path: None,
                     key: None,
                 };
                 seed(&mut l);
-                snapshot(&l)
+                let expected = snapshot(&l);
+                drop(l);
+                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
+                nabungo_storage::migrate_to(&mut conn, 4).unwrap();
+                copy_into_old_schema(&conn, &src);
+                expected
             };
             assert_eq!(
                 nabungo_storage::schema_version(&nabungo_storage::open_file(&old, None).unwrap())

@@ -7,6 +7,7 @@ import AccountFormDialog from '@/components/AccountFormDialog.vue'
 import AccountList from '@/components/AccountList.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import MoneyText from '@/components/MoneyText.vue'
+import ReconcileDialog from '@/components/ReconcileDialog.vue'
 import ValuationDialog from '@/components/ValuationDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -56,6 +57,13 @@ const valuating = ref<AccountDto | null>(null)
 function valuate(a: AccountDto) {
   valuating.value = a
   valuationOpen.value = true
+}
+
+const reconcileOpen = ref(false)
+const reconciling = ref<AccountDto | null>(null)
+function reconcile(a: AccountDto) {
+  reconciling.value = a
+  reconcileOpen.value = true
 }
 
 function move(accountId: string, groupId: string | null, index: number) {
@@ -218,6 +226,7 @@ async function saveGroup() {
         @move="move"
         @edit="edit"
         @valuate="valuate"
+        @reconcile="reconcile"
         @archive="archive"
         @delete="remove"
       />
@@ -237,6 +246,7 @@ async function saveGroup() {
 
     <AccountFormDialog v-model:open="formOpen" :account="editing" :group-id="formGroup" />
     <ValuationDialog v-if="valuating" v-model:open="valuationOpen" :account="valuating" />
+    <ReconcileDialog v-if="reconciling" v-model:open="reconcileOpen" :account="reconciling" />
 
     <ConfirmDialog
       v-if="pending"

@@ -10,6 +10,7 @@ pub mod account_group;
 pub mod allocation;
 pub mod budget;
 pub mod category;
+pub mod contact;
 pub mod export;
 mod file;
 mod key;
@@ -123,6 +124,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0003_catalog_indexes.sql"),
     include_str!("../migrations/0004_txn_indexes.sql"),
     include_str!("../migrations/0005_allocation_names.sql"),
+    include_str!("../migrations/0006_contact.sql"),
 ];
 
 /// Versi skema terbaru (`user_version` setelah semua migrasi).
@@ -228,6 +230,31 @@ mod tests {
                 .unwrap();
             assert_eq!(n, 1, "missing index {index}");
         }
+    }
+
+    #[test]
+    fn migration_0006_contact_schema() {
+        let conn = open_in_memory().unwrap();
+        let n: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('account') WHERE name = 'contact_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+        conn.execute(
+            "INSERT INTO contact (id, name, created_at, updated_at) VALUES ('a', 'Budi', '', '')",
+            [],
+        )
+        .unwrap();
+        assert!(
+            conn.execute(
+                "INSERT INTO contact (id, name, created_at, updated_at) VALUES ('b', 'budi', '', '')",
+                [],
+            )
+            .is_err()
+        );
     }
 
     #[test]

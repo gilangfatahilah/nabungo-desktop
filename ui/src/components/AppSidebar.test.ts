@@ -19,7 +19,7 @@ async function mountSidebar(path: string) {
     groups: [],
     accounts: [{ id: 'bca', name: 'BCA', kind: 'bank', groupId: null, includeInNetWorth: true, creditLimit: null,
       statementDay: null, icon: null, color: null, sortOrder: 0, archived: false, balance: 4_343_000,
-      openingBalance: 4_343_000, openingDate: '2026-10-01' }],
+      openingBalance: 4_343_000, openingDate: '2026-10-01', contact: null, reconciledThrough: null }],
     netWorth: { assets: 4_343_000, liabilities: 0, net: 4_343_000 },
   }
   store.loaded = true

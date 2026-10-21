@@ -58,6 +58,11 @@ export const commands = {
 	recordValuation: (accountId: string, date: string, value: number) => typedError<string, IpcError>(__TAURI_INVOKE("record_valuation", { accountId, date, value })),
 	/**  Riwayat valuation, terbaru dulu. */
 	valuationHistory: (accountId: string) => typedError<ValuationPointDto[], IpcError>(__TAURI_INVOKE("valuation_history", { accountId })),
+	/**  Samakan saldo akun per akhir `date` dengan `balance` (ACC-04). */
+	reconcileAccount: (accountId: string, date: string, balance: number) => typedError<ReconciliationDto, IpcError>(__TAURI_INVOKE("reconcile_account", { accountId, date, balance })),
+	/**  Saldo tercatat akun per akhir `date` (bertanda). */
+	accountBalanceAsOf: (accountId: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("account_balance_as_of", { accountId, date })),
+	listContacts: () => typedError<ContactDto[], IpcError>(__TAURI_INVOKE("list_contacts")),
 	listAllocation: () => typedError<AllocationOverviewDto, IpcError>(__TAURI_INVOKE("list_allocation")),
 	createBucket: (fields: BucketFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_bucket", { fields })),
 	updateBucket: (id: string, fields: BucketFieldsDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_bucket", { id, fields })),
@@ -108,6 +113,9 @@ export type AccountDto = {
 	/**  0 bila akun tidak punya saldo awal. */
 	openingBalance: number,
 	openingDate: string | null,
+	contact: string | null,
+	/**  `YYYY-MM-DD` txn terakhir yang sudah direkonsiliasi. */
+	reconciledThrough: string | null,
 };
 
 export type AccountFieldsDto = {
@@ -121,6 +129,8 @@ export type AccountFieldsDto = {
 	openingBalance: number,
 	/**  `YYYY-MM-DD` */
 	openingDate: string,
+	/**  Hanya untuk akun piutang/hutang. */
+	contact: string | null,
 };
 
 export type AccountGroupDto = {
@@ -296,6 +306,11 @@ export type CategoryFieldsDto = {
 
 export type CategoryKindDto = "income" | "expense";
 
+export type ContactDto = {
+	id: string,
+	name: string,
+};
+
 export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
 
 export type FeeDto = {
@@ -352,6 +367,12 @@ export type PostingDto = {
 	categoryId: string | null,
 	amount: number,
 	memo: string | null,
+};
+
+export type ReconciliationDto = {
+	adjustmentId: string | null,
+	difference: number,
+	marked: number,
 };
 
 /**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */
@@ -458,6 +479,8 @@ export type TxnRowDto = {
 	tags: string[],
 	accountDelta: number | null,
 	runningBalance: number | null,
+	/**  Hanya saat difilter per akun. */
+	reconciled: boolean | null,
 };
 
 export type UiSettingsDto = {

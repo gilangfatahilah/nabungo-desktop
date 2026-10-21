@@ -250,6 +250,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 - Baris 1: payee (atau nama kategori bila payee kosong), `text-body` 500.
 - Baris 2 (`text-meta`, Tinta pudar): kategori anak saja, dengan induk di tooltip; akun; tag sebagai teks `#tag`. Pemisah berupa jarak 12px, bukan `·` atau `›`.
 - Kanan: nominal bertanda dengan warna semantik; di bawahnya saldo berjalan (bila filter satu akun).
+- Bila filter satu akun, transaksi yang sudah direkonsiliasi diberi ikon lingkaran centang kecil (14px, Tinta pudar) di akhir baris 2, dengan label/tooltip "Sudah direkonsiliasi". Tanpa filter akun ikon tidak tampil.
 - Menu `⋯` hanya terlihat saat hover/fokus baris. Baris bisa difokus (Tab/↑↓), dan `Enter` membuka edit, `Delete` menghapus.
 - Hover: latar Kanvas. Terfokus: ring Zamrud di dalam baris.
 
@@ -331,6 +332,11 @@ Header sticky (judul + toolbar §8.6), lalu daftar virtual §8.5. Tidak ada kota
 ### 9.3 Akun
 
 Tabel datar per grup (bukan kartu bersarang). Grup berupa header baris dengan subtotal di kanan. Kolom: tile ikon jenis, nama + jenis (meta), saldo (kanan, `num`), `⋯`. Akun terarsip di seksi terlipat "Diarsipkan (n)" di bawah.
+
+- Akun Piutang/Hutang: meta menampilkan arah dari tanda saldo ("Piutang" bila positif, "Hutang" bila negatif, "Lunas" bila 0) menggantikan nama jenis, dan saldo tampil tanpa tanda minus (Hutang tetap berwarna Bata). Nama kontak menyusul di meta.
+- Meta juga memuat "Direkonsiliasi s.d. {tanggal}" bila akun pernah direkonsiliasi. Bagian meta dipisah ` · `.
+- Menu `⋯` berisi "Rekonsiliasi…" untuk semua jenis kecuali investasi (investasi memakai "Perbarui nilai…"). Dialog rekonsiliasi menampilkan saldo tercatat per tanggal terpilih (dibaca ulang saat tanggal diganti), input saldo riil (utang diketik positif) dan tanggal; hasilnya disampaikan lewat toast (selisih yang dicatat, atau saldo cocok).
+- Form akun Piutang/Hutang punya input Kontak (saran dari kontak yang ada) dan segmented control arah "Mereka berutang ke saya | Saya berutang ke mereka".
 
 ### 9.4 Kategori
 

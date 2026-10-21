@@ -34,6 +34,8 @@ import {
   type StartupReportDto,
   type UiSettingsDto,
   type ValuationPointDto,
+  type ContactDto,
+  type ReconciliationDto,
 } from './bindings'
 import { browserCommands } from './browser'
 
@@ -63,6 +65,8 @@ export type {
   ShareDto,
   UnallocatedDto,
   ValuationPointDto,
+  ContactDto,
+  ReconciliationDto,
   WarningDto,
   BudgetRowDto,
   BudgetTotalDto,
@@ -319,6 +323,20 @@ export function recordValuation(accountId: string, date: string, value: number):
 
 export function valuationHistory(accountId: string): Promise<ValuationPointDto[]> {
   return unwrap(api().valuationHistory(accountId))
+}
+
+// --- Rekonsiliasi & kontak ---
+
+export function reconcileAccount(accountId: string, date: string, balance: number): Promise<ReconciliationDto> {
+  return unwrap(api().reconcileAccount(accountId, date, balance))
+}
+
+export function accountBalanceAsOf(accountId: string, date: string): Promise<number> {
+  return unwrap(api().accountBalanceAsOf(accountId, date))
+}
+
+export function listContacts(): Promise<ContactDto[]> {
+  return unwrap(api().listContacts())
 }
 
 // --- Alokasi modal ---

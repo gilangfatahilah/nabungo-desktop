@@ -12,9 +12,10 @@ use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto,
     CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
-    LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, SavedTxnDto, SecurityStatusDto,
-    ShareDto, StartupReportDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto,
-    TxnQueryDto, UiSettingsDto, ValuationPointDto, parse_day, parse_id, parse_period,
+    ContactDto, LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ReconciliationDto,
+    SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto, ThemeDto, TxnDetailDto,
+    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
@@ -441,6 +442,47 @@ pub fn valuation_history(
     let account_id = parse_id(&account_id, "account")?;
     Ok(ledger(&state)?
         .valuation_history(account_id)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+// --- Rekonsiliasi & kontak ---
+
+/// Samakan saldo akun per akhir `date` dengan `balance` (ACC-04).
+#[tauri::command]
+#[specta::specta]
+pub fn reconcile_account(
+    state: State<'_, AppState>,
+    account_id: String,
+    date: String,
+    balance: i64,
+) -> Result<ReconciliationDto, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?
+        .reconcile_account(account_id, date, balance)?
+        .into())
+}
+
+/// Saldo tercatat akun per akhir `date` (bertanda).
+#[tauri::command]
+#[specta::specta]
+pub fn account_balance_as_of(
+    state: State<'_, AppState>,
+    account_id: String,
+    date: String,
+) -> Result<i64, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?.balance_as_of(account_id, date)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_contacts(state: State<'_, AppState>) -> Result<Vec<ContactDto>, IpcError> {
+    Ok(ledger(&state)?
+        .list_contacts()?
         .into_iter()
         .map(Into::into)
         .collect())

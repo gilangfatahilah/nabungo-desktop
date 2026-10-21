@@ -17,7 +17,7 @@ pub fn net_worth(
 ) -> Result<NetWorth, MoneyError> {
     let (mut assets, mut liabilities) = (0i128, 0i128);
     for (kind, balance) in items {
-        if kind.is_liability() {
+        if kind.counts_as_liability(balance) {
             liabilities -= i128::from(balance);
         } else {
             assets += i128::from(balance);
@@ -50,6 +50,24 @@ mod tests {
                 assets: 1_250_000,
                 liabilities: 1_400_000,
                 net: -150_000
+            }
+        );
+    }
+
+    #[test]
+    fn negative_receivable_is_liability() {
+        let nw = net_worth([
+            (AccountKind::Bank, 1_000),
+            (AccountKind::Receivable, 300),
+            (AccountKind::Receivable, -200),
+        ])
+        .unwrap();
+        assert_eq!(
+            nw,
+            NetWorth {
+                assets: 1_300,
+                liabilities: 200,
+                net: 1_100
             }
         );
     }

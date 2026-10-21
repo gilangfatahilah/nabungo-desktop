@@ -16,7 +16,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { AccountDto, BucketDto } from '@/ipc'
-import { isLiability } from '@/lib/accounts'
+import { countsAsLiability } from '@/lib/accounts'
 import { formatPeriod } from '@/lib/date'
 import { moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
@@ -69,7 +69,7 @@ const segments = computed(() => [
 
 // Akun aset aktif, plus akun aset terarsip yang masih bersaldo (masih ikut dihitung di total aset).
 const assetAccounts = computed(() =>
-  accounts.overview.accounts.filter((a) => !isLiability(a.kind) && (!a.archived || a.balance !== 0)),
+  accounts.overview.accounts.filter((a) => !countsAsLiability(a.kind, a.balance) && (!a.archived || a.balance !== 0)),
 )
 function mappingSummary(accountId: string): string | null {
   const mine = (o.value?.mappings ?? []).filter((m) => m.accountId === accountId)

@@ -12,7 +12,7 @@ describe('accounts store (fallback browser)', () => {
     expect(group).toBeTruthy()
     await s.createAccount('bank', {
       name: 'BCA', groupId: group!.id, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-17',
+      icon: null, color: null, openingBalance: 1_000_000, openingDate: '2026-10-17', contact: null,
     })
     const bca = s.overview.accounts.find((a) => a.name === 'BCA')
     expect(bca?.balance).toBe(1_000_000)
@@ -28,7 +28,7 @@ describe('net worth fallback browser', () => {
     const s = useAccountsStore()
     const id = await s.createAccount('cash', {
       name: 'Celengan', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 250_000, openingDate: '2026-10-17',
+      icon: null, color: null, openingBalance: 250_000, openingDate: '2026-10-17', contact: null,
     })
     const before = s.overview.netWorth.net
     await s.archiveAccount(id)

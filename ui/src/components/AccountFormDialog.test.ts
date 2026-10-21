@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
+import * as ipc from '@/ipc'
 import type { AccountDto } from '@/ipc'
 import { useAccountsStore } from '@/stores/accounts'
 import AccountFormDialog from './AccountFormDialog.vue'
@@ -11,7 +12,7 @@ import AccountFormDialog from './AccountFormDialog.vue'
 function account(kind: AccountDto['kind']): AccountDto {
   return {
     id: 'a1', name: 'Kartu', kind, groupId: null, includeInNetWorth: true, creditLimit: 5_000_000, statementDay: 20,
-    icon: null, color: null, sortOrder: 1, archived: false, balance: -100_000, openingBalance: 0, openingDate: null,
+    icon: null, color: null, sortOrder: 1, archived: false, balance: -100_000, openingBalance: 0, openingDate: null, contact: null, reconciledThrough: null,
   }
 }
 
@@ -110,3 +111,51 @@ describe('AccountFormDialog', () => {
   })
 })
 
+
+describe('AccountFormDialog piutang/hutang', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    i18n.global.locale.value = 'id'
+  })
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  async function pickKind(label: string) {
+    key($('[data-testid="kind"]')!, 'Enter')
+    await flushPromises()
+    key([...document.body.querySelectorAll('[role="option"]')].find((o) => o.textContent?.trim() === label)!, 'Enter')
+    await flushPromises()
+  }
+
+  it('receivable: kontak + arah "Saya berutang" mengirim saldo awal negatif', async () => {
+    await ipc.createAccount('receivable', {
+      name: 'Piutang Sari', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: 'Sari',
+    })
+    const store = useAccountsStore()
+    const spy = vi.spyOn(store, 'createAccount').mockResolvedValue('x')
+    await open()
+    expect($('#acc-contact')).toBeNull()
+    await pickKind(id.accountKinds.receivable)
+    expect($('#acc-contact')).not.toBeNull()
+    const options = [...document.body.querySelectorAll('datalist option')].map((o) => (o as HTMLOptionElement).value)
+    expect(options).toContain('Sari')
+    ;($('[data-testid="direction-iOwe"]') as HTMLElement).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+    await flushPromises()
+    await type('#acc-name', 'Hutang Budi')
+    await type('#acc-contact', 'Budi')
+    await type('#acc-opening', '50000')
+    ;($('form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(spy.mock.calls[0]![0]).toBe('receivable')
+    expect(spy.mock.calls[0]![1]).toMatchObject({ openingBalance: -50_000, contact: 'Budi' })
+  })
+
+  it('edit hutang memilih arah "Saya berutang" dan saldo positif', async () => {
+    await open({ account: { ...account('receivable'), openingBalance: -50_000, contact: 'Budi' } })
+    expect($('[data-testid="direction-iOwe"]')?.getAttribute('data-state')).toBe('active')
+    expect(($('#acc-opening') as HTMLInputElement).value).toBe('50000')
+    expect(($('#acc-contact') as HTMLInputElement).value).toBe('Budi')
+  })
+})

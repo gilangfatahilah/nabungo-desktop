@@ -42,6 +42,7 @@ struct JsonAccount<'a> {
     archived: bool,
     /// Dihitung dari postings saat ekspor (K15).
     balance: i64,
+    contact: Option<&'a str>,
 }
 
 #[derive(Serialize)]
@@ -80,6 +81,7 @@ struct JsonPosting {
     amount: i64,
     currency: String,
     memo: Option<String>,
+    reconciled: bool,
 }
 
 impl From<ExportTxn> for JsonTxn {
@@ -101,6 +103,7 @@ impl From<ExportTxn> for JsonTxn {
                     amount: p.amount,
                     currency: p.currency,
                     memo: p.memo,
+                    reconciled: p.reconciled,
                 })
                 .collect(),
         }
@@ -275,6 +278,7 @@ impl Ledger {
             "archived",
             "include_in_net_worth",
             "balance",
+            "contact",
         ])
         .map_err(csv_err)?;
         for a in &accounts {
@@ -291,6 +295,7 @@ impl Ledger {
                 bool_cell(a.archived),
                 bool_cell(a.include_in_net_worth),
                 &a.balance.to_string(),
+                &cell(a.contact.as_deref().unwrap_or("")),
             ])
             .map_err(csv_err)?;
         }
@@ -373,6 +378,7 @@ fn json_account(a: &AccountRow) -> JsonAccount<'_> {
         statement_day: a.statement_day,
         archived: a.archived,
         balance: a.balance,
+        contact: a.contact.as_deref(),
     }
 }
 
@@ -425,7 +431,12 @@ mod tests {
 
     #[test]
     fn json_export_has_all_collections() {
-        let k = seeded();
+        let mut k = seeded();
+        let mut f = crate::AccountFields::new("Pinjaman Budi", 0, date!(2026 - 10 - 01));
+        f.contact = Some("Budi".into());
+        k.ledger
+            .create_account(nabungo_core::AccountKind::Receivable, &f)
+            .unwrap();
         let v = json(&k);
         assert_eq!(v["format"], "nabungo-export");
         assert_eq!(v["version"], 1);
@@ -443,7 +454,19 @@ mod tests {
             .collect();
         assert_eq!(sides.len(), 2);
         assert!(sides.iter().all(|p| p["currency"] == "IDR"));
-        for a in v["accounts"].as_array().unwrap() {
+        assert!(
+            txns.iter()
+                .flat_map(|t| t["postings"].as_array().unwrap())
+                .all(|p| p["reconciled"] == false)
+        );
+        let accounts = v["accounts"].as_array().unwrap();
+        let budi = accounts
+            .iter()
+            .find(|a| a["name"] == "Pinjaman Budi")
+            .unwrap();
+        assert_eq!(budi["contact"], "Budi");
+        assert!(accounts.iter().any(|a| a["contact"].is_null()));
+        for a in accounts {
             let id: crate::Uuid = a["id"].as_str().unwrap().parse().unwrap();
             assert_eq!(a["balance"], k.ledger.balance(id).unwrap());
         }
@@ -524,7 +547,7 @@ mod tests {
             ),
             (
                 "accounts.csv",
-                "id,name,kind,group,currency,archived,include_in_net_worth,balance",
+                "id,name,kind,group,currency,archived,include_in_net_worth,balance,contact",
             ),
             ("categories.csv", "id,name,kind,parent,archived"),
             ("budgets.csv", "period,category,amount,rollover"),

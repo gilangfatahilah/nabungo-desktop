@@ -11,7 +11,7 @@ async function data<T>(p: Promise<{ status: 'ok'; data: T } | { status: 'error';
 async function account(name: string, opening = 0): Promise<string> {
   return data(L.createAccount('bank', {
     name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-    icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01',
+    icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01', contact: null,
   }))
 }
 
@@ -304,7 +304,7 @@ describe('browser ledger valuation (paritas Rust)', () => {
   async function investment(name: string, opening: number): Promise<string> {
     return data(L.createAccount('investment', {
       name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01',
+      icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01', contact: null,
     }))
   }
 
@@ -347,7 +347,7 @@ describe('browser ledger alokasi (paritas Rust)', () => {
   const err = (code: string) => ({ status: 'error', error: { code } })
   const investment = (name: string, opening: number) => data(L.createAccount('investment', {
     name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-    icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01',
+    icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01', contact: null,
   }))
 
   it('nested target is relative', async () => {
@@ -395,7 +395,7 @@ describe('browser ledger alokasi (paritas Rust)', () => {
     expect(await L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 10001 }])).toMatchObject(err('allocation_invalid_bp'))
     const cc = await data(L.createAccount('credit_card', {
       name: 'Kartu S', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01',
+      icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: null,
     }))
     expect(await L.setAccountAllocation(cc, [{ bucketId: a, shareBp: 100 }])).toMatchObject(err('allocation_liability'))
     await data(L.setAccountAllocation(acc, [{ bucketId: a, shareBp: 100 }]))
@@ -436,7 +436,7 @@ describe('browser ledger laporan (paritas Rust)', () => {
   const create = (kind: 'bank' | 'credit_card' | 'investment', name: string, opening: number, openingDate: string) =>
     data(L.createAccount(kind, {
       name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
-      icon: null, color: null, openingBalance: opening, openingDate,
+      icon: null, color: null, openingBalance: opening, openingDate, contact: null,
     }))
   const line = (categoryId: string, amount: number) => [{ categoryId, amount, memo: null }]
 
@@ -518,5 +518,108 @@ describe('browser ledger backup', () => {
   it('tanpa file di browser: restore dari file batal, laporan startup bersih', async () => {
     expect(await data(L.restoreBackupFromFile())).toBe(false)
     expect(await L.startupReport()).toEqual({ uncleanShutdown: false, integrity: 'skipped' })
+  })
+})
+
+describe('browser ledger piutang/hutang & rekonsiliasi (paritas Rust)', () => {
+  const receivable = (name: string, opening: number, contact: string | null = null) =>
+    data(L.createAccount('receivable', {
+      name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: opening, openingDate: '2026-10-01', contact,
+    }))
+  const spendOn = (accountId: string, c: string, date: string, amount: number) =>
+    data(L.createTxn(form({ accountId, date, amount, splits: [{ categoryId: c, amount, memo: null }] })))
+
+  it('hutang dihitung sebagai liabilitas', async () => {
+    const before = await data(L.accountsOverview())
+    const [nwBefore] = await data(L.netWorthHistory('2026-10', 1))
+    const allocBefore = await data(L.listAllocation())
+    await receivable('Hutang ke Andi', -50_000)
+    const after = await data(L.accountsOverview())
+    expect(after.netWorth.liabilities).toBe(before.netWorth.liabilities + 50_000)
+    expect(after.netWorth.assets).toBe(before.netWorth.assets)
+    const [nwAfter] = await data(L.netWorthHistory('2026-10', 1))
+    expect(nwAfter!.liabilities).toBe(nwBefore!.liabilities + 50_000)
+    expect(nwAfter!.assets).toBe(nwBefore!.assets)
+    const allocAfter = await data(L.listAllocation())
+    expect(allocAfter.gross).toBe(allocBefore.gross)
+  })
+
+  it('ubah akun tanpa ganti saldo awal mempertahankan tanda reconciled', async () => {
+    const fields = (name: string, openingBalance: number) => ({
+      name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance, openingDate: '2026-10-01', contact: null,
+    })
+    const throughOf = async (i: string) => (await data(L.accountsOverview())).accounts.find((a) => a.id === i)!.reconciledThrough
+    const laci = await data(L.createAccount('cash', fields('Laci', 50_000)))
+    await data(L.reconcileAccount(laci, '2026-10-10', 50_000))
+    expect(await throughOf(laci)).toBe('2026-10-01')
+    await data(L.updateAccount(laci, { ...fields('Laci meja', 50_000), icon: 'wallet' }))
+    expect(await throughOf(laci)).toBe('2026-10-01')
+    await data(L.updateAccount(laci, fields('Laci meja', 60_000)))
+    expect(await throughOf(laci)).toBeNull()
+  })
+
+  it('saldo per tanggal tidak menghitung transaksi sesudahnya', async () => {
+    const c = (await data(L.listCategories())).find((x) => x.kind === 'expense')!.id
+    const laci = await data(L.createAccount('cash', {
+      name: 'Laci Saldo', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: 50_000, openingDate: '2026-10-01', contact: null,
+    }))
+    await spendOn(laci, c, '2026-10-20', 10_000)
+    expect(await data(L.accountBalanceAsOf(laci, '2026-10-10'))).toBe(50_000)
+    expect(await data(L.accountBalanceAsOf(laci, '2026-10-20'))).toBe(40_000)
+    expect(await L.accountBalanceAsOf('nope', '2026-10-20')).toMatchObject({ status: 'error', error: { code: 'not_found' } })
+  })
+
+  it('kontak dipakai ulang tanpa beda huruf', async () => {
+    const a = await receivable('Piutang Budi 1', 10_000, 'Budi')
+    const b = await receivable('Piutang Budi 2', 10_000, ' budi')
+    const bank = await data(L.createAccount('bank', {
+      name: 'Bank Kontak', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: 'Budi',
+    }))
+    expect((await data(L.listContacts())).filter((c) => c.name.toLowerCase() === 'budi').map((c) => c.name)).toEqual(['Budi'])
+    const o = await data(L.accountsOverview())
+    const by = (i: string) => o.accounts.find((x) => x.id === i)!
+    expect([by(a).contact, by(b).contact, by(bank).contact]).toEqual(['Budi', 'Budi', null])
+  })
+
+  it('rekonsiliasi membuat penyesuaian dan menandai', async () => {
+    const a = await account('Bank Rek', 100_000)
+    const c = await category('expense', 'Belanja Rek')
+    const early = await spendOn(a, c, '2026-10-05', 10_000)
+    const late = await spendOn(a, c, '2026-10-20', 5_000)
+    const r = await data(L.reconcileAccount(a, '2026-10-10', 75_000))
+    expect(r.difference).toBe(-15_000)
+    expect(r.adjustmentId).not.toBeNull()
+    const rows = (await data(L.listTxns({ ...q, accountId: a }))).rows
+    const flag = (i: string) => rows.find((x) => x.id === i)!.reconciled
+    expect(rows.find((x) => x.id === r.adjustmentId)!.kind).toBe('adjustment')
+    expect([flag(early.id), flag(r.adjustmentId!), flag(late.id)]).toEqual([true, true, false])
+    expect(r.marked).toBe(3)
+    expect((await data(L.listTxns(q))).rows.every((x) => x.reconciled === null)).toBe(true)
+    const o = await data(L.accountsOverview())
+    expect(o.accounts.find((x) => x.id === a)!.reconciledThrough).toBe('2026-10-10')
+    expect(await balance(a)).toBe(70_000)
+
+    await data(L.updateTxn(early.id, form({ accountId: a, date: '2026-10-05', amount: 11_000, splits: [{ categoryId: c, amount: 11_000, memo: null }] })))
+    const edited = (await data(L.listTxns({ ...q, accountId: a }))).rows.find((x) => x.id === early.id)!
+    expect(edited.reconciled).toBe(false)
+  })
+
+  it('saldo cocok tidak membuat transaksi', async () => {
+    const a = await account('Bank Cocok', 40_000)
+    const r = await data(L.reconcileAccount(a, '2026-10-10', 40_000))
+    expect(r).toEqual({ adjustmentId: null, difference: 0, marked: 1 })
+    expect((await data(L.listTxns({ ...q, accountId: a }))).total).toBe(1)
+  })
+
+  it('akun diarsip ditolak', async () => {
+    const a = await account('Bank Arsip Rek', 1_000)
+    await data(L.archiveAccount(a))
+    expect(await L.reconcileAccount(a, '2026-10-10', 0)).toMatchObject({ status: 'error', error: { code: 'archived', entity: 'account' } })
+    expect(await L.reconcileAccount('x', '2026-10-10', 0)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'account' } })
+    expect(await L.reconcileAccount(a, '2026-10-10', 2_000_000_000_000)).toMatchObject({ status: 'error', error: { code: 'txn_amount_too_large' } })
   })
 })
