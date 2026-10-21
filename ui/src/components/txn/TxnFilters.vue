@@ -16,16 +16,19 @@ import { activeFilterCount, type Period, periodOf, periodRange } from '@/lib/txn
 import { withErrorToast } from '@/lib/notify'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
+import { useLabelsStore } from '@/stores/labels'
 import { useSettingsStore } from '@/stores/settings'
 import { type TxnFilter, useTransactionsStore } from '@/stores/transactions'
 import CategoryCombobox from './CategoryCombobox.vue'
 
-// Filter disimpan di store (bukan URL). Payee dicari lewat kotak pencarian.
+// Filter disimpan di store (bukan URL). Payee dicari lewat kotak pencarian; filter payeeId
+// (dari layar Tag & Payee) hanya tampil sebagai chip.
 // Toolbar satu baris (ui-guidelines §8.6): cari, periode, akun selalu terlihat; sisanya di "+ Filter" + chip.
 const { t } = useI18n()
 const store = useTransactionsStore()
 const accounts = useAccountsStore()
 const categories = useCategoriesStore()
+const labels = useLabelsStore()
 const settings = useSettingsStore()
 
 // Reka Select tidak menerima nilai kosong; sentinel untuk "Semua".
@@ -48,16 +51,21 @@ function setPeriod(v: unknown) {
   if (p !== 'custom') apply(periodRange(p, todayIso()))
 }
 
-type Chip = { key: 'categoryId' | 'tag' | 'amountMin' | 'amountMax'; label: string }
+type Chip = { key: 'categoryId' | 'tag' | 'payeeId' | 'amountMin' | 'amountMax'; label: string }
 const chips = computed<Chip[]>(() => {
   const q = store.query
   const out: Chip[] = []
   if (q.categoryId) out.push({ key: 'categoryId', label: categories.list.find((c) => c.id === q.categoryId)?.name ?? '' })
   if (q.tag) out.push({ key: 'tag', label: `#${q.tag}` })
+  if (q.payeeId) {
+    const name = labels.payees.find((p) => p.id === q.payeeId)?.name ?? ''
+    out.push({ key: 'payeeId', label: t('txn.filters.payee', { name }) })
+  }
   if (q.amountMin !== null) out.push({ key: 'amountMin', label: `≥ ${formatIdr(q.amountMin, settings.locale)}` })
   if (q.amountMax !== null) out.push({ key: 'amountMax', label: `≤ ${formatIdr(q.amountMax, settings.locale)}` })
   return out
 })
+const CHIP_IDS: Partial<Record<Chip['key'], string>> = { categoryId: 'category', payeeId: 'payee' }
 const hasFilter = computed(() => activeFilterCount(store.query) > 0)
 
 const activeAccounts = computed(() => accounts.overview.accounts.filter((a) => !a.archived || a.id === store.query.accountId))
@@ -78,6 +86,7 @@ watch(() => store.query, (q) => {
 
 onMounted(() => withErrorToast(async () => {
   tags.value = await listTags()
+  if (store.query.payeeId && !labels.loaded) await labels.reload()
 }))
 
 function apply(patch: Partial<TxnFilter>) {
@@ -183,7 +192,7 @@ function reset() {
     </div>
     <div v-if="hasFilter" class="flex flex-wrap items-center gap-2">
       <span
-        v-for="c in chips" :key="c.key" :data-testid="`chip-${c.key === 'categoryId' ? 'category' : c.key}`"
+        v-for="c in chips" :key="c.key" :data-testid="`chip-${CHIP_IDS[c.key] ?? c.key}`"
         class="inline-flex h-6 items-center gap-1 rounded-full border pr-1 pl-2.5 text-meta"
       >
         {{ c.label }}

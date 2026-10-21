@@ -174,6 +174,7 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
  Kelola
    Akun
    Kategori
+   Tag & Payee
    Terjadwal
  ─────────────
  Pengaturan            Ctrl ,
@@ -341,6 +342,10 @@ Tabel datar per grup (bukan kartu bersarang). Grup berupa header baris dengan su
 ### 9.4 Kategori
 
 Segmented control horizontal **Pengeluaran | Pemasukan** di header (mengganti tab vertikal yang rusak). Daftar pohon: induk 48px, anak menjorok 24px, aksi `+ sub` dan `⋯` saat hover. Kategori terarsip di seksi terlipat.
+
+### 9.4a Tag & Payee (Fase 7c)
+
+Segmented control **Tag | Payee** di header (tab disimpan di query `?tab=payee`) + tombol `+ Tag baru` / `+ Payee baru`. Daftar baris 48px: nama (tag berawalan `#`), meta jumlah transaksi (payee: `· kategori default`), `⋯` saat hover berisi Ubah, Gabungkan…, Lihat transaksi, Hapus. "Lihat transaksi" mereset filter lain lalu membuka Transaksi dengan chip `#tag` / `Payee: nama`. Hapus memakai dialog konfirmasi yang menyebut jumlah transaksi terdampak (tanpa undo; saldo tidak berubah).
 
 ### 9.5 Budget (Fase 5)
 

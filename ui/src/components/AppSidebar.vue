@@ -41,6 +41,7 @@ const main: Item[] = [
 const manage: Item[] = [
   { name: 'accounts', to: '/accounts', keys: '' },
   { name: 'categories', to: '/categories', keys: '' },
+  { name: 'labels', to: '/labels', keys: '' },
   { name: 'scheduled', to: '/scheduled', keys: '' },
 ]
 const settings: Item = { name: 'settings', to: '/settings', keys: 'Ctrl+,' }

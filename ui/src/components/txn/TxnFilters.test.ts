@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TxnFilters from '@/components/txn/TxnFilters.vue'
 import { i18n } from '@/i18n'
+import { useLabelsStore } from '@/stores/labels'
 import { useTransactionsStore } from '@/stores/transactions'
 
 function input(w: ReturnType<typeof mount>, sel: string, value: string) {
@@ -79,5 +80,24 @@ describe('TxnFilters', () => {
     expect(store.query.search).toBeNull()
     expect(store.query.dateFrom).toBeNull()
     expect((w.find<HTMLInputElement>('[data-testid="filter-search"]').element).value).toBe('')
+  })
+})
+
+describe('TxnFilters chip payee', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('payeeId aktif tampil sebagai chip nama payee dan bisa dihapus', async () => {
+    const labels = useLabelsStore()
+    labels.payees = [{ id: 'p1', name: 'Indomaret', defaultCategoryId: null, txnCount: 1, lastDate: null }]
+    labels.loaded = true
+    const store = useTransactionsStore()
+    store.query.payeeId = 'p1'
+    const spy = vi.spyOn(store, 'setQuery').mockResolvedValue()
+    const w = mount(TxnFilters, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const chip = w.find('[data-testid="chip-payee"]')
+    expect(chip.text()).toContain('Payee: Indomaret')
+    await chip.find('button').trigger('click')
+    expect(spy).toHaveBeenCalledWith({ payeeId: null })
   })
 })
