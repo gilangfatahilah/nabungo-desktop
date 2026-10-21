@@ -2,11 +2,12 @@
 
 use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
-    AllocationPoint, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetOverview, BudgetPeriod,
-    BudgetRow, CashflowPoint, CategoryAmount, CategoryFields, CategoryKind, CategoryRow, Date, Fee,
-    FormBody, Locale, NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PeriodStartDay,
-    PostingRecord, SplitLine, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery,
-    UiSettings, Uuid, ValuationPoint, format_date, parse_date,
+    AllocationPoint, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert, BudgetLevel,
+    BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount, CategoryFields,
+    CategoryKind, CategoryRow, Date, Fee, FormBody, Locale, NetWorth, NetWorthPoint,
+    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, SplitLine, Theme, TxnDetail,
+    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
+    parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -675,26 +676,61 @@ pub fn parse_period(s: &str) -> Result<BudgetPeriod, IpcError> {
     Ok(BudgetPeriod::parse(s)?)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetLevelDto {
+    Ok,
+    Warning,
+    Exceeded,
+}
+
+impl From<BudgetLevel> for BudgetLevelDto {
+    fn from(l: BudgetLevel) -> Self {
+        match l {
+            BudgetLevel::Ok => Self::Ok,
+            BudgetLevel::Warning => Self::Warning,
+            BudgetLevel::Exceeded => Self::Exceeded,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BudgetRowDto {
     pub category_id: String,
     pub parent_id: Option<String>,
     pub budget: Option<i64>,
+    /// Sisa periode ini dibawa ke periode berikutnya.
+    pub rollover: bool,
+    /// Bawaan dari periode sebelumnya (bisa negatif).
+    pub carry: i64,
+    /// `budget + carry`; `null` tanpa budget.
+    pub available: Option<i64>,
     /// Positif = terpakai; parent mencakup child.
     pub spent: i64,
-    /// `budget − spent`; negatif = lewat budget.
+    /// `available − spent`; negatif = lewat budget.
     pub remaining: Option<i64>,
+    pub level: Option<BudgetLevelDto>,
+    pub percent: Option<u32>,
+    /// `null` tanpa budget atau di luar periode berjalan.
+    pub per_day: Option<i64>,
 }
 
 impl From<BudgetRow> for BudgetRowDto {
     fn from(r: BudgetRow) -> Self {
+        let available = r.budget.map(|b| b.saturating_add(r.carry));
         Self {
             category_id: r.category_id.to_string(),
             parent_id: r.parent_id.map(|p| p.to_string()),
             budget: r.budget,
+            rollover: r.rollover,
+            carry: r.carry,
+            available,
             spent: r.spent,
-            remaining: r.budget.map(|b| b.saturating_sub(r.spent)),
+            remaining: available.map(|a| a.saturating_sub(r.spent)),
+            level: r.level.map(Into::into),
+            percent: r.percent,
+            per_day: r.per_day,
         }
     }
 }
@@ -703,8 +739,11 @@ impl From<BudgetRow> for BudgetRowDto {
 #[serde(rename_all = "camelCase")]
 pub struct BudgetTotalDto {
     pub budget: i64,
+    pub carry: i64,
+    pub available: i64,
     pub spent: i64,
     pub remaining: i64,
+    pub per_day: Option<i64>,
 }
 
 /// `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri.
@@ -717,26 +756,61 @@ pub struct BudgetOverviewDto {
     pub from: String,
     /// Inklusif.
     pub to: String,
+    /// Hari tersisa termasuk hari ini; `null` bila hari ini di luar periode.
+    pub days_left: Option<u32>,
     pub rows: Vec<BudgetRowDto>,
     pub total: BudgetTotalDto,
 }
 
 impl From<BudgetOverview> for BudgetOverviewDto {
     fn from(o: BudgetOverview) -> Self {
+        let available = o.totals.budget.saturating_add(o.totals.carry);
         Self {
             period: o.period.key(),
             prev: o.period.prev().key(),
             next: o.period.next().key(),
             from: format_date(o.from),
             to: format_date(o.to),
+            days_left: o.days_left,
             rows: o.rows.into_iter().map(Into::into).collect(),
             total: BudgetTotalDto {
                 budget: o.totals.budget,
+                carry: o.totals.carry,
+                available,
                 spent: o.totals.spent,
-                remaining: o.totals.budget.saturating_sub(o.totals.spent),
+                remaining: available.saturating_sub(o.totals.spent),
+                per_day: o.total_per_day,
             },
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BudgetAlertDto {
+    pub category_id: String,
+    pub period: String,
+    pub level: BudgetLevelDto,
+    pub percent: Option<u32>,
+}
+
+impl From<BudgetAlert> for BudgetAlertDto {
+    fn from(a: BudgetAlert) -> Self {
+        Self {
+            category_id: a.category_id.to_string(),
+            period: a.period.key(),
+            level: a.level.into(),
+            percent: a.percent,
+        }
+    }
+}
+
+/// Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedTxnDto {
+    pub id: String,
+    pub alerts: Vec<BudgetAlertDto>,
 }
 
 // --- Valuation ---
@@ -1121,19 +1195,32 @@ mod tests {
                     category_id: cat,
                     parent_id: None,
                     budget: Some(100),
-                    spent: 130,
+                    rollover: true,
+                    carry: -30,
+                    spent: 50,
+                    level: Some(BudgetLevel::Warning),
+                    percent: Some(71),
+                    per_day: Some(2),
                 },
                 BudgetRow {
                     category_id: Uuid::now_v7(),
                     parent_id: Some(cat),
                     budget: None,
+                    rollover: false,
+                    carry: 0,
                     spent: 5,
+                    level: None,
+                    percent: None,
+                    per_day: None,
                 },
             ],
             totals: nabungo_app::BudgetTotals {
                 budget: 100,
-                spent: 130,
+                carry: -30,
+                spent: 50,
             },
+            days_left: Some(10),
+            total_per_day: Some(2),
         });
         assert_eq!(
             (dto.prev.as_str(), dto.next.as_str()),
@@ -1143,13 +1230,46 @@ mod tests {
             (dto.from.as_str(), dto.to.as_str()),
             ("2025-12-25", "2026-01-24")
         );
-        assert_eq!(dto.rows[0].remaining, Some(-30));
+        let r = &dto.rows[0];
+        assert_eq!((r.available, r.remaining), (Some(70), Some(20)));
+        assert_eq!((r.carry, r.rollover), (-30, true));
+        assert_eq!(r.level, Some(BudgetLevelDto::Warning));
+        assert_eq!((r.percent, r.per_day), (Some(71), Some(2)));
         assert_eq!(dto.rows[1].remaining, None);
+        assert_eq!(dto.rows[1].available, None);
         assert_eq!(dto.rows[1].parent_id, Some(cat.to_string()));
-        assert_eq!(dto.total.remaining, -30);
+        assert_eq!((dto.total.available, dto.total.remaining), (70, 20));
+        assert_eq!((dto.total.carry, dto.total.per_day), (-30, Some(2)));
+        assert_eq!(dto.days_left, Some(10));
         assert_eq!(
             parse_period("2026-13").unwrap_err().code,
             ErrorCode::InvalidPeriod
+        );
+    }
+
+    #[test]
+    fn budget_level_serializes_snake_case() {
+        let v = serde_json::to_value(BudgetLevelDto::from(BudgetLevel::Exceeded)).unwrap();
+        assert_eq!(v, "exceeded");
+    }
+
+    #[test]
+    fn budget_alert_dto_maps_period_key() {
+        let cat = Uuid::now_v7();
+        let dto = BudgetAlertDto::from(BudgetAlert {
+            category_id: cat,
+            period: BudgetPeriod::parse("2026-10").unwrap(),
+            level: BudgetLevel::Warning,
+            percent: Some(85),
+        });
+        assert_eq!(
+            dto,
+            BudgetAlertDto {
+                category_id: cat.to_string(),
+                period: "2026-10".into(),
+                level: BudgetLevelDto::Warning,
+                percent: Some(85),
+            }
         );
     }
 

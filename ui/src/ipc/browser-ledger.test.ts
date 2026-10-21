@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BudgetOverviewDto, TxnFormDto } from './bindings'
 import { browserLedger as L } from './browser-ledger'
 
@@ -97,7 +97,7 @@ describe('browser ledger transaksi (paritas Rust)', () => {
   it('update menjaga id; hapus + undo memulihkan saldo', async () => {
     const a = await account('U', 100_000)
     const c = await category('expense', 'Makan U')
-    const id = await data(L.createTxn(form({ accountId: a, amount: 10_000, tags: ['#kantor', 'KANTOR'], splits: [{ categoryId: c, amount: 10_000, memo: null }] })))
+    const { id } = await data(L.createTxn(form({ accountId: a, amount: 10_000, tags: ['#kantor', 'KANTOR'], splits: [{ categoryId: c, amount: 10_000, memo: null }] })))
     expect((await data(L.getTxn(id))).tags).toEqual(['kantor'])
     await data(L.updateTxn(id, form({ accountId: a, amount: 20_000, splits: [{ categoryId: c, amount: 20_000, memo: null }] })))
     expect(await balance(a)).toBe(80_000)
@@ -116,6 +116,8 @@ describe('browser ledger budget (paritas Rust)', () => {
   const row = (o: BudgetOverviewDto, c: string) => o.rows.find((r) => r.categoryId === c)
 
   it('transfer tidak memengaruhi budget', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2030, 0, 1))
     await data(L.setPeriodStartDay(1))
     const a = await account('BT1', 1_000_000)
     const b = await account('BT2')
@@ -125,7 +127,10 @@ describe('browser ledger budget (paritas Rust)', () => {
     const before = await data(L.budgetOverview('2026-10'))
     await data(L.createTxn(form({ kind: 'transfer', accountId: a, toAccountId: b, amount: 200_000 })))
     expect(await data(L.budgetOverview('2026-10'))).toEqual(before)
-    expect(row(before, c)).toEqual({ categoryId: c, parentId: null, budget: 100_000, spent: 25_000, remaining: 75_000 })
+    expect(row(before, c)).toEqual({
+      categoryId: c, parentId: null, budget: 100_000, rollover: false, carry: 0, available: 100_000,
+      spent: 25_000, remaining: 75_000, level: 'ok', percent: 25, perDay: null,
+    })
   })
 
   it('periodOf dan rentang dengan tanggal mulai 25', async () => {
@@ -164,7 +169,123 @@ describe('browser ledger budget (paritas Rust)', () => {
     expect(row(o, ch)).toMatchObject({ parentId: p, spent: 25_000 })
     const i = o.rows.findIndex((r) => r.categoryId === p)
     expect(o.rows[i + 1]?.categoryId).toBe(ch)
-    expect(o.total).toEqual({ budget: 100_000, spent: 25_000, remaining: 75_000 })
+    expect(o.total).toEqual({ budget: 100_000, carry: 0, available: 100_000, spent: 25_000, remaining: 75_000, perDay: null })
+  })
+
+  afterEach(() => vi.useRealTimers())
+
+  async function budget(c: string, period: string, amount: number, rollover = false) {
+    await data(L.setBudget(c, period, amount))
+    if (rollover) await data(L.setBudgetRollover(c, period, true))
+  }
+
+  it('carry berantai', async () => {
+    const a = await account('CR1', 10_000_000)
+    const c = await category('expense', 'Rantai CR')
+    await budget(c, '2029-01', 100_000, true)
+    await budget(c, '2029-02', 100_000, true)
+    await budget(c, '2029-03', 100_000)
+    await spend(a, c, 30_000, '2029-01-05')
+    await spend(a, c, 50_000, '2029-02-05')
+    await spend(a, c, 10_000, '2029-03-05')
+    const o = await data(L.budgetOverview('2029-03'))
+    expect(row(o, c)).toMatchObject({ rollover: false, carry: 120_000, available: 220_000, remaining: 210_000, level: 'ok', percent: 4 })
+    expect(row(await data(L.budgetOverview('2029-02')), c)).toMatchObject({ rollover: true, carry: 70_000, available: 170_000 })
+    expect(o.total).toMatchObject({ carry: 120_000, available: 220_000 })
+  })
+
+  it('carry reset setelah periode tanpa budget', async () => {
+    const c = await category('expense', 'Reset CR')
+    await budget(c, '2029-05', 100_000, true)
+    await budget(c, '2029-07', 100_000, true)
+    expect(row(await data(L.budgetOverview('2029-07')), c)).toMatchObject({ carry: 0, available: 100_000 })
+    await budget(c, '2029-06', 100_000)
+    expect(row(await data(L.budgetOverview('2029-07')), c)).toMatchObject({ carry: 0 })
+  })
+
+  it('carry negatif → exceeded tanpa percent', async () => {
+    const a = await account('CR2', 10_000_000)
+    const c = await category('expense', 'Negatif CR')
+    await budget(c, '2029-09', 50_000, true)
+    await spend(a, c, 100_000, '2029-09-10')
+    await budget(c, '2029-10', 30_000)
+    expect(row(await data(L.budgetOverview('2029-10')), c)).toMatchObject({
+      carry: -50_000, available: -20_000, spent: 0, remaining: -20_000, level: 'exceeded', percent: null,
+    })
+  })
+
+  it('per hari hanya periode berjalan', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 22, 10))
+    const a = await account('PD', 1_000_000)
+    const c = await category('expense', 'Harian PD')
+    await budget(c, '2026-10', 310_000)
+    await spend(a, c, 10_000, '2026-10-05')
+    const o = await data(L.budgetOverview('2026-10'))
+    expect(o.daysLeft).toBe(10)
+    expect(row(o, c)?.perDay).toBe(30_000)
+    expect(o.total.perDay).not.toBeNull()
+    const next = await data(L.budgetOverview('2026-11'))
+    expect(next.daysLeft).toBeNull()
+    expect(next.total.perDay).toBeNull()
+  })
+
+  it('setBudgetRollover tanpa budget → not_found', async () => {
+    const c = await category('expense', 'Flag SR')
+    const inc = await category('income', 'Masuk SR')
+    expect(await L.setBudgetRollover(c, '2029-01', true)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'budget' } })
+    expect(await L.setBudgetRollover('x', '2029-01', true)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'category' } })
+    expect(await L.setBudgetRollover(inc, '2029-01', true)).toMatchObject({ status: 'error', error: { code: 'budget_income_category' } })
+    expect(await L.setBudgetRollover(c, '2029-13', true)).toMatchObject({ status: 'error', error: { code: 'invalid_period' } })
+    await budget(c, '2029-01', 1)
+    await data(L.archiveCategory(c))
+    expect(await L.setBudgetRollover(c, '2029-01', true)).toMatchObject({ status: 'error', error: { code: 'archived', entity: 'category' } })
+    await data(L.setBudgetRollover(c, '2029-01', false))
+  })
+
+  it('salin budget ikut flag rollover', async () => {
+    const c = await category('expense', 'Salin SR')
+    await budget(c, '2030-01', 40_000, true)
+    expect(await data(L.copyBudgets('2030-02'))).toBe(1)
+    expect(row(await data(L.budgetOverview('2030-02')), c)).toMatchObject({ budget: 40_000, rollover: true })
+    await data(L.setBudget(c, '2030-02', 50_000))
+    expect(row(await data(L.budgetOverview('2030-02')), c)).toMatchObject({ budget: 50_000, rollover: true })
+  })
+
+  it('alert sekali saat melewati 80% lalu 100%', async () => {
+    const a = await account('AL', 10_000_000)
+    const c = await category('expense', 'Alert AL')
+    const ch = await category('expense', 'Anak AL', c)
+    await budget(c, '2030-05', 100_000)
+    const alerts = async (amount: number, cat = c) => (await spend(a, cat, amount, '2030-05-10')).alerts
+    expect(await alerts(70_000)).toEqual([])
+    expect(await alerts(15_000, ch)).toEqual([{ categoryId: c, period: '2030-05', level: 'warning', percent: 85 }])
+    expect(await alerts(5_000)).toEqual([])
+    expect(await alerts(20_000)).toEqual([{ categoryId: c, period: '2030-05', level: 'exceeded', percent: 110 }])
+    expect(await alerts(1_000)).toEqual([])
+  })
+
+  it('edit pindah periode → alert periode baru saja', async () => {
+    const a = await account('ED', 10_000_000)
+    const c = await category('expense', 'Edit ED')
+    await budget(c, '2030-07', 100_000)
+    await budget(c, '2030-08', 100_000)
+    const saved = await spend(a, c, 90_000, '2030-07-10')
+    expect(saved.alerts.map((x) => x.period)).toEqual(['2030-07'])
+    const line = (amount: number) => [{ categoryId: c, amount, memo: null }]
+    expect(await data(L.updateTxn(saved.id, form({ accountId: a, date: '2030-08-10', amount: 90_000, splits: line(90_000) }))))
+      .toEqual([{ categoryId: c, period: '2030-08', level: 'warning', percent: 90 }])
+    expect(await data(L.updateTxn(saved.id, form({ accountId: a, date: '2030-08-11', amount: 95_000, splits: line(95_000) })))).toEqual([])
+    expect(await L.updateTxn('x', form({ accountId: a }))).toMatchObject({ status: 'error', error: { code: 'not_found' } })
+  })
+
+  it('transfer tidak memberi alert', async () => {
+    const a = await account('TA1', 10_000_000)
+    const b = await account('TA2')
+    const c = await category('expense', 'Tanpa TA')
+    await budget(c, '2026-10', 1)
+    const r = await data(L.createTxn(form({ kind: 'transfer', accountId: a, toAccountId: b, amount: 500_000 })))
+    expect(r.alerts).toEqual([])
   })
 
   it('aturan setBudget', async () => {

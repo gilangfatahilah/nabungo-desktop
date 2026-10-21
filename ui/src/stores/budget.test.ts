@@ -35,4 +35,15 @@ describe('budget store', () => {
     expect(await s.copyPrevious()).toBe(1)
     expect(s.overview?.rows.find((r) => r.categoryId === cat)?.budget).toBe(5)
   })
+
+  it('setRollover memuat ulang overview', async () => {
+    const cat = await ipc.createCategory('expense', { name: 'Store R', parentId: null, icon: null, color: null })
+    const s = useBudgetStore()
+    await s.load('2026-12')
+    await s.setAmount(cat, 10_000)
+    await s.setRollover(cat, true)
+    expect(s.overview?.rows.find((r) => r.categoryId === cat)?.rollover).toBe(true)
+    await s.setRollover(cat, false)
+    expect(s.overview?.rows.find((r) => r.categoryId === cat)?.rollover).toBe(false)
+  })
 })

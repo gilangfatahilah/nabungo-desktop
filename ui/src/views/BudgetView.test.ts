@@ -33,6 +33,8 @@ async function view() {
   await settle()
 }
 
+const key = (el: Element, k: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
+const headers = () => [...document.body.querySelectorAll('[role="columnheader"]')].map((h) => h.textContent!.trim())
 const cell = (name: string) => $(`[data-testid="budget-cell-${cats[name]}"]`)
 const remaining = (name: string) => $(`[data-testid="budget-remaining-${cats[name]}"]`).textContent!.trim()
 
@@ -87,7 +89,7 @@ describe('BudgetView', () => {
     expect((await ipc.budgetOverview('2026-10')).rows.find((r) => r.categoryId === cats['Tagihan'])?.budget).toBeNull()
   })
 
-  it('sisa negatif ditandai bahaya', async () => {
+  it('sisa negatif berwarna destructive dengan tanda minus', async () => {
     await ipc.setBudget(cats['Kopi & jajan']!, '2026-10', 10_000)
     await ipc.createTxn({ kind: 'expense', date: '2026-10-02', accountId: bca, toAccountId: null, amount: 25_000,
       splits: [{ categoryId: cats['Kopi & jajan']!, amount: 25_000, memo: null }], fee: null, payee: null, note: null, tags: [] })
@@ -116,5 +118,54 @@ describe('BudgetView', () => {
     })
     await settle()
     expect(remaining('Kopi & jajan')).toBe('−20.000')
+  })
+
+  it('kolom per hari hanya untuk periode berjalan', async () => {
+    await view()
+    expect(headers()).toContain(id.budget.perDay)
+    expect($('[data-testid="budget-total"]').textContent).toContain(id.budget.total)
+    $(`[aria-label="${id.budget.next}"]`).click()
+    await settle()
+    expect(headers()).not.toContain(id.budget.perDay)
+    expect(headers()).toContain(id.budget.carry)
+  })
+
+  it('rollover lewat menu baris menampilkan bawaan di periode berikutnya', async () => {
+    await ipc.setBudget(cats['Biaya admin']!, '2026-10', 100_000)
+    await ipc.setBudget(cats['Biaya admin']!, '2026-11', 50_000)
+    await view()
+    expect($(`[data-testid="budget-carry-${cats['Biaya admin']}"]`).textContent!.trim()).toBe('—')
+    expect($(`[aria-label="${i18n.global.t('budget.rowMenu', { name: 'Tagihan' })}"]`)).toBeNull()
+    key($(`[aria-label="${i18n.global.t('budget.rowMenu', { name: 'Biaya admin' })}"]`), 'Enter')
+    await settle()
+    const item = [...document.body.querySelectorAll('[role="menuitemcheckbox"]')].find((x) => x.textContent?.includes(id.budget.rollover)) as HTMLElement
+    expect(item.getAttribute('aria-checked')).toBe('false')
+    item.click()
+    await settle()
+    expect((await ipc.budgetOverview('2026-10')).rows.find((r) => r.categoryId === cats['Biaya admin'])?.rollover).toBe(true)
+    $(`[aria-label="${id.budget.next}"]`).click()
+    await settle()
+    expect($(`[data-testid="budget-carry-${cats['Biaya admin']}"]`).textContent!.trim()).toBe('+100.000')
+    expect(remaining('Biaya admin')).toBe('150.000')
+  })
+
+  it('ringkasan menghitung kategori hampir habis dan terlampaui', async () => {
+    const a = await ipc.createCategory('expense', { name: 'Ringkas A', parentId: null, icon: null, color: null })
+    const b = await ipc.createCategory('expense', { name: 'Ringkas B', parentId: null, icon: null, color: null })
+    await ipc.setBudget(a, '2026-10', 100_000)
+    await ipc.setBudget(b, '2026-10', 100_000)
+    const spend = (c: string, amount: number) => ipc.createTxn({ kind: 'expense', date: '2026-10-03', accountId: bca, toAccountId: null,
+      amount, splits: [{ categoryId: c, amount, memo: null }], fee: null, payee: null, note: null, tags: [] })
+    await spend(a, 85_000)
+    await spend(b, 120_000)
+    const rows = (await ipc.budgetOverview('2026-10')).rows
+    const warning = rows.filter((r) => r.level === 'warning').length
+    const exceeded = rows.filter((r) => r.level === 'exceeded').length
+    expect(warning).toBeGreaterThanOrEqual(1)
+    expect(exceeded).toBeGreaterThanOrEqual(1)
+    await view()
+    const summary = $('[data-testid="budget-summary"]').textContent!
+    expect(summary).toContain(i18n.global.t('budget.summaryWarning', { n: warning }))
+    expect(summary).toContain(i18n.global.t('budget.summaryExceeded', { n: exceeded }))
   })
 })

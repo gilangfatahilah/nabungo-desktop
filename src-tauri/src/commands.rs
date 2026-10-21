@@ -10,10 +10,10 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-    AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
-    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
-    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, SecurityStatusDto, ShareDto,
-    StartupReportDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto,
+    AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto,
+    CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
+    LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, SavedTxnDto, SecurityStatusDto,
+    ShareDto, StartupReportDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto,
     TxnQueryDto, UiSettingsDto, ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
@@ -275,9 +275,13 @@ pub fn merge_category(
 
 #[tauri::command]
 #[specta::specta]
-pub fn create_txn(state: State<'_, AppState>, form: TxnFormDto) -> Result<String, IpcError> {
+pub fn create_txn(state: State<'_, AppState>, form: TxnFormDto) -> Result<SavedTxnDto, IpcError> {
     let form = form.try_into()?;
-    Ok(ledger(&state)?.create_txn(&form)?.to_string())
+    let (id, alerts) = ledger(&state)?.create_txn_with_alerts(&form)?;
+    Ok(SavedTxnDto {
+        id: id.to_string(),
+        alerts: alerts.into_iter().map(Into::into).collect(),
+    })
 }
 
 #[tauri::command]
@@ -286,10 +290,11 @@ pub fn update_txn(
     state: State<'_, AppState>,
     id: String,
     form: TxnFormDto,
-) -> Result<(), IpcError> {
+) -> Result<Vec<BudgetAlertDto>, IpcError> {
     let id = parse_id(&id, "transaction")?;
     let form = form.try_into()?;
-    Ok(ledger(&state)?.update_txn(id, &form)?)
+    let alerts = ledger(&state)?.update_txn_with_alerts(id, &form)?;
+    Ok(alerts.into_iter().map(Into::into).collect())
 }
 
 #[tauri::command]
@@ -368,7 +373,8 @@ pub fn budget_overview(
     period: String,
 ) -> Result<BudgetOverviewDto, IpcError> {
     let period = parse_period(&period)?;
-    Ok(ledger(&state)?.budget_overview(period)?.into())
+    let today = nabungo_app::local_today();
+    Ok(ledger(&state)?.budget_overview(period, today)?.into())
 }
 
 /// `amount = null` menghapus budget kategori di periode itu.
@@ -383,6 +389,20 @@ pub fn set_budget(
     let category_id = parse_id(&category_id, "category")?;
     let period = parse_period(&period)?;
     Ok(ledger(&state)?.set_budget(category_id, period, amount)?)
+}
+
+/// Nyalakan/matikan rollover budget kategori di periode itu (budget harus ada).
+#[tauri::command]
+#[specta::specta]
+pub fn set_budget_rollover(
+    state: State<'_, AppState>,
+    category_id: String,
+    period: String,
+    on: bool,
+) -> Result<(), IpcError> {
+    let category_id = parse_id(&category_id, "category")?;
+    let period = parse_period(&period)?;
+    Ok(ledger(&state)?.set_budget_rollover(category_id, period, on)?)
 }
 
 /// Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris.

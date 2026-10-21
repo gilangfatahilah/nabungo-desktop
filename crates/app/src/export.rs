@@ -58,6 +58,7 @@ struct JsonBudget<'a> {
     category_id: Uuid,
     period: &'a str,
     amount: i64,
+    rollover: bool,
 }
 
 #[derive(Serialize)]
@@ -229,6 +230,7 @@ impl Ledger {
                     category_id: b.category_id,
                     period: &b.period,
                     amount: b.amount,
+                    rollover: b.rollover,
                 })
                 .collect(),
             transactions,
@@ -311,13 +313,14 @@ impl Ledger {
         w.flush()?;
 
         let mut w = csv_writer(&dir.join("budgets.csv"))?;
-        w.write_record(["period", "category", "amount"])
+        w.write_record(["period", "category", "amount", "rollover"])
             .map_err(csv_err)?;
         for b in budget::list_all_budgets(&self.conn)? {
             w.write_record([
                 cell(&b.period).as_ref(),
                 &cell(name_of(&b.category_id)),
                 &b.amount.to_string(),
+                bool_cell(b.rollover),
             ])
             .map_err(csv_err)?;
         }
@@ -449,6 +452,7 @@ mod tests {
         assert_eq!(budgets.len(), 1);
         assert_eq!(budgets[0]["period"], "2026-10");
         assert_eq!(budgets[0]["amount"], 500_000);
+        assert_eq!(budgets[0]["rollover"], false);
     }
 
     #[test]
@@ -523,7 +527,7 @@ mod tests {
                 "id,name,kind,group,currency,archived,include_in_net_worth,balance",
             ),
             ("categories.csv", "id,name,kind,parent,archived"),
-            ("budgets.csv", "period,category,amount"),
+            ("budgets.csv", "period,category,amount,rollover"),
         ];
         for (file, header) in headers {
             let text = read(&out.join(file));
@@ -544,6 +548,7 @@ mod tests {
         let budgets = records(&out.join("budgets.csv"));
         assert_eq!(budgets.len(), 1);
         assert_eq!(&budgets[0][1], "Makan & Minum");
+        assert_eq!(&budgets[0][3], "false");
     }
 
     #[test]

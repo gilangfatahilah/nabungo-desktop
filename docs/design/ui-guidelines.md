@@ -65,7 +65,7 @@ Teks di atas Zamrud memakai `#FFFFFF` (light) / `#022C22` (emerald-950, dark). L
 | **Masuk** | income, sisa budget positif | `#1E7A4F` | `#5CC38E` |
 | **Keluar** | expense | `#B4382F` | `#F08A80` |
 | **Pindah** | transfer | `#5B6472` (= Tinta pudar) | `#98A1AE` |
-| **Waspada** | budget > 80%, peringatan | `#9A5B00` | `#E5A84B` |
+| **Waspada** | budget ≥ 80%, peringatan | `#9A5B00` | `#E5A84B` |
 | **Bahaya** | destruktif, error, budget lewat | `#B4382F` (= Keluar) | `#F08A80` |
 
 Semua pasangan teks/latar di atas lolos kontras ≥ 4.5:1 di Lembar dan Kanvas. Cek ulang bila mengubah nilai.
@@ -290,9 +290,10 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 
 - `MoneyText` punya ukuran `sm | md | lg | display`. `display` hanya untuk Garis periode.
 - Batang progres budget: tinggi 6px, radius penuh, track Garis. Isi:
-  - Tinta pudar bila ≤ 80%
-  - Waspada bila > 80%
-  - Bahaya bila > 100%; bagian yang lewat ditampilkan menonjol keluar dari track
+  - Tinta pudar bila < 80%
+  - Waspada bila ≥ 80%
+  - Bahaya bila ≥ 100% (atau tersedia ≤ 0 dengan realisasi); bagian yang lewat ditampilkan menonjol keluar dari track
+  - Warna mengikuti `level` dari backend (`ok`/`warning`/`exceeded`), bukan dihitung ulang di UI
 
 ## 9. Pola layar
 
@@ -339,17 +340,22 @@ Segmented control horizontal **Pengeluaran | Pemasukan** di header (mengganti ta
 
 ```
  Budget                     ‹ Okt 2026 ›                  [Salin dari bulan lalu]
- ┌ Garis periode (versi ringkas, tanpa angka display) ─────────────────────┐
- Kategori              Budget        Terpakai       Sisa
- Makan & Minum      1.500.000       1.290.000    210.000   ▓▓▓▓▓▓▓▓░ 86%
-   Restoran           600.000         512.000     88.000   ▓▓▓▓▓▓▓░░
- Transportasi         800.000         330.000    470.000   ▓▓▓▓░░░░░
- ─────────────────────────────────────────────────────────────────────────
- Total              4.000.000       2.480.000  1.520.000
+ ⊘ 1 kategori terlampaui   △ 1 kategori hampir habis
+ Kategori            Budget    Bawaan   Terpakai      Sisa  Per hari
+ Makan & Minum    1.500.000  +120.000  1.290.000   330.000    33.000  ▓▓▓▓▓▓▓░ 79%  ⋮
+   Restoran         600.000         —    512.000    88.000     8.800  ▓▓▓▓▓▓▓░ 85%  ⋮
+ Transportasi       800.000   −50.000    830.000   −80.000         0  ▓▓▓▓▓▓▓▓▓▓ 110% ⋮
+ ─────────────────────────────────────────────────────────────────────────────────
+ Total            2.300.000   +70.000  2.120.000   250.000    25.000
 ```
 
 - Tabel dengan kolom angka rata kanan, `num`. Nominal budget bisa diedit langsung di sel (klik/Enter, `Esc` batal, `Tab` ke baris berikutnya).
 - Sisa negatif berwarna Bahaya dengan tanda `−`.
+- **Bawaan** (rollover): nominal bertanda (`+`/`−`, negatif berwarna Bahaya); `—` bila tidak ada yang dibawa. Sisa = budget + bawaan − terpakai; persen dan bar dihitung dari budget + bawaan.
+- **Per hari** hanya tampil untuk periode berjalan: sisa ÷ hari tersisa (termasuk hari ini), tidak pernah negatif.
+- Rollover dinyalakan per kategori × periode lewat menu baris (`⋮`, "Bawa sisa ke periode berikutnya"); menu hanya ada pada baris ber-budget.
+- Ringkasan di bawah header muncul bila ada kategori Waspada/Bahaya: ikon + teks (bukan warna saja).
+- Saat transaksi disimpan dan budget kategori baru melewati 80% atau 100%, tampilkan toast peringatan (satu per kategori; tidak berulang selama level tidak naik).
 
 ### 9.6 Alokasi & Laporan (Fase 5)
 

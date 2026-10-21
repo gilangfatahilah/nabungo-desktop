@@ -3,11 +3,13 @@ import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { i18n } from '@/i18n'
 import * as ipc from '@/ipc'
-import type { TxnRowDto } from '@/ipc'
+import type { BudgetAlertDto, TxnRowDto } from '@/ipc'
+import { showBudgetAlerts } from '@/lib/budgetAlerts'
 import type { TxnFilter } from '@/lib/txnFilter'
 import { withErrorToast } from '@/lib/notify'
 import { toDto, type TxnFormState } from '@/lib/txnForm'
 import { useAccountsStore } from './accounts'
+import { useCategoriesStore } from './categories'
 
 export type { TxnFilter } from '@/lib/txnFilter'
 
@@ -27,6 +29,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const loading = ref(false)
   /** Naik setiap transaksi disimpan/dihapus/dipulihkan: layar turunan (budget, laporan, alokasi) memuat ulang. */
   const ledgerVersion = ref(0)
+  /** Peringatan budget dari penyimpanan terakhir. */
 
   /** `keepLoaded`: setelah aksi tulis, muat ulang sebanyak baris yang sudah dimuat agar posisi tidak hilang. */
   async function reload(keepLoaded = false) {
@@ -70,11 +73,26 @@ export const useTransactionsStore = defineStore('transactions', () => {
 
   async function save(id: string | null, state: TxnFormState): Promise<string> {
     const dto = toDto(state)
-    let saved = id
-    if (id) await ipc.updateTxn(id, dto)
-    else saved = await ipc.createTxn(dto)
+    let saved: string
+    let alerts: BudgetAlertDto[]
+    if (id) {
+      alerts = await ipc.updateTxn(id, dto)
+      saved = id
+    } else {
+      ({ id: saved, alerts } = await ipc.createTxn(dto))
+    }
     await refresh()
-    return saved!
+    if (alerts.length) {
+      // Transaksi sudah tersimpan: gagal memuat nama kategori tidak boleh membuat save tampak gagal.
+      try {
+        const categories = useCategoriesStore()
+        if (!categories.loaded) await categories.load()
+        showBudgetAlerts(alerts, new Map(categories.list.map((c) => [c.id, c.name])))
+      } catch (e) {
+        console.warn('gagal menampilkan peringatan budget', e)
+      }
+    }
+    return saved
   }
 
   async function remove(id: string) {

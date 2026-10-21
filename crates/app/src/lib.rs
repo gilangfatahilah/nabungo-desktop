@@ -17,6 +17,7 @@ mod accounts;
 mod allocation;
 mod backup;
 mod budget;
+mod budget_alerts;
 mod categories;
 mod defaults;
 mod export;
@@ -36,15 +37,16 @@ pub use accounts::{AccountFields, AccountsOverview};
 pub use allocation::{AllocationOverview, AllocationPoint, BucketFields};
 pub use backup::{BackupInfo, BackupKind, is_auto_due, list_backups, parse_backup_name};
 pub use budget::{BudgetOverview, BudgetRow};
+pub use budget_alerts::BudgetAlert;
 pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
 pub use nabungo_core::date::{format_date, parse_date};
 pub use nabungo_core::{
     AccountKind, AllocationError, AllocationReport, AmountParseError, BucketActual, BudgetError,
-    BudgetPeriod, BudgetTotals, CatalogError, CategoryKind, Fee, FormBody, MoneyError, NetWorth,
-    PeriodError, PeriodStartDay, SiblingWarning, SplitLine, TxnError, TxnKind, Unallocated,
-    parse_amount,
+    BudgetLevel, BudgetPeriod, BudgetTotals, CatalogError, CategoryKind, Fee, FormBody, MoneyError,
+    NetWorth, PeriodError, PeriodStartDay, SiblingWarning, SplitLine, TxnError, TxnKind,
+    Unallocated, parse_amount,
 };
 pub use nabungo_storage::DbKey;
 pub use nabungo_storage::account::{AccountRow, Opening};

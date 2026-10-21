@@ -35,6 +35,7 @@ export const useBudgetStore = defineStore('budget', () => {
     load,
     go,
     setAmount: (categoryId: string, amount: number | null) => then(ipc.setBudget(categoryId, period.value!, amount)),
+    setRollover: (categoryId: string, on: boolean) => then(ipc.setBudgetRollover(categoryId, period.value!, on)),
     copyPrevious: () => then(ipc.copyBudgets(period.value!)),
   }
 })
