@@ -196,6 +196,7 @@ impl TryFrom<AccountFieldsDto> for AccountFields {
             icon: d.icon,
             color: d.color,
             opening_balance: d.opening_balance,
+            contact: None,
         })
     }
 }

@@ -25,6 +25,7 @@ pub struct ExportPosting {
     pub amount: i64,
     pub currency: String,
     pub memo: Option<String>,
+    pub reconciled: bool,
 }
 
 /// Panggil `f` untuk tiap transaksi aktif, urut `date, created_at`. Error dari `f`
@@ -36,7 +37,7 @@ pub fn for_each_txn<E: From<StorageError>>(
     let mut stmt = conn
         .prepare(
             "SELECT t.id, t.kind, t.date, t.status, py.name, t.note,
-                    p.account_id, p.category_id, p.amount, a.currency, p.memo
+                    p.account_id, p.category_id, p.amount, a.currency, p.memo, p.reconciled
              FROM txn t
              LEFT JOIN payee py ON py.id = t.payee_id
              JOIN posting p ON p.txn_id = t.id
@@ -67,6 +68,7 @@ pub fn for_each_txn<E: From<StorageError>>(
                     amount: r.get(8)?,
                     currency: r.get(9)?,
                     memo: r.get(10)?,
+                    reconciled: r.get(11)?,
                 },
             ))
         })()?;

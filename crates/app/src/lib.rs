@@ -53,6 +53,7 @@ pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::allocation::BucketRow;
 pub use nabungo_storage::category::CategoryRow;
+pub use nabungo_storage::contact::ContactRow;
 pub use nabungo_storage::format_utc as format_timestamp;
 pub use nabungo_storage::txn::PostingRecord;
 pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
