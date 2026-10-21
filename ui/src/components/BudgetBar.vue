@@ -14,7 +14,8 @@ const percent = computed(() => {
 })
 const state = computed(() => ({ ok: 'ok', warning: 'warn', exceeded: 'over' } as const)[props.level])
 const now = computed(() => (Number.isFinite(percent.value) ? Math.round(percent.value) : 100))
-const fill = computed(() => Math.min(percent.value, 100))
+// Tersedia ≤ 0 yang sudah terlampaui (bawaan negatif) digambar penuh agar warna bahaya terlihat.
+const fill = computed(() => (props.budget <= 0 && props.level === 'exceeded' ? 100 : Math.min(percent.value, 100)))
 // Lebihnya digambar menjulur ke luar track, dibatasi agar tidak menabrak kolom lain.
 const overflow = computed(() => Math.min(Math.max(percent.value - 100, 0), 25))
 const color = computed(() => ({ ok: 'bg-muted-foreground/60', warn: 'bg-warning', over: 'bg-destructive' })[state.value])

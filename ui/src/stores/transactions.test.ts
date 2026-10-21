@@ -94,4 +94,15 @@ describe('transactions store', () => {
     await s.save(null, { ...form, amount: 1_000, categoryId: cat })
     expect(warningMock).toHaveBeenCalledTimes(1)
   })
+
+  it('save tetap sukses walau nama kategori untuk alert gagal dimuat', async () => {
+    const acc = await seed(0)
+    const cat = await ipc.createCategory('expense', { name: `Makan ${crypto.randomUUID()}`, parentId: null, icon: null, color: null })
+    await ipc.setBudget(cat, '2026-10', 100_000)
+    const spy = vi.spyOn(ipc, 'listCategories').mockRejectedValueOnce(new Error('boom'))
+    const s = useTransactionsStore()
+    const form = emptyForm('expense', { accountId: acc, feeCategoryId: null, today: '2026-10-17' })
+    await expect(s.save(null, { ...form, amount: 90_000, categoryId: cat })).resolves.toBeTypeOf('string')
+    spy.mockRestore()
+  })
 })

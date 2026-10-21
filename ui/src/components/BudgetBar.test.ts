@@ -25,4 +25,10 @@ describe('BudgetBar', () => {
     expect(bar(0, 0, 'ok').attributes('data-state')).toBe('ok')
     expect(bar(-5, 100, 'ok').attributes('aria-valuenow')).toBe('0')
   })
+
+  it('tersedia ≤ 0 berstatus terlampaui tetap tampil penuh walau belum ada realisasi', () => {
+    const fill = (b: number) => mountBar(0, b, 'exceeded').get('[role="progressbar"] > div').attributes('style')
+    expect(fill(0)).toContain('width: 100%')
+    expect(fill(-5)).toContain('width: 100%')
+  })
 })

@@ -26,9 +26,9 @@ impl Ledger {
         form: &TxnForm,
     ) -> Result<(Uuid, Vec<BudgetAlert>), AppError> {
         let periods = vec![self.period_of(form.date)?];
-        let before = self.budget_levels(&periods)?;
+        let before = self.budget_levels(&periods);
         let id = self.create_txn(form)?;
-        Ok((id, self.budget_alerts(&periods, &before)?))
+        Ok((id, self.alerts_after_save(&periods, before)))
     }
 
     /// Memeriksa periode tanggal lama dan tanggal baru; periode yang realisasinya
@@ -42,9 +42,25 @@ impl Ledger {
         let mut periods = vec![self.period_of(old)?, self.period_of(form.date)?];
         periods.sort();
         periods.dedup();
-        let before = self.budget_levels(&periods)?;
+        let before = self.budget_levels(&periods);
         self.update_txn(id, form)?;
-        self.budget_alerts(&periods, &before)
+        Ok(self.alerts_after_save(&periods, before))
+    }
+
+    /// Transaksi sudah tersimpan: kegagalan menghitung alert tidak boleh membuat
+    /// penyimpanan tampak gagal (user akan mengulang dan mendobel transaksi).
+    fn alerts_after_save(
+        &self,
+        periods: &[BudgetPeriod],
+        before: Result<Levels, AppError>,
+    ) -> Vec<BudgetAlert> {
+        match before.and_then(|b| self.budget_alerts(periods, &b)) {
+            Ok(alerts) => alerts,
+            Err(e) => {
+                tracing::warn!(error = %e, "gagal menghitung peringatan budget");
+                Vec::new()
+            }
+        }
     }
 
     fn budget_levels(&self, periods: &[BudgetPeriod]) -> Result<Levels, AppError> {
@@ -261,5 +277,19 @@ mod tests {
                 .unwrap(),
             before
         );
+    }
+
+    #[test]
+    fn alert_failure_after_write_still_reports_saved_txn() {
+        let mut k = kit_with_budget(100_000);
+        // Baris budget rusak membuat overview gagal; transaksi tetap harus sukses.
+        k.ledger.conn.execute_batch("PRAGMA foreign_keys = OFF;
+             INSERT INTO budget (id, category_id, period, amount) VALUES ('x', 'bukan-uuid', '2026-10', 1);").unwrap();
+        let form = expense(&k, date!(2026 - 10 - 10), "Makan & Minum", 90_000);
+        let (id, alerts) = k.ledger.create_txn_with_alerts(&form).unwrap();
+        assert!(alerts.is_empty());
+        assert!(k.ledger.get_txn(id).is_ok());
+        let edit = expense(&k, date!(2026 - 10 - 11), "Makan & Minum", 95_000);
+        assert_eq!(k.ledger.update_txn_with_alerts(id, &edit).unwrap(), vec![]);
     }
 }
