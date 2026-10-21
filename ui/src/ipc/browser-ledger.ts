@@ -10,6 +10,7 @@ import type {
   CategoryFieldsDto, CategoryKindDto, ContactDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
   ReconciliationDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
+  AttachmentDto, PayeeUsageDto, TagUsageDto,
 } from './bindings'
 import { todayIso } from '@/lib/date'
 import { countsAsLiability, isLiability } from '@/lib/accounts'
@@ -27,7 +28,11 @@ const state = {
   accounts: [] as AccountDto[],
   categories: [] as CategoryDto[],
   txns: [] as Txn[],
-  payees: [] as { id: string; name: string }[],
+  payees: [] as { id: string; name: string; defaultCategoryId: string | null }[],
+  /** Registri tag seperti tabel `tag` di Rust: tag tak terpakai tetap tercantum. */
+  tags: [] as { id: string; name: string }[],
+  /** Lampiran simulasi (tanpa filesystem). */
+  attachments: [] as (AttachmentDto & { txnId: string })[],
   contacts: [] as ContactDto[],
   lastFeeCategoryId: null as string | null,
   budgets: [] as { categoryId: string; period: string; amount: number; rollover: boolean }[],
@@ -51,6 +56,8 @@ type Txn = {
 
 // Batas nominal per posting, sama dengan `MAX_AMOUNT` di core.
 const MAX_AMOUNT = 1_000_000_000_000
+// Sama dengan `MAX_NAME_LEN` di core/catalog.rs.
+const MAX_NAME_LEN = 80
 const SEED_FEE_NAMES = ['biaya admin', 'fees']
 let seq = 0
 
@@ -231,18 +238,57 @@ function resolvePayee(name: string | null): string | null {
   if (!n) return null
   const found = state.payees.find((p) => p.name.toLowerCase() === n.toLowerCase())
   if (found) return found.id
-  const p = { id: id(), name: n }
+  const p = { id: id(), name: n, defaultCategoryId: null }
   state.payees.push(p)
   return p.id
 }
 
+const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+const byName = (a: { name: string }, b: { name: string }) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+
+/** Cermin `normalize_name` (core). */
+function catalogName(raw: string): Result<string> {
+  const n = raw.trim()
+  if (!n) return fail('name_empty')
+  if ([...n].length > MAX_NAME_LEN) return fail('name_too_long')
+  return ok(n)
+}
+
+/** Cermin `normalize_tag`: buang `#` di depan lalu trim. */
+const tagName = (raw: string) => catalogName(raw.trim().replace(/^#+/, ''))
+
+/** Tag transaksi: nama yang sudah terdaftar dipakai apa adanya (NOCASE), yang baru didaftarkan. */
 function normalizeTags(tags: string[]): string[] {
   const out: string[] = []
   for (const raw of tags) {
-    const t = raw.trim().replace(/^#/, '').trim()
-    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t)
+    const r = tagName(raw)
+    if (r.status === 'error') continue
+    let t = state.tags.find((x) => sameName(x.name, r.data))
+    if (!t) {
+      t = { id: id(), name: r.data }
+      state.tags.push(t)
+    }
+    if (!out.includes(t.name)) out.push(t.name)
   }
   return out.sort((a, b) => a.localeCompare(b))
+}
+
+/** Ganti tag `from` di semua transaksi (termasuk terhapus); `to = null` berarti dibuang. */
+function retag(from: string, to: string | null) {
+  for (const t of state.txns) {
+    if (!t.tags.includes(from)) continue
+    const rest = t.tags.filter((x) => x !== from)
+    if (to && !rest.includes(to)) rest.push(to)
+    t.tags = rest.sort((a, b) => a.localeCompare(b))
+  }
+}
+
+function checkDefaultCategory(categoryId: string | null): Result<null> {
+  if (categoryId === null) return ok(null)
+  const c = state.categories.find((x) => x.id === categoryId)
+  if (!c) return notFound('category')
+  if (c.archived) return fail('archived', 'category')
+  return ok(null)
 }
 
 function writeTxn(existing: Txn | null, f: TxnFormDto): Result<string> {
@@ -267,6 +313,8 @@ function writeTxn(existing: Txn | null, f: TxnFormDto): Result<string> {
 }
 
 const byNewest = (a: Txn, b: Txn) => b.date.localeCompare(a.date) || b.seq - a.seq
+const attachmentDto = ({ txnId: _, ...a }: AttachmentDto & { txnId: string }): AttachmentDto => a
+
 const payeeName = (t: Txn) => state.payees.find((p) => p.id === t.payeeId)?.name ?? null
 
 function matches(t: Txn, q: TxnQueryDto): boolean {
@@ -302,7 +350,8 @@ function shapeRow(t: Txn, running: Map<string, number> | null, accountId: string
   const row: TxnRowDto = {
     id: t.id, kind: t.kind, date: t.date, payee: payeeName(t), note: t.note, amount: 0,
     accountId: t.postings[0]!.accountId, toAccountId: null, categoryId: null, splitCount: 0, fee: 0,
-    tags: [...t.tags], accountDelta: null, runningBalance: null, reconciled: null, attachmentCount: 0,
+    tags: [...t.tags], accountDelta: null, runningBalance: null, reconciled: null,
+    attachmentCount: state.attachments.filter((a) => a.txnId === t.id).length,
   }
   if (t.kind === 'transfer') {
     for (const p of t.postings) {
@@ -812,17 +861,117 @@ export const browserLedger = {
     return ok(null)
   },
   payeeSuggestion: async (name: string): Promise<Result<PayeeSuggestionDto | null>> => {
-    const p = state.payees.find((x) => x.name.toLowerCase() === name.trim().toLowerCase())
-    const last = p && activeTxns().filter((t) => t.payeeId === p.id).sort(byNewest)[0]
-    if (!last) return ok(null)
-    const row = shapeRow(last, null, null)
-    return ok({ accountId: row.accountId, categoryId: row.categoryId })
+    const p = state.payees.find((x) => sameName(x.name, name.trim()))
+    if (!p) return ok(null)
+    const last = activeTxns().filter((t) => t.payeeId === p.id).sort(byNewest)[0]
+    const row = last ? shapeRow(last, null, null) : null
+    const def = state.categories.find((c) => c.id === p.defaultCategoryId && !c.archived)
+    return ok({ accountId: row?.accountId ?? null, categoryId: def?.id ?? row?.categoryId ?? null })
   },
   searchPayees: async (query: string) => {
     const q = query.trim().toLowerCase()
     return ok(state.payees.filter((p) => p.name.toLowerCase().includes(q)).map((p) => p.name).slice(0, 8))
   },
-  listTags: async () => ok(normalizeTags(activeTxns().flatMap((t) => t.tags))),
+  listTags: async () => ok([...state.tags].sort(byName).map((t) => t.name)),
+  listTagUsage: async (): Promise<Result<TagUsageDto[]>> => {
+    const active = activeTxns()
+    return ok([...state.tags].sort(byName).map((t) => ({
+      id: t.id, name: t.name, txnCount: active.filter((x) => x.tags.includes(t.name)).length,
+    })))
+  },
+  createTag: async (name: string): Promise<Result<string>> => {
+    const n = tagName(name)
+    if (n.status === 'error') return n
+    if (state.tags.some((t) => sameName(t.name, n.data))) return fail('duplicate', 'tag')
+    const t = { id: id(), name: n.data }
+    state.tags.push(t)
+    return ok(t.id)
+  },
+  renameTag: async (i: string, name: string): Promise<Result<null>> => {
+    const n = tagName(name)
+    if (n.status === 'error') return n
+    const t = state.tags.find((x) => x.id === i)
+    if (!t) return notFound('tag')
+    if (state.tags.some((x) => x.id !== i && sameName(x.name, n.data))) return fail('duplicate', 'tag')
+    retag(t.name, n.data)
+    t.name = n.data
+    return ok(null)
+  },
+  mergeTag: async (source: string, target: string): Promise<Result<null>> => {
+    const s = state.tags.find((x) => x.id === source)
+    const t = state.tags.find((x) => x.id === target)
+    if (!s || !t) return notFound('tag')
+    if (source === target) return fail('merge_into_self')
+    retag(s.name, t.name)
+    state.tags = state.tags.filter((x) => x.id !== source)
+    return ok(null)
+  },
+  deleteTag: async (i: string): Promise<Result<null>> => {
+    const t = state.tags.find((x) => x.id === i)
+    if (!t) return notFound('tag')
+    retag(t.name, null)
+    state.tags = state.tags.filter((x) => x.id !== i)
+    return ok(null)
+  },
+  listPayeeUsage: async (): Promise<Result<PayeeUsageDto[]>> => {
+    const active = activeTxns()
+    return ok([...state.payees].sort(byName).map((p) => {
+      const used = active.filter((t) => t.payeeId === p.id)
+      const lastDate = used.reduce<string | null>((m, t) => (m === null || t.date > m ? t.date : m), null)
+      return { id: p.id, name: p.name, defaultCategoryId: p.defaultCategoryId, txnCount: used.length, lastDate }
+    }))
+  },
+  createPayee: async (name: string, defaultCategoryId: string | null): Promise<Result<string>> => {
+    const n = catalogName(name)
+    if (n.status === 'error') return n
+    const c = checkDefaultCategory(defaultCategoryId)
+    if (c.status === 'error') return c
+    if (state.payees.some((p) => sameName(p.name, n.data))) return fail('duplicate', 'payee')
+    const p = { id: id(), name: n.data, defaultCategoryId }
+    state.payees.push(p)
+    return ok(p.id)
+  },
+  updatePayee: async (i: string, name: string, defaultCategoryId: string | null): Promise<Result<null>> => {
+    const n = catalogName(name)
+    if (n.status === 'error') return n
+    const p = state.payees.find((x) => x.id === i)
+    if (!p) return notFound('payee')
+    const c = checkDefaultCategory(defaultCategoryId)
+    if (c.status === 'error') return c
+    if (state.payees.some((x) => x.id !== i && sameName(x.name, n.data))) return fail('duplicate', 'payee')
+    Object.assign(p, { name: n.data, defaultCategoryId })
+    return ok(null)
+  },
+  // Termasuk transaksi terhapus, agar undo memakai payee hasil gabung (sama dengan Rust).
+  mergePayee: async (source: string, target: string): Promise<Result<null>> => {
+    if (!state.payees.some((p) => p.id === source) || !state.payees.some((p) => p.id === target)) return notFound('payee')
+    if (source === target) return fail('merge_into_self')
+    for (const t of state.txns) if (t.payeeId === source) t.payeeId = target
+    state.payees = state.payees.filter((p) => p.id !== source)
+    return ok(null)
+  },
+  deletePayee: async (i: string): Promise<Result<null>> => {
+    if (!state.payees.some((p) => p.id === i)) return notFound('payee')
+    for (const t of state.txns) if (t.payeeId === i) t.payeeId = null
+    state.payees = state.payees.filter((p) => p.id !== i)
+    return ok(null)
+  },
+  // Tanpa filesystem: setiap panggilan menambah satu struk contoh.
+  addAttachments: async (txnId: string): Promise<Result<AttachmentDto[]>> => {
+    if (!activeTxns().some((t) => t.id === txnId)) return notFound('transaction')
+    const a = { id: id(), txnId, fileName: 'struk-contoh.jpg', mime: 'image/jpeg', sizeBytes: 1234, missing: false }
+    state.attachments.push(a)
+    return ok([attachmentDto(a)])
+  },
+  listAttachments: async (txnId: string): Promise<Result<AttachmentDto[]>> =>
+    ok(state.attachments.filter((a) => a.txnId === txnId).map(attachmentDto)),
+  removeAttachment: async (i: string): Promise<Result<null>> => {
+    if (!state.attachments.some((a) => a.id === i)) return notFound('attachment')
+    state.attachments = state.attachments.filter((a) => a.id !== i)
+    return ok(null)
+  },
+  openAttachment: async (i: string): Promise<Result<null>> =>
+    state.attachments.some((a) => a.id === i) ? ok(null) : notFound('attachment'),
   txnFormDefaults: async (): Promise<Result<TxnFormDefaultsDto>> => {
     const last = activeTxns().filter((t) => t.kind !== 'opening').sort((a, b) => b.seq - a.seq)[0]
     return ok({ lastAccountId: last ? shapeRow(last, null, null).accountId : null, feeCategoryId: defaultFeeCategory() })
