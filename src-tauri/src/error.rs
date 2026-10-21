@@ -2,7 +2,8 @@
 
 use nabungo_app::AppError;
 use nabungo_app::{
-    AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, TxnError,
+    AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, RecurrenceError,
+    TxnError,
 };
 use serde::Serialize;
 
@@ -71,6 +72,9 @@ pub enum ErrorCode {
     AttachmentType,
     AttachmentTooLarge,
     AttachmentMissing,
+    OccurrenceStale,
+    RecurrenceInterval,
+    RecurrenceUntil,
     FileIo,
     Locked,
     WrongPassword,
@@ -215,6 +219,15 @@ impl From<AppError> for IpcError {
             AppError::AttachmentType => Self::code(ErrorCode::AttachmentType),
             AppError::AttachmentTooLarge => Self::code(ErrorCode::AttachmentTooLarge),
             AppError::AttachmentMissing => Self::code(ErrorCode::AttachmentMissing),
+            AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
+            AppError::Recurrence(err) => Self::code(match err {
+                RecurrenceError::Interval => ErrorCode::RecurrenceInterval,
+                RecurrenceError::UntilBeforeStart => ErrorCode::RecurrenceUntil,
+                RecurrenceError::Invalid(rrule) => {
+                    tracing::error!(%rrule, "invalid stored rrule");
+                    ErrorCode::Internal
+                }
+            }),
             AppError::Io(err) => {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::FileIo)
@@ -297,6 +310,36 @@ mod tests {
                 AppError::AttachmentMissing,
                 ErrorCode::AttachmentMissing,
                 "attachment_missing",
+            ),
+        ];
+        for (err, code, wire) in cases {
+            assert_eq!(IpcError::from(err).code, code);
+            assert_eq!(serde_json::to_value(code).unwrap(), wire);
+        }
+    }
+
+    #[test]
+    fn recurrence_errors_map_to_codes() {
+        let cases = [
+            (
+                AppError::OccurrenceStale,
+                ErrorCode::OccurrenceStale,
+                "occurrence_stale",
+            ),
+            (
+                AppError::Recurrence(RecurrenceError::Interval),
+                ErrorCode::RecurrenceInterval,
+                "recurrence_interval",
+            ),
+            (
+                AppError::Recurrence(RecurrenceError::UntilBeforeStart),
+                ErrorCode::RecurrenceUntil,
+                "recurrence_until",
+            ),
+            (
+                AppError::Recurrence(RecurrenceError::Invalid("x".into())),
+                ErrorCode::Internal,
+                "internal",
             ),
         ];
         for (err, code, wire) in cases {

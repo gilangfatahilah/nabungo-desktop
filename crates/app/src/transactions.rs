@@ -75,7 +75,7 @@ pub(crate) fn write_txn(
 /// Nama kategori seed biaya admin (id, en), lihat `defaults.rs`.
 const SEED_FEE_NAMES: [&str; 2] = ["Biaya admin", "Fees"];
 
-fn form_input(form: &TxnForm) -> Result<TxnInput, AppError> {
+pub(crate) fn form_input(form: &TxnForm) -> Result<TxnInput, AppError> {
     let postings = form_postings(&form.body)?
         .into_iter()
         .map(|p| PostingInput {

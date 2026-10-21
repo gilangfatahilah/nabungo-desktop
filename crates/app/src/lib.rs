@@ -26,6 +26,7 @@ mod ledger;
 mod onboarding;
 mod payee;
 mod reconcile;
+mod recurring;
 mod reports;
 pub mod security;
 mod settings;
@@ -46,6 +47,7 @@ pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
 pub use nabungo_core::date::{format_date, parse_date};
+pub use nabungo_core::recurrence::{Freq, MAX_INTERVAL, Recurrence, RecurrenceError};
 pub use nabungo_core::{
     AccountKind, AllocationError, AllocationReport, AmountParseError, BucketActual, BudgetError,
     BudgetLevel, BudgetPeriod, BudgetTotals, CatalogError, CategoryKind, Fee, FormBody, MoneyError,
@@ -66,6 +68,7 @@ pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use reconcile::Reconciliation;
+pub use recurring::{MAX_CATCH_UP, RuleInput, RuleRow};
 pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
 pub use settings::{AUTO_LOCK_CHOICES, Locale, Theme, UiSettings};
 pub use time::{Date, OffsetDateTime};
