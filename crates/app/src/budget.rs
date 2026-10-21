@@ -82,6 +82,7 @@ impl Ledger {
             .map(|r| BudgetLine {
                 category_id: r.category_id,
                 budget: r.budget,
+                carry: 0,
                 spent: r.spent,
             })
             .collect();
@@ -307,6 +308,7 @@ mod tests {
             o.totals,
             BudgetTotals {
                 budget: 800_000,
+                carry: 0,
                 spent: 50_000
             }
         );

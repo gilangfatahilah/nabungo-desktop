@@ -1132,6 +1132,7 @@ mod tests {
             ],
             totals: nabungo_app::BudgetTotals {
                 budget: 100,
+                carry: 0,
                 spent: 130,
             },
         });

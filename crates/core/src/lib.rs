@@ -23,7 +23,8 @@ pub use allocation::{
 };
 pub use amount::{AmountParseError, parse_amount};
 pub use budget::{
-    BudgetCategory, BudgetError, BudgetLine, BudgetTotals, budget_totals, rollup_spent,
+    BudgetCategory, BudgetEntry, BudgetError, BudgetLevel, BudgetLine, BudgetTotals, budget_level,
+    budget_totals, days_left, per_day, rollover_chain, rollup_spent, spent_percent,
     validate_budget_amount,
 };
 pub use catalog::{
