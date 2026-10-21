@@ -52,6 +52,17 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Nama file yang sah di folder lampiran: sha256 hex huruf kecil.
+pub(crate) fn is_sha256(name: &str) -> bool {
+    name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// `<dir>/<sha>`, atau `None` bila `sha` (dari DB, bisa berasal dari backup orang lain)
+/// bukan sha256 sah — mencegah path keluar dari folder lampiran.
+pub(crate) fn blob_path(dir: &Path, sha: &str) -> Option<PathBuf> {
+    is_sha256(sha).then(|| dir.join(sha))
+}
+
 /// sha256 isi file (hex huruf kecil), dibaca bertahap.
 pub(crate) fn sha256_file(path: &Path) -> io::Result<String> {
     let mut hasher = Sha256::new();
@@ -142,7 +153,7 @@ fn store(source: &Path, dir: &Path) -> io::Result<(String, bool)> {
 
 fn row(rec: AttachmentRecord, dir: &Path) -> AttachmentRow {
     AttachmentRow {
-        missing: !dir.join(&rec.sha256).is_file(),
+        missing: !blob_path(dir, &rec.sha256).is_some_and(|p| p.is_file()),
         id: rec.id,
         file_name: rec.file_name,
         mime: rec.mime,
@@ -225,8 +236,8 @@ impl Ledger {
         attachment::delete_attachment(&tx, id)?;
         let refs = attachment::sha_ref_count(&tx, &rec.sha256)?;
         tx.commit()?;
-        if refs == 0 {
-            match fs::remove_file(dir.join(&rec.sha256)) {
+        if let Some(path) = blob_path(dir, &rec.sha256).filter(|_| refs == 0) {
+            match fs::remove_file(path) {
                 Err(e) if e.kind() != io::ErrorKind::NotFound => {
                     tracing::warn!(error = %e, "failed to remove attachment file");
                 }
@@ -240,12 +251,9 @@ impl Ledger {
     pub fn attachment_path(&self, id: Uuid, dir: &Path) -> Result<PathBuf, AppError> {
         let rec =
             attachment::get_attachment(&self.conn, id)?.ok_or(AppError::NotFound("attachment"))?;
-        let path = dir.join(&rec.sha256);
-        if path.is_file() {
-            Ok(path)
-        } else {
-            Err(AppError::AttachmentMissing)
-        }
+        blob_path(dir, &rec.sha256)
+            .filter(|p| p.is_file())
+            .ok_or(AppError::AttachmentMissing)
     }
 }
 
@@ -415,6 +423,40 @@ mod tests {
             f.kit.ledger.attachment_path(row.id, f.dir.path()),
             Err(AppError::AttachmentMissing)
         ));
+    }
+
+    #[test]
+    fn tampered_sha_never_escapes_attachments_dir() {
+        // Backup .db dari pihak lain bisa berisi sha256 berupa path; jangan pernah disentuh.
+        let mut f = fx();
+        let p = f.file("s.png", PNG);
+        let row = f.add(f.txn, &[p]).unwrap().remove(0);
+        let outside = tempfile::tempdir().unwrap();
+        let victim = outside.path().join("dokumen.txt");
+        fs::write(&victim, b"penting").unwrap();
+        for sha in [
+            victim.to_str().unwrap().to_owned(),
+            "../dokumen.txt".to_owned(),
+        ] {
+            f.kit
+                .ledger
+                .conn
+                .execute("UPDATE attachment SET sha256 = ?1", [&sha])
+                .unwrap();
+            let rows = f.kit.ledger.list_attachments(f.txn, f.dir.path()).unwrap();
+            assert!(rows[0].missing, "{sha}");
+            assert!(matches!(
+                f.kit.ledger.attachment_path(row.id, f.dir.path()),
+                Err(AppError::AttachmentMissing)
+            ));
+        }
+        fs::copy(&victim, f.dir.path().join("../dokumen.txt")).unwrap();
+        f.kit
+            .ledger
+            .remove_attachment(row.id, f.dir.path())
+            .unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"penting");
+        assert!(f.dir.path().join("../dokumen.txt").exists());
     }
 
     #[test]

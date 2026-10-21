@@ -45,7 +45,8 @@ function meta(x: Label): string {
 }
 
 onMounted(() => {
-  if (!store.loaded) void withErrorToast(() => store.reload())
+  // Selalu muat ulang: transaksi di layar lain mengubah jumlah pemakaian dan menambah payee/tag.
+  void withErrorToast(() => store.reload())
   if (!categories.loaded) void withErrorToast(() => categories.load())
 })
 

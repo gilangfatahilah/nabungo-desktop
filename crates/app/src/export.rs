@@ -413,9 +413,11 @@ impl Ledger {
                 a.sha256,
                 crate::attachments::ext_for(&a.mime)
             );
-            let src = attachments_dir.join(&a.sha256);
-            let copied = src.is_file()
-                && {
+            let src =
+                crate::attachments::blob_path(attachments_dir, &a.sha256).filter(|p| p.is_file());
+            let copied = match src {
+                None => false,
+                Some(src) => {
                     std::fs::create_dir_all(&out)?;
                     let target = dir.join(&rel);
                     // Konten sama (sha sama) cukup disalin sekali.
@@ -428,12 +430,13 @@ impl Ledger {
                                 false
                             }
                         }
-                };
+                }
+            };
             let file = if copied { rel.as_str() } else { "" };
             w.write_record([
                 a.txn_id.to_string().as_str(),
                 &cell(&a.file_name),
-                &a.sha256,
+                &cell(&a.sha256),
                 &a.mime,
                 &a.size_bytes.to_string(),
                 file,

@@ -689,6 +689,16 @@ describe('browser ledger tag & payee (CAT-04, paritas Rust)', () => {
     expect(await L.createPayee('toko py2', null)).toEqual({ status: 'error', error: { code: 'duplicate', entity: 'payee' } })
   })
 
+  it('payee dengan kategori default terarsip tetap bisa diubah namanya', async () => {
+    const c = await category('expense', 'Jajan PY5')
+    const other = await category('expense', 'Lain PY5')
+    const p = await data(L.createPayee('warung PY5', c))
+    await data(L.archiveCategory(c))
+    await data(L.updatePayee(p, 'Warung PY5', c))
+    await data(L.updatePayee(p, 'Warung PY5', other))
+    expect(await L.updatePayee(p, 'Warung PY5', c)).toEqual({ status: 'error', error: { code: 'archived', entity: 'category' } })
+  })
+
   it('gabung payee memindah transaksi termasuk yang terhapus', async () => {
     const a = await account('PY3', 100_000)
     const c = await category('expense', 'Makan PY3')

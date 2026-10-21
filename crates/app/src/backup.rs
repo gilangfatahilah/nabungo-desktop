@@ -8,6 +8,7 @@ use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
+use crate::attachments::blob_path;
 use crate::vault::keyfile_path;
 use crate::{AppError, Ledger};
 
@@ -203,7 +204,6 @@ fn prune_logged(dir: &Path, kind: BackupKind) {
     }
 }
 
-/// `path` setelah symlink dan `.`/`..` di-resolve; file boleh belum ada.
 /// Folder lampiran pendamping backup manual: `<parent>/<stem>-lampiran` (K7).
 pub fn attachments_sidecar(db: &Path) -> PathBuf {
     let stem = db
@@ -213,24 +213,21 @@ pub fn attachments_sidecar(db: &Path) -> PathBuf {
     db.with_file_name(format!("{stem}-lampiran"))
 }
 
-fn is_sha256(name: &str) -> bool {
-    name.len() == 64 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-}
-
 /// Salin setiap lampiran yang dirujuk dan ada ke sidecar `dest`. Folder hanya dibuat
 /// bila ada yang disalin; gagal menyalin satu file hanya dicatat.
 fn copy_to_sidecar(conn: &Connection, attachments_dir: &Path, dest: &Path) -> Result<(), AppError> {
     let present: Vec<_> = attachment::all_shas(conn)?
         .into_iter()
-        .filter(|sha| attachments_dir.join(sha).is_file())
+        .filter_map(|sha| blob_path(attachments_dir, &sha).map(|p| (sha, p)))
+        .filter(|(_, p)| p.is_file())
         .collect();
     if present.is_empty() {
         return Ok(());
     }
     let sidecar = attachments_sidecar(dest);
     std::fs::create_dir_all(&sidecar)?;
-    for sha in present {
-        if let Err(e) = std::fs::copy(attachments_dir.join(&sha), sidecar.join(&sha)) {
+    for (sha, path) in present {
+        if let Err(e) = std::fs::copy(path, sidecar.join(&sha)) {
             tracing::warn!(error = %e, sha256 = %sha, "failed to copy attachment into backup");
         }
     }
@@ -249,7 +246,7 @@ fn restore_sidecar(src: &Path, attachments_dir: &Path) {
     }
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let Some(sha) = name.to_str().filter(|n| is_sha256(n)) else {
+        let Some(sha) = name.to_str().filter(|n| crate::attachments::is_sha256(n)) else {
             continue;
         };
         let target = attachments_dir.join(sha);
@@ -278,6 +275,7 @@ fn restore_sidecar(src: &Path, attachments_dir: &Path) {
     }
 }
 
+/// `path` setelah symlink dan `.`/`..` di-resolve; file boleh belum ada.
 fn resolve(path: &Path) -> Result<PathBuf, AppError> {
     if let Ok(p) = std::fs::canonicalize(path) {
         return Ok(p);
@@ -1193,6 +1191,27 @@ mod tests {
             assert_eq!(rows.len(), 1);
             assert!(!rows[0].missing);
             assert_eq!(std::fs::read(att2.join(&sha)).unwrap(), PNG);
+        }
+
+        #[test]
+        fn backup_ignores_tampered_sha() {
+            let mut f = Fixture::new();
+            attach(&mut f);
+            let outside = tempfile::tempdir().unwrap();
+            let victim = outside.path().join("dokumen.txt");
+            std::fs::write(&victim, b"penting").unwrap();
+            f.ledger
+                .conn
+                .execute(
+                    "UPDATE attachment SET sha256 = ?1",
+                    [victim.to_str().unwrap()],
+                )
+                .unwrap();
+            let out = tempfile::tempdir().unwrap();
+            let x = out.path().join("cadangan.db");
+            f.ledger.backup_to(&x, &f.root.join("attachments")).unwrap();
+            assert_eq!(std::fs::read(&victim).unwrap(), b"penting");
+            assert_eq!(files(out.path()), ["cadangan.db"]);
         }
 
         #[test]

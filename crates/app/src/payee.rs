@@ -80,7 +80,10 @@ impl Ledger {
         let name = normalize_name(name)?;
         let tx = self.conn.transaction()?;
         ensure_payee(&tx, id)?;
-        check_default_category(&tx, default_category_id)?;
+        // Default lama yang sudah diarsip boleh tetap; hanya nilai baru yang divalidasi.
+        if payee::payee_default_category(&tx, id)? != default_category_id {
+            check_default_category(&tx, default_category_id)?;
+        }
         payee::update_payee(&tx, id, &name, default_category_id)
             .map_err(AppError::duplicate_as("payee"))?;
         tx.commit()?;
@@ -309,6 +312,22 @@ mod tests {
         assert!(matches!(
             ledger.create_payee("Toko", Some(Uuid::now_v7())),
             Err(AppError::NotFound("category"))
+        ));
+    }
+
+    #[test]
+    fn rename_keeps_archived_default_category() {
+        // Kategori default yang terpakai hanya bisa diarsip; payee tetap harus bisa diubah.
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let snack = expense_cat(&mut ledger, "Jajan");
+        let other = expense_cat(&mut ledger, "Lain");
+        let id = ledger.create_payee("warung", Some(snack)).unwrap();
+        ledger.archive_category(snack).unwrap();
+        ledger.update_payee(id, "Warung", Some(snack)).unwrap();
+        ledger.update_payee(id, "Warung", Some(other)).unwrap();
+        assert!(matches!(
+            ledger.update_payee(id, "Warung", Some(snack)),
+            Err(AppError::Archived("category"))
         ));
     }
 

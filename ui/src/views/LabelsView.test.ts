@@ -57,6 +57,12 @@ describe('LabelsView', () => {
     document.body.innerHTML = ''
   })
 
+  it('memuat ulang tag/payee setiap kali dibuka (jumlah transaksi bisa berubah di layar lain)', async () => {
+    const { labels, mountView } = setup()
+    await mountView()
+    expect(labels.reload).toHaveBeenCalledTimes(1)
+  })
+
   it('tab Tag menampilkan #kantor dengan jumlah transaksi', async () => {
     const { mountView } = setup()
     const w = await mountView()

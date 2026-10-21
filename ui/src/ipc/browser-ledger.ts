@@ -936,8 +936,11 @@ export const browserLedger = {
     if (n.status === 'error') return n
     const p = state.payees.find((x) => x.id === i)
     if (!p) return notFound('payee')
-    const c = checkDefaultCategory(defaultCategoryId)
-    if (c.status === 'error') return c
+    // Default lama yang sudah diarsip boleh tetap; hanya nilai baru yang divalidasi (sama dengan Rust).
+    if (p.defaultCategoryId !== defaultCategoryId) {
+      const c = checkDefaultCategory(defaultCategoryId)
+      if (c.status === 'error') return c
+    }
     if (state.payees.some((x) => x.id !== i && sameName(x.name, n.data))) return fail('duplicate', 'payee')
     Object.assign(p, { name: n.data, defaultCategoryId })
     return ok(null)
