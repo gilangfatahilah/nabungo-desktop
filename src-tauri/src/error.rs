@@ -209,6 +209,10 @@ impl From<AppError> for IpcError {
             AppError::InvalidBackup => Self::code(ErrorCode::BackupInvalid),
             AppError::BackupTooNew => Self::code(ErrorCode::BackupTooNew),
             AppError::BackupTargetInvalid => Self::code(ErrorCode::BackupTargetInvalid),
+            // Sementara sampai command lampiran punya kode sendiri.
+            AppError::AttachmentType
+            | AppError::AttachmentTooLarge
+            | AppError::AttachmentMissing => Self::code(ErrorCode::Internal),
             AppError::Io(err) => {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::FileIo)

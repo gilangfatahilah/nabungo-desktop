@@ -489,7 +489,7 @@ mod tests {
         let mut l = Ledger::open_with_backups(&e.db, &e.backups, None, NOW).unwrap();
         add_account(&mut l, "Lama", 10);
         let plain = e.db.with_file_name("salinan.db");
-        l.backup_to(&plain).unwrap();
+        l.backup_to(&plain, &plain.with_extension("att")).unwrap();
         add_account(&mut l, "Baru", 20);
         l.enable_encryption(PW, &e.backups, FAST).unwrap();
         std::fs::create_dir_all(&e.backups).unwrap();
@@ -542,7 +542,7 @@ mod tests {
         let e = env();
         let (l, _) = encrypted(&e);
         assert!(matches!(
-            l.backup_to(&keyfile_path(&e.db)),
+            l.backup_to(&keyfile_path(&e.db), &e.db.with_extension("att")),
             Err(AppError::BackupTargetInvalid)
         ));
     }

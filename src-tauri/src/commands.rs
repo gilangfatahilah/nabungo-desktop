@@ -673,7 +673,7 @@ pub async fn backup_now(
     let Some(dest) = pick_path(&app, Dialog::Save { name, ext: "db" }).await? else {
         return Ok(None);
     };
-    ledger(&state)?.backup_to(&dest)?;
+    ledger(&state)?.backup_to(&dest, &state.data_dir.path.join("attachments"))?;
     Ok(Some(display(&dest)))
 }
 
@@ -700,7 +700,8 @@ pub async fn restore_backup_from_file(
         return Ok(false);
     };
     let dir = state.data_dir.backups_path();
-    ledger(&state)?.restore_file(&src, &dir, OffsetDateTime::now_utc())?;
+    let att = state.data_dir.path.join("attachments");
+    ledger(&state)?.restore_file(&src, &dir, &att, OffsetDateTime::now_utc())?;
     crate::lifecycle::on_restored(&app);
     Ok(true)
 }
@@ -731,7 +732,8 @@ pub async fn export_csv(
     let Some(parent) = pick_path(&app, Dialog::Folder).await? else {
         return Ok(None);
     };
-    let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today())?;
+    let att = state.data_dir.path.join("attachments");
+    let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today(), &att)?;
     Ok(Some(display(&dir)))
 }
 
