@@ -302,7 +302,7 @@ function shapeRow(t: Txn, running: Map<string, number> | null, accountId: string
   const row: TxnRowDto = {
     id: t.id, kind: t.kind, date: t.date, payee: payeeName(t), note: t.note, amount: 0,
     accountId: t.postings[0]!.accountId, toAccountId: null, categoryId: null, splitCount: 0, fee: 0,
-    tags: [...t.tags], accountDelta: null, runningBalance: null, reconciled: null,
+    tags: [...t.tags], accountDelta: null, runningBalance: null, reconciled: null, attachmentCount: 0,
   }
   if (t.kind === 'transfer') {
     for (const p of t.postings) {

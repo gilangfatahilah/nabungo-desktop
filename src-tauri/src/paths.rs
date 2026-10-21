@@ -20,6 +20,10 @@ impl DataDir {
         self.path.join("backups")
     }
 
+    pub fn attachments_path(&self) -> PathBuf {
+        self.path.join("attachments")
+    }
+
     pub fn session_marker_path(&self) -> PathBuf {
         self.path.join("session.lock")
     }
@@ -69,5 +73,12 @@ mod tests {
     fn no_base_dir_is_error() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(resolve_data_dir(tmp.path(), None).is_err());
+    }
+
+    #[test]
+    fn attachments_dir_under_data() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = resolve_data_dir(tmp.path(), Some(&tmp.path().join("share"))).unwrap();
+        assert_eq!(d.attachments_path(), d.path.join("attachments"));
     }
 }

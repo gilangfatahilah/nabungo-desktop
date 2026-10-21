@@ -68,6 +68,9 @@ pub enum ErrorCode {
     BackupInvalid,
     BackupTooNew,
     BackupTargetInvalid,
+    AttachmentType,
+    AttachmentTooLarge,
+    AttachmentMissing,
     FileIo,
     Locked,
     WrongPassword,
@@ -209,10 +212,9 @@ impl From<AppError> for IpcError {
             AppError::InvalidBackup => Self::code(ErrorCode::BackupInvalid),
             AppError::BackupTooNew => Self::code(ErrorCode::BackupTooNew),
             AppError::BackupTargetInvalid => Self::code(ErrorCode::BackupTargetInvalid),
-            // Sementara sampai command lampiran punya kode sendiri.
-            AppError::AttachmentType
-            | AppError::AttachmentTooLarge
-            | AppError::AttachmentMissing => Self::code(ErrorCode::Internal),
+            AppError::AttachmentType => Self::code(ErrorCode::AttachmentType),
+            AppError::AttachmentTooLarge => Self::code(ErrorCode::AttachmentTooLarge),
+            AppError::AttachmentMissing => Self::code(ErrorCode::AttachmentMissing),
             AppError::Io(err) => {
                 tracing::error!(error = %err, "io error");
                 Self::code(ErrorCode::FileIo)
@@ -276,6 +278,31 @@ mod tests {
         );
         let io = AppError::Io(std::io::Error::other("disk penuh"));
         assert_eq!(IpcError::from(io).code, ErrorCode::FileIo);
+    }
+
+    #[test]
+    fn attachment_errors_map_to_codes() {
+        let cases = [
+            (
+                AppError::AttachmentType,
+                ErrorCode::AttachmentType,
+                "attachment_type",
+            ),
+            (
+                AppError::AttachmentTooLarge,
+                ErrorCode::AttachmentTooLarge,
+                "attachment_too_large",
+            ),
+            (
+                AppError::AttachmentMissing,
+                ErrorCode::AttachmentMissing,
+                "attachment_missing",
+            ),
+        ];
+        for (err, code, wire) in cases {
+            assert_eq!(IpcError::from(err).code, code);
+            assert_eq!(serde_json::to_value(code).unwrap(), wire);
+        }
     }
 
     #[test]

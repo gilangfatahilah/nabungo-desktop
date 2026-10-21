@@ -49,6 +49,20 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::undo_delete_txn,
             commands::payee_suggestion,
             commands::search_payees,
+            commands::list_tag_usage,
+            commands::create_tag,
+            commands::rename_tag,
+            commands::merge_tag,
+            commands::delete_tag,
+            commands::list_payee_usage,
+            commands::create_payee,
+            commands::update_payee,
+            commands::merge_payee,
+            commands::delete_payee,
+            commands::add_attachments,
+            commands::list_attachments,
+            commands::remove_attachment,
+            commands::open_attachment,
             commands::list_tags,
             commands::txn_form_defaults,
             commands::period_of,
@@ -156,6 +170,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| init(app).map_err(Into::into))
         .invoke_handler(builder.invoke_handler())
         .build(tauri::generate_context!())
