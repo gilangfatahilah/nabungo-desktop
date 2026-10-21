@@ -3,10 +3,12 @@
 use std::path::{Path, PathBuf};
 
 use nabungo_storage::rusqlite::Connection;
+use nabungo_storage::{DbKey, StorageError};
 use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
+use crate::vault::keyfile_path;
 use crate::{AppError, Ledger};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -129,17 +131,19 @@ pub fn is_auto_due(last: Option<OffsetDateTime>, now: OffsetDateTime) -> bool {
 /// Retensi hanya berjalan bila backup sukses.
 pub(crate) fn write_backup(
     conn: &Connection,
+    key: Option<&DbKey>,
     dir: &Path,
     kind: BackupKind,
     now: OffsetDateTime,
 ) -> Result<BackupInfo, AppError> {
-    let info = write_unpruned(conn, dir, kind, now)?;
+    let info = write_unpruned(conn, key, dir, kind, now)?;
     prune_logged(dir, kind);
     Ok(info)
 }
 
 fn write_unpruned(
     conn: &Connection,
+    key: Option<&DbKey>,
     dir: &Path,
     kind: BackupKind,
     now: OffsetDateTime,
@@ -169,9 +173,9 @@ fn write_unpruned(
     // Pra-restore menyalin DB apa adanya, termasuk yang rusak: justru saat itu restore dibutuhkan.
     // Jatahnya terpisah, jadi salinan rusak tidak menggeser backup otomatis.
     if kind == BackupKind::PreRestore {
-        nabungo_storage::backup_into_unverified(conn, &path)?;
+        nabungo_storage::backup_into_unverified(conn, &path, key)?;
     } else {
-        nabungo_storage::backup_into(conn, &path)?;
+        nabungo_storage::backup_into(conn, &path, key)?;
     }
     let size_bytes = std::fs::metadata(&path)?.len();
     Ok(BackupInfo {
@@ -213,21 +217,33 @@ fn resolve(path: &Path) -> Result<PathBuf, AppError> {
 }
 
 impl Ledger {
-    /// Buka DB; bila skemanya lama (bukan DB baru), simpan backup pra-migrasi dulu (K6).
+    /// Buka DB (dengan `key` bila terenkripsi); bila skemanya lama (bukan DB baru), simpan
+    /// backup pra-migrasi dulu (K6).
     pub fn open_with_backups(
         path: &Path,
         backup_dir: &Path,
+        key: Option<&DbKey>,
         now: OffsetDateTime,
     ) -> Result<Self, AppError> {
-        let mut conn = nabungo_storage::open_file(path)?;
+        // Key yang diberikan sudah diverifikasi pemanggil (key file / recovery key), jadi
+        // "key salah" di sini berarti file DB-nya yang tidak cocok atau rusak.
+        let mut conn = nabungo_storage::open_file(path, key).map_err(|e| match e {
+            StorageError::WrongKey => AppError::DatabaseUnreadable,
+            e => e.into(),
+        })?;
         let version = nabungo_storage::schema_version(&conn)?;
         if version > 0 && version < nabungo_storage::latest_version() {
-            write_backup(&conn, backup_dir, BackupKind::PreMigration, now)?;
+            write_backup(&conn, key, backup_dir, BackupKind::PreMigration, now)?;
         }
         nabungo_storage::migrate(&mut conn)?;
+        // Ulangi konversi backup yang gagal saat enable (idempoten: file terenkripsi dilewati).
+        if let Some(key) = key {
+            crate::security::convert_backups(backup_dir, None, Some(key));
+        }
         Ok(Self {
             conn,
             path: Some(path.to_path_buf()),
+            key: key.cloned(),
         })
     }
 
@@ -250,13 +266,16 @@ impl Ledger {
                 return Err(AppError::BackupTargetInvalid);
             }
         }
+        if target == keyfile_path(&live) {
+            return Err(AppError::BackupTargetInvalid);
+        }
         Ok(())
     }
 
     /// Backup manual ke path pilihan user (K3), tanpa retensi.
     pub fn backup_to(&self, dest: &Path) -> Result<(), AppError> {
         self.ensure_not_live(dest)?;
-        nabungo_storage::backup_into(&self.conn, dest)?;
+        nabungo_storage::backup_into(&self.conn, dest, self.key.as_ref())?;
         Ok(())
     }
 
@@ -275,7 +294,7 @@ impl Ledger {
         if !is_auto_due(last, now) {
             return Ok(None);
         }
-        write_backup(&self.conn, dir, BackupKind::Auto, now).map(Some)
+        write_backup(&self.conn, self.key.as_ref(), dir, BackupKind::Auto, now).map(Some)
     }
 
     /// Pulihkan dari `src` (K7): periksa → backup pra-restore → salin → migrasi.
@@ -287,9 +306,16 @@ impl Ledger {
         now: OffsetDateTime,
     ) -> Result<(), AppError> {
         self.ensure_not_live(src)?;
-        nabungo_storage::inspect_backup(src).map_err(AppError::from_backup)?;
-        write_unpruned(&self.conn, backup_dir, BackupKind::PreRestore, now)?;
-        nabungo_storage::restore_from(&mut self.conn, src).map_err(AppError::from_backup)?;
+        nabungo_storage::inspect_backup(src, self.key.as_ref()).map_err(AppError::from_backup)?;
+        write_unpruned(
+            &self.conn,
+            self.key.as_ref(),
+            backup_dir,
+            BackupKind::PreRestore,
+            now,
+        )?;
+        nabungo_storage::restore_from(&mut self.conn, src, self.key.as_ref())
+            .map_err(AppError::from_backup)?;
         nabungo_storage::migrate(&mut self.conn)?;
         // Retensi setelah restore: sumbernya bisa saja pre-restore tertua.
         prune_logged(backup_dir, BackupKind::PreRestore);
@@ -339,11 +365,11 @@ mod tests {
     fn name_roundtrip() {
         let dir = tempfile::tempdir().unwrap();
         let c = conn();
-        let a = write_backup(&c, dir.path(), BackupKind::Auto, T).unwrap();
+        let a = write_backup(&c, None, dir.path(), BackupKind::Auto, T).unwrap();
         assert_eq!(a.file_name, "auto-20261020T031500Z.db");
         assert_eq!(a.kind, BackupKind::Auto);
         assert_eq!(a.created_at, T);
-        let b = write_backup(&c, dir.path(), BackupKind::Auto, T).unwrap();
+        let b = write_backup(&c, None, dir.path(), BackupKind::Auto, T).unwrap();
         assert_eq!(b.file_name, "auto-20261020T031500Z-1.db");
         assert_eq!(
             parse_backup_name("pre-migration-20261020T031500Z-2.db"),
@@ -381,11 +407,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let c = conn();
         for i in 0..16 {
-            write_backup(&c, dir.path(), BackupKind::Auto, T + Duration::days(i)).unwrap();
+            write_backup(
+                &c,
+                None,
+                dir.path(),
+                BackupKind::Auto,
+                T + Duration::days(i),
+            )
+            .unwrap();
         }
         for i in 0..6 {
             write_backup(
                 &c,
+                None,
                 dir.path(),
                 BackupKind::PreRestore,
                 T + Duration::days(i),
@@ -409,7 +443,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let c = conn();
         for _ in 0..15 {
-            write_backup(&c, dir.path(), BackupKind::Auto, T).unwrap();
+            write_backup(&c, None, dir.path(), BackupKind::Auto, T).unwrap();
         }
         let n = names(dir.path());
         assert_eq!(n.len(), 14);
@@ -426,6 +460,7 @@ mod tests {
         for i in 0..15 {
             write_backup(
                 &c,
+                None,
                 dir.path(),
                 BackupKind::Auto,
                 T + time::Duration::days(i),
@@ -443,9 +478,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         assert!(list_backups(&dir.path().join("none")).unwrap().is_empty());
         let c = conn();
-        write_backup(&c, dir.path(), BackupKind::Auto, T).unwrap();
+        write_backup(&c, None, dir.path(), BackupKind::Auto, T).unwrap();
         write_backup(
             &c,
+            None,
             dir.path(),
             BackupKind::PreMigration,
             T + time::Duration::hours(1),
@@ -462,7 +498,7 @@ mod tests {
     fn write_creates_missing_dir() {
         let dir = tempfile::tempdir().unwrap();
         let sub = dir.path().join("backups");
-        write_backup(&conn(), &sub, BackupKind::Auto, T).unwrap();
+        write_backup(&conn(), None, &sub, BackupKind::Auto, T).unwrap();
         assert_eq!(names(&sub).len(), 1);
     }
 
@@ -475,6 +511,7 @@ mod tests {
         for i in 0..14 {
             write_backup(
                 &c,
+                None,
                 dir.path(),
                 BackupKind::Auto,
                 T + time::Duration::days(i),
@@ -485,6 +522,7 @@ mod tests {
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
         let r = write_backup(
             &c,
+            None,
             dir.path(),
             BackupKind::Auto,
             T + time::Duration::days(30),
@@ -696,15 +734,19 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let old = dir.path().join("old.db");
             let expected = {
-                let mut conn = nabungo_storage::open_file(&old).unwrap();
+                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
                 nabungo_storage::migrate_to(&mut conn, 4).unwrap();
                 // 0005 hanya menambah index, jadi use case jalan di skema 4.
-                let mut l = Ledger { conn, path: None };
+                let mut l = Ledger {
+                    conn,
+                    path: None,
+                    key: None,
+                };
                 seed(&mut l);
                 snapshot(&l)
             };
             assert_eq!(
-                nabungo_storage::schema_version(&nabungo_storage::open_file(&old).unwrap())
+                nabungo_storage::schema_version(&nabungo_storage::open_file(&old, None).unwrap())
                     .unwrap(),
                 4
             );
@@ -808,19 +850,19 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let backups = dir.path().join("backups");
             let fresh = dir.path().join("fresh.db");
-            Ledger::open_with_backups(&fresh, &backups, NOW).unwrap();
+            Ledger::open_with_backups(&fresh, &backups, None, NOW).unwrap();
             assert!(backup_files(&backups).is_empty());
 
             let old = dir.path().join("old.db");
             {
-                let mut conn = nabungo_storage::open_file(&old).unwrap();
+                let mut conn = nabungo_storage::open_file(&old, None).unwrap();
                 nabungo_storage::migrate_to(&mut conn, 4).unwrap();
             }
-            let l = Ledger::open_with_backups(&old, &backups, NOW).unwrap();
+            let l = Ledger::open_with_backups(&old, &backups, None, NOW).unwrap();
             let list = backup_files(&backups);
             assert_eq!(list.len(), 1);
             assert!(list[0].starts_with("pre-migration-"), "{list:?}");
-            let b = nabungo_storage::open_file_read_only(&backups.join(&list[0])).unwrap();
+            let b = nabungo_storage::open_file_read_only(&backups.join(&list[0]), None).unwrap();
             assert_eq!(nabungo_storage::schema_version(&b).unwrap(), 4);
             assert_eq!(
                 nabungo_storage::schema_version(&l.conn).unwrap(),
@@ -829,7 +871,7 @@ mod tests {
 
             // Buka ulang di versi terbaru: tidak ada backup pra-migrasi baru.
             drop(l);
-            Ledger::open_with_backups(&old, &backups, NOW + Duration::hours(1)).unwrap();
+            Ledger::open_with_backups(&old, &backups, None, NOW + Duration::hours(1)).unwrap();
             assert_eq!(
                 backup_files(&backups).len(),
                 1,
@@ -861,7 +903,7 @@ mod tests {
         /// Rusak satu halaman b-tree `posting` (jumlah sel mustahil); DB harus tertutup.
         fn corrupt_posting_page(db: &Path) {
             let (root, page_size): (i64, i64) = {
-                let c = nabungo_storage::open_file_read_only(db).unwrap();
+                let c = nabungo_storage::open_file_read_only(db, None).unwrap();
                 let root = c
                     .query_row(
                         "SELECT rootpage FROM sqlite_schema WHERE name = 'posting'",

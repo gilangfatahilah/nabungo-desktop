@@ -77,6 +77,16 @@ export const commands = {
 	restoreBackupFromFile: () => typedError<boolean, IpcError>(__TAURI_INVOKE("restore_backup_from_file")),
 	exportJson: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_json")),
 	exportCsv: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_csv")),
+	setAutoLockMinutes: (minutes: number) => typedError<null, IpcError>(__TAURI_INVOKE("set_auto_lock_minutes", { minutes })),
+	/**  Status enkripsi; bisa dipanggil saat terkunci. */
+	securityStatus: () => typedError<SecurityStatusDto, IpcError>(__TAURI_INVOKE("security_status")),
+	unlock: (password: string) => typedError<null, IpcError>(__TAURI_INVOKE("unlock", { password })),
+	unlockWithRecovery: (recoveryKey: string, newPassword: string) => typedError<null, IpcError>(__TAURI_INVOKE("unlock_with_recovery", { recoveryKey, newPassword })),
+	/**  Tutup koneksi DB terenkripsi; kunci hilang dari memori sampai unlock berikutnya. */
+	lock: () => typedError<null, IpcError>(__TAURI_INVOKE("lock")),
+	enableEncryption: (password: string) => typedError<string, IpcError>(__TAURI_INVOKE("enable_encryption", { password })),
+	disableEncryption: (password: string) => typedError<null, IpcError>(__TAURI_INVOKE("disable_encryption", { password })),
+	changePassword: (oldPassword: string, newPassword: string) => typedError<null, IpcError>(__TAURI_INVOKE("change_password", { oldPassword, newPassword })),
 };
 
 /* Types */
@@ -260,7 +270,7 @@ export type CategoryFieldsDto = {
 
 export type CategoryKindDto = "income" | "expense";
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "file_io" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
 
 export type FeeDto = {
 	amount: number,
@@ -316,6 +326,13 @@ export type PostingDto = {
 	categoryId: string | null,
 	amount: number,
 	memo: string | null,
+};
+
+/**  Status enkripsi untuk UI; tersedia juga saat terkunci. */
+export type SecurityStatusDto = {
+	encrypted: boolean,
+	locked: boolean,
+	hasKeyfile: boolean,
 };
 
 export type ShareDto = {
@@ -414,6 +431,7 @@ export type TxnRowDto = {
 export type UiSettingsDto = {
 	theme: ThemeDto,
 	locale: LocaleDto,
+	autoLockMinutes: number,
 };
 
 export type UnallocatedDto = {

@@ -73,6 +73,14 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::restore_backup_from_file,
             commands::export_json,
             commands::export_csv,
+            commands::set_auto_lock_minutes,
+            commands::security_status,
+            commands::unlock,
+            commands::unlock_with_recovery,
+            commands::lock,
+            commands::enable_encryption,
+            commands::disable_encryption,
+            commands::change_password,
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()
@@ -99,43 +107,35 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
     if unclean_shutdown {
         tracing::warn!("sesi sebelumnya tidak berakhir normal");
     }
-    let backups = data_dir.backups_path();
-    let opened = nabungo_app::Ledger::open_with_backups(
-        &data_dir.db_path(),
-        &backups,
-        nabungo_app::OffsetDateTime::now_utc(),
-    );
-    let ledger = match opened {
-        Ok(l) => l,
+    let db_state = match nabungo_app::security::db_state(&data_dir.db_path()) {
+        Ok(st) => st,
         Err(e) => {
-            tracing::error!(error = %e, "gagal membuka database");
-            eprintln!("gagal membuka database: {e}");
+            tracing::error!(error = %e, "gagal memeriksa file database");
             return Err(e.into());
         }
     };
-    let startup = lifecycle::StartupReport {
-        unclean_shutdown,
-        integrity: if unclean_shutdown {
-            lifecycle::check_integrity(&ledger)
-        } else {
-            lifecycle::IntegrityStatus::Skipped
-        },
-    };
-    let auto_backup = lifecycle::auto_backup_allowed(&startup);
-    if auto_backup {
-        lifecycle::run_auto_backup(&ledger, &backups);
-    } else {
-        tracing::warn!("backup otomatis dimatikan untuk sesi ini");
-    }
     app.manage(state::LogGuard(guard));
     app.manage(state::AppState {
-        ledger: std::sync::Mutex::new(ledger),
+        ledger: std::sync::Mutex::new(None),
         data_dir,
-        startup: std::sync::Mutex::new(startup),
+        startup: std::sync::Mutex::new(lifecycle::StartupReport {
+            unclean_shutdown,
+            integrity: lifecycle::IntegrityStatus::Skipped,
+        }),
         scheduler_started: std::sync::atomic::AtomicBool::new(false),
+        unclean_shutdown,
     });
-    if auto_backup {
-        lifecycle::spawn_backup_scheduler(app.handle().clone());
+    match db_state {
+        nabungo_app::security::DbState::Plain => {
+            if let Err(e) = lifecycle::open_unlocked(app.handle(), None) {
+                tracing::error!(error = %e, "gagal membuka database");
+                eprintln!("gagal membuka database: {e}");
+                return Err(e.into());
+            }
+        }
+        nabungo_app::security::DbState::Encrypted { .. } => {
+            tracing::info!("database terenkripsi; menunggu unlock");
+        }
     }
     Ok(())
 }

@@ -1,31 +1,84 @@
-//! File database: buka tanpa migrasi, backup/restore via online backup API, inspeksi, integrity.
+//! File database: buka tanpa migrasi, backup/restore via online backup API, konversi
+//! plaintext ↔ terenkripsi, inspeksi, integrity.
 //!
 //! Semua file DB (utama, tujuan backup, sumber restore) dibuka lewat modul ini; di sinilah key
-//! SQLCipher akan dipasang (Fase 6b).
+//! SQLCipher dipasang.
 
 use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use zeroize::Zeroizing;
 
+use crate::key::DbKey;
 use crate::{Result, StorageError, configure, latest_version, migrations};
 
-/// Satu-satunya tempat koneksi ke file dibuat (tanpa PRAGMA).
-fn open_raw(path: &Path, flags: OpenFlags) -> Result<Connection> {
-    Ok(Connection::open_with_flags(path, flags)?)
+/// 16 byte pertama file SQLite yang tidak terenkripsi.
+const PLAIN_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+/// `true` bila file ada dan 16 byte pertamanya bukan header SQLite plaintext. File yang tidak
+/// ada, kosong, atau lebih pendek dari header dianggap tidak terenkripsi.
+pub fn is_encrypted_file(path: &Path) -> std::io::Result<bool> {
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let mut buf = [0u8; 16];
+    let mut n = 0;
+    while n < buf.len() {
+        match f.read(&mut buf[n..])? {
+            0 => break,
+            k => n += k,
+        }
+    }
+    Ok(n == buf.len() && &buf != PLAIN_HEADER)
 }
 
-/// Buka (atau buat) file DB dan set PRAGMA, tanpa migrasi.
-pub fn open_file(path: &Path) -> Result<Connection> {
-    let conn = open_raw(path, OpenFlags::default())?;
+/// Satu-satunya tempat koneksi ke file dibuat (tanpa PRAGMA selain key).
+///
+/// Tanpa key pada file terenkripsi → [`StorageError::KeyRequired`]; key yang tidak cocok
+/// (termasuk key pada file plaintext) → [`StorageError::WrongKey`].
+fn open_raw(path: &Path, flags: OpenFlags, key: Option<&DbKey>) -> Result<Connection> {
+    if key.is_none() && is_encrypted_file(path)? {
+        return Err(StorageError::KeyRequired);
+    }
+    let conn = Connection::open_with_flags(path, flags)?;
+    if let Some(key) = key {
+        conn.execute_batch(&Zeroizing::new(format!(
+            "PRAGMA key = {};",
+            key.sql_literal().as_str()
+        )))?;
+        // SQLCipher baru memverifikasi key saat halaman pertama dibaca.
+        match conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+            r.get::<_, i64>(0)
+        }) {
+            Ok(_) => {}
+            Err(rusqlite::Error::SqliteFailure(e, _))
+                if e.code == rusqlite::ErrorCode::NotADatabase =>
+            {
+                return Err(StorageError::WrongKey);
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(conn)
+}
+
+/// Buka (atau buat) file DB dan set PRAGMA, tanpa migrasi. `key` `Some` pada file baru
+/// membuat file terenkripsi.
+pub fn open_file(path: &Path, key: Option<&DbKey>) -> Result<Connection> {
+    let conn = open_raw(path, OpenFlags::default(), key)?;
     configure(&conn)?;
     Ok(conn)
 }
 
 /// Buka file DB yang sudah ada hanya untuk dibaca; file tidak dibuat bila belum ada.
-pub fn open_file_read_only(path: &Path) -> Result<Connection> {
+pub fn open_file_read_only(path: &Path, key: Option<&DbKey>) -> Result<Connection> {
     open_raw(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        key,
     )
 }
 
@@ -79,22 +132,23 @@ fn quick_check(conn: &Connection) -> Result<bool> {
 }
 
 /// Salin isi `conn` ke `dest`: tulis ke `dest.partial`, `quick_check`, lalu rename
-/// (menimpa `dest` bila ada). Gagal → tidak ada file yang tertinggal.
-pub fn backup_into(conn: &Connection, dest: &Path) -> Result<()> {
-    copy_into(conn, dest, true)
+/// (menimpa `dest` bila ada). Gagal → tidak ada file yang tertinggal. `key` harus key DB
+/// sumber: backup API tidak bisa menyalin lintas status enkripsi.
+pub fn backup_into(conn: &Connection, dest: &Path, key: Option<&DbKey>) -> Result<()> {
+    copy_into(conn, dest, key, true)
 }
 
 /// Seperti [`backup_into`] tanpa `quick_check`: salinan pengaman dari DB yang mungkin
 /// rusak (pra-restore) tetap harus bisa dibuat.
-pub fn backup_into_unverified(conn: &Connection, dest: &Path) -> Result<()> {
-    copy_into(conn, dest, false)
+pub fn backup_into_unverified(conn: &Connection, dest: &Path, key: Option<&DbKey>) -> Result<()> {
+    copy_into(conn, dest, key, false)
 }
 
-fn copy_into(conn: &Connection, dest: &Path, verify: bool) -> Result<()> {
+fn copy_into(conn: &Connection, dest: &Path, key: Option<&DbKey>, verify: bool) -> Result<()> {
     let partial = sibling(dest, ".partial");
     remove_partial(&partial);
     let result = (|| {
-        let mut dst = open_raw(&partial, OpenFlags::default())?;
+        let mut dst = open_raw(&partial, OpenFlags::default(), key)?;
         copy_all(&Backup::new(conn, &mut dst)?)?;
         // Header ikut sumber (WAL); jadikan file tunggal agar bisa disalin/dibuka apa adanya.
         dst.pragma_update(None, "journal_mode", "DELETE")?;
@@ -111,17 +165,99 @@ fn copy_into(conn: &Connection, dest: &Path, verify: bool) -> Result<()> {
     result
 }
 
-/// Ganti isi `conn` dengan isi file `src` dalam satu langkah backup API (atomik di sisi tujuan).
-pub fn restore_from(conn: &mut Connection, src: &Path) -> Result<()> {
-    let src = open_file_read_only(src)?;
-    copy_all(&Backup::new(&src, conn)?)?;
-    Ok(())
+/// Ganti isi `conn` (DB aktif dengan key `live_key`) dengan isi file `src` dalam satu langkah
+/// backup API (atomik di sisi tujuan). Sumber terenkripsi dibuka dengan `live_key`; bila status
+/// enkripsi sumber berbeda dari DB aktif, sumber lebih dulu dikonversi ke file sementara di
+/// samping DB aktif.
+pub fn restore_from(conn: &mut Connection, src: &Path, live_key: Option<&DbKey>) -> Result<()> {
+    let src_encrypted = is_encrypted_file(src)?;
+    if src_encrypted == live_key.is_some() {
+        let src = open_file_read_only(src, live_key)?;
+        return copy_all(&Backup::new(&src, conn)?);
+    }
+    let base = conn
+        .path()
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| src.to_path_buf());
+    let tmp = sibling(&base, ".restore-partial");
+    remove_partial(&tmp);
+    let src_key = if src_encrypted { live_key } else { None };
+    let result = convert_file(src, src_key, &tmp, live_key).and_then(|()| {
+        let tmp_conn = open_file_read_only(&tmp, live_key)?;
+        copy_all(&Backup::new(&tmp_conn, conn)?)
+    });
+    remove_partial(&tmp);
+    result
 }
 
-/// Validasi file backup sebelum restore; mengembalikan versi skemanya.
-pub fn inspect_backup(path: &Path) -> Result<usize> {
+/// Salin `src` ke `dest` dengan status enkripsi baru lewat `sqlcipher_export` (backup API tidak
+/// bisa lintas enkripsi). Ditulis ke `dest.partial`, diverifikasi, lalu di-rename.
+pub fn convert_file(
+    src: &Path,
+    src_key: Option<&DbKey>,
+    dest: &Path,
+    dest_key: Option<&DbKey>,
+) -> Result<()> {
+    let partial = sibling(dest, ".partial");
+    remove_partial(&partial);
+    let result = (|| {
+        // DB yang di-ATTACH mewarisi flag koneksi utama, jadi CREATE wajib agar `.partial`
+        // bisa dibuat; sumber yang tidak ada dicek manual supaya tidak ikut dibuat.
+        if !src.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{} not found", src.display()),
+            )
+            .into());
+        }
+        let conn = open_raw(
+            src,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            src_key,
+        )?;
+        let dest_literal = match dest_key {
+            Some(k) => k.sql_literal(),
+            None => Zeroizing::new("''".to_owned()),
+        };
+        conn.execute(
+            &Zeroizing::new(format!(
+                "ATTACH DATABASE ?1 AS nabungo_dest KEY {}",
+                dest_literal.as_str()
+            )),
+            [partial.to_string_lossy()],
+        )?;
+        conn.execute_batch("SELECT sqlcipher_export('nabungo_dest');")?;
+        // `sqlcipher_export` tidak menjamin `user_version` ikut tersalin.
+        let version = schema_version(&conn)?;
+        conn.execute_batch(&format!(
+            "PRAGMA nabungo_dest.user_version = {version}; DETACH DATABASE nabungo_dest;"
+        ))?;
+        drop(conn);
+        let check = open_file_read_only(&partial, dest_key)?;
+        if !quick_check(&check)? {
+            return Err(StorageError::Corrupt(
+                "converted file failed quick_check".into(),
+            ));
+        }
+        drop(check);
+        std::fs::rename(&partial, dest)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        remove_partial(&partial);
+    }
+    result
+}
+
+/// Validasi file backup sebelum restore; mengembalikan versi skemanya. `key` dipakai hanya bila
+/// file terenkripsi.
+pub fn inspect_backup(path: &Path, key: Option<&DbKey>) -> Result<usize> {
     let check = || -> Result<usize> {
-        let conn = open_file_read_only(path)?;
+        let key = if is_encrypted_file(path)? { key } else { None };
+        let conn = open_file_read_only(path, key)?;
         if !quick_check(&conn)? {
             return Err(StorageError::InvalidBackup);
         }
@@ -137,7 +273,9 @@ pub fn inspect_backup(path: &Path) -> Result<usize> {
     };
     let version = match check() {
         Ok(v) => v,
-        Err(StorageError::Sqlite(_)) => return Err(StorageError::InvalidBackup),
+        Err(StorageError::Sqlite(_) | StorageError::KeyRequired | StorageError::WrongKey) => {
+            return Err(StorageError::InvalidBackup);
+        }
         Err(e) => return Err(e),
     };
     if version > latest_version() {
@@ -158,6 +296,7 @@ pub fn integrity_check(conn: &Connection) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::key::DbKey;
     use crate::{open, open_in_memory, setting};
 
     fn put(conn: &mut Connection, value: &str) {
@@ -173,10 +312,10 @@ mod tests {
     #[test]
     fn backup_roundtrip_preserves_rows() {
         let dir = tempfile::tempdir().unwrap();
-        let mut conn = open(&dir.path().join("main.db")).unwrap();
+        let mut conn = open(&dir.path().join("main.db"), None).unwrap();
         put(&mut conn, "v");
         let dest = dir.path().join("b.db");
-        backup_into(&conn, &dest).unwrap();
+        backup_into(&conn, &dest, None).unwrap();
         let mut names: Vec<_> = std::fs::read_dir(dir.path())
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
@@ -184,20 +323,20 @@ mod tests {
             .collect();
         names.sort();
         assert_eq!(names, ["b.db"]);
-        assert_eq!(get(&open(&dest).unwrap()).as_deref(), Some("v"));
+        assert_eq!(get(&open(&dest, None).unwrap()).as_deref(), Some("v"));
     }
 
     #[test]
     fn backup_includes_committed_wal_frames() {
         let dir = tempfile::tempdir().unwrap();
         let main = dir.path().join("main.db");
-        let mut conn = open(&main).unwrap();
+        let mut conn = open(&main, None).unwrap();
         put(&mut conn, "wal");
         // Belum checkpoint: data masih di -wal.
         assert!(dir.path().join("main.db-wal").exists());
         let dest = dir.path().join("b.db");
-        backup_into(&conn, &dest).unwrap();
-        let b = open_file_read_only(&dest).unwrap();
+        backup_into(&conn, &dest, None).unwrap();
+        let b = open_file_read_only(&dest, None).unwrap();
         assert_eq!(get(&b).as_deref(), Some("wal"));
         // File backup mandiri: mode rollback, tidak menumbuhkan -wal/-shm saat dibuka.
         let mode: String = b
@@ -212,9 +351,9 @@ mod tests {
     #[test]
     fn backup_failure_leaves_no_file() {
         let dir = tempfile::tempdir().unwrap();
-        let conn = open(&dir.path().join("main.db")).unwrap();
+        let conn = open(&dir.path().join("main.db"), None).unwrap();
         let dest = dir.path().join("missing").join("b.db");
-        assert!(backup_into(&conn, &dest).is_err());
+        assert!(backup_into(&conn, &dest, None).is_err());
         assert!(!dest.exists());
         assert!(!dir.path().join("missing").join("b.db.partial").exists());
     }
@@ -222,13 +361,13 @@ mod tests {
     #[test]
     fn restore_replaces_contents() {
         let dir = tempfile::tempdir().unwrap();
-        let mut a = open(&dir.path().join("a.db")).unwrap();
+        let mut a = open(&dir.path().join("a.db"), None).unwrap();
         put(&mut a, "a");
         let b_path = dir.path().join("b.db");
-        let mut b = open(&b_path).unwrap();
+        let mut b = open(&b_path, None).unwrap();
         put(&mut b, "b");
         drop(b);
-        restore_from(&mut a, &b_path).unwrap();
+        restore_from(&mut a, &b_path, None).unwrap();
         assert_eq!(get(&a).as_deref(), Some("b"));
     }
 
@@ -242,20 +381,20 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(
-            inspect_backup(&text),
+            inspect_backup(&text, None),
             Err(StorageError::InvalidBackup)
         ));
 
         let empty = dir.path().join("e.db");
         std::fs::write(&empty, b"").unwrap();
         assert!(matches!(
-            inspect_backup(&empty),
+            inspect_backup(&empty, None),
             Err(StorageError::InvalidBackup)
         ));
 
         let missing = dir.path().join("nope.db");
         assert!(matches!(
-            inspect_backup(&missing),
+            inspect_backup(&missing, None),
             Err(StorageError::InvalidBackup)
         ));
         assert!(!missing.exists());
@@ -266,23 +405,23 @@ mod tests {
             .execute_batch("CREATE TABLE x (a)")
             .unwrap();
         assert!(matches!(
-            inspect_backup(&foreign),
+            inspect_backup(&foreign, None),
             Err(StorageError::InvalidBackup)
         ));
 
         let newer = dir.path().join("n.db");
-        let conn = open(&newer).unwrap();
+        let conn = open(&newer, None).unwrap();
         conn.pragma_update(None, "user_version", latest_version() as i64 + 1)
             .unwrap();
         drop(conn);
         assert!(matches!(
-            inspect_backup(&newer),
+            inspect_backup(&newer, None),
             Err(StorageError::BackupTooNew(v)) if v == latest_version() + 1
         ));
 
         let good = dir.path().join("g.db");
-        drop(open(&good).unwrap());
-        assert_eq!(inspect_backup(&good).unwrap(), latest_version());
+        drop(open(&good, None).unwrap());
+        assert_eq!(inspect_backup(&good, None).unwrap(), latest_version());
     }
 
     #[test]
@@ -297,12 +436,155 @@ mod tests {
     #[test]
     fn migrate_to_then_migrate_reaches_latest() {
         let dir = tempfile::tempdir().unwrap();
-        let mut conn = open_file(&dir.path().join("m.db")).unwrap();
+        let mut conn = open_file(&dir.path().join("m.db"), None).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), 0);
         migrate_to(&mut conn, 3).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), 3);
         migrate(&mut conn).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), latest_version());
         assert_eq!(latest_version(), 5);
+    }
+
+    fn key(b: u8) -> DbKey {
+        DbKey::from_bytes([b; 32])
+    }
+
+    #[test]
+    fn plaintext_file_is_not_encrypted() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("p.db");
+        drop(open(&p, None).unwrap());
+        assert!(!is_encrypted_file(&p).unwrap());
+    }
+
+    #[test]
+    fn missing_or_empty_file_is_not_encrypted() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_encrypted_file(&dir.path().join("nope.db")).unwrap());
+        let empty = dir.path().join("e.db");
+        std::fs::write(&empty, b"").unwrap();
+        assert!(!is_encrypted_file(&empty).unwrap());
+    }
+
+    #[test]
+    fn keyed_file_roundtrip_and_is_encrypted() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("k.db");
+        let mut conn = open(&p, Some(&key(1))).unwrap();
+        put(&mut conn, "rahasia");
+        drop(conn);
+        assert!(is_encrypted_file(&p).unwrap());
+        let raw = std::fs::read(&p).unwrap();
+        assert!(!raw.windows(7).any(|w| w == b"rahasia"));
+        assert_eq!(
+            get(&open(&p, Some(&key(1))).unwrap()).as_deref(),
+            Some("rahasia")
+        );
+    }
+
+    #[test]
+    fn encrypted_without_key_is_key_required() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("k.db");
+        drop(open(&p, Some(&key(1))).unwrap());
+        assert!(matches!(
+            open_file(&p, None),
+            Err(StorageError::KeyRequired)
+        ));
+        assert!(matches!(
+            open_file_read_only(&p, None),
+            Err(StorageError::KeyRequired)
+        ));
+    }
+
+    #[test]
+    fn encrypted_with_wrong_key_is_wrong_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("k.db");
+        drop(open(&p, Some(&key(1))).unwrap());
+        assert!(matches!(
+            open_file(&p, Some(&key(2))),
+            Err(StorageError::WrongKey)
+        ));
+        assert!(matches!(
+            open_file_read_only(&p, Some(&key(2))),
+            Err(StorageError::WrongKey)
+        ));
+    }
+
+    #[test]
+    fn convert_plain_to_encrypted_and_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("p.db");
+        let mut conn = open(&plain, None).unwrap();
+        put(&mut conn, "v");
+        drop(conn);
+        let enc = dir.path().join("e.db");
+        convert_file(&plain, None, &enc, Some(&key(3))).unwrap();
+        assert!(is_encrypted_file(&enc).unwrap());
+        assert!(!sibling(&enc, ".partial").exists());
+        let c = open_file(&enc, Some(&key(3))).unwrap();
+        assert_eq!(get(&c).as_deref(), Some("v"));
+        assert_eq!(schema_version(&c).unwrap(), latest_version());
+        drop(c);
+        let back = dir.path().join("b.db");
+        convert_file(&enc, Some(&key(3)), &back, None).unwrap();
+        assert!(!is_encrypted_file(&back).unwrap());
+        let c = open_file(&back, None).unwrap();
+        assert_eq!(get(&c).as_deref(), Some("v"));
+        assert_eq!(schema_version(&c).unwrap(), latest_version());
+    }
+
+    #[test]
+    fn backup_of_encrypted_db_is_encrypted() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut conn = open(&dir.path().join("m.db"), Some(&key(4))).unwrap();
+        put(&mut conn, "v");
+        let dest = dir.path().join("b.db");
+        backup_into(&conn, &dest, Some(&key(4))).unwrap();
+        assert!(is_encrypted_file(&dest).unwrap());
+        assert_eq!(
+            inspect_backup(&dest, Some(&key(4))).unwrap(),
+            latest_version()
+        );
+        assert!(matches!(
+            inspect_backup(&dest, None),
+            Err(StorageError::InvalidBackup)
+        ));
+    }
+
+    #[test]
+    fn restore_plain_backup_into_encrypted_live() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("plain.db");
+        let mut s = open(&src, None).unwrap();
+        put(&mut s, "dari-plain");
+        drop(s);
+        let live_path = dir.path().join("live.db");
+        let mut live = open(&live_path, Some(&key(5))).unwrap();
+        put(&mut live, "lama");
+        restore_from(&mut live, &src, Some(&key(5))).unwrap();
+        assert_eq!(get(&live).as_deref(), Some("dari-plain"));
+        drop(live);
+        assert!(is_encrypted_file(&live_path).unwrap());
+        assert!(!sibling(&src, ".restore-partial").exists());
+        assert_eq!(
+            get(&open(&live_path, Some(&key(5))).unwrap()).as_deref(),
+            Some("dari-plain")
+        );
+    }
+
+    #[test]
+    fn restore_encrypted_backup_into_plain_live() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("enc.db");
+        let mut s = open(&src, Some(&key(6))).unwrap();
+        put(&mut s, "dari-enc");
+        drop(s);
+        let live_path = dir.path().join("live.db");
+        let mut live = open(&live_path, None).unwrap();
+        // Sumber terenkripsi dengan key yang tidak dimiliki live → tidak bisa dibaca.
+        assert!(restore_from(&mut live, &src, None).is_err());
+        assert_eq!(get(&live), None);
     }
 }

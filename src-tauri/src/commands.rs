@@ -1,31 +1,26 @@
 //! Command Tauri: tipis, hanya memanggil `Ledger`/core lalu memetakan DTO & error.
 
 use std::path::{Path, PathBuf};
-use std::sync::MutexGuard;
 
-use nabungo_app::{Ledger, OffsetDateTime, PeriodStartDay, Uuid};
-use tauri::{AppHandle, State};
+use nabungo_app::security::{self, DbState};
+use nabungo_app::vault::KdfParams;
+use nabungo_app::{AppError, OffsetDateTime, PeriodStartDay, Uuid};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetOverviewDto, CashflowPointDto,
     CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, LocaleDto,
-    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ShareDto, StartupReportDto, ThemeDto,
-    TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
-    ValuationPointDto, parse_day, parse_id, parse_period,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, SecurityStatusDto, ShareDto,
+    StartupReportDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto,
+    TxnQueryDto, UiSettingsDto, ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
-use crate::state::AppState;
+use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
 
-fn ledger<'a>(state: &'a State<'_, AppState>) -> Result<MutexGuard<'a, Ledger>, IpcError> {
-    state.ledger.lock().map_err(|_| {
-        tracing::error!("mutex ledger poisoned");
-        IpcError {
-            code: ErrorCode::Internal,
-            entity: None,
-        }
-    })
+fn ledger<'a>(state: &'a State<'_, AppState>) -> Result<LedgerGuard<'a>, IpcError> {
+    lock_ledger(&state.ledger)
 }
 
 #[tauri::command]
@@ -48,6 +43,12 @@ pub fn get_ui_settings(state: State<'_, AppState>) -> Result<UiSettingsDto, IpcE
 #[specta::specta]
 pub fn set_theme(state: State<'_, AppState>, theme: ThemeDto) -> Result<(), IpcError> {
     Ok(ledger(&state)?.set_theme(theme.into())?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_auto_lock_minutes(state: State<'_, AppState>, minutes: u8) -> Result<(), IpcError> {
+    Ok(ledger(&state)?.set_auto_lock_minutes(minutes)?)
 }
 
 #[tauri::command]
@@ -670,4 +671,131 @@ pub async fn export_csv(
     };
     let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today())?;
     Ok(Some(display(&dir)))
+}
+
+/// Kerja berat (Argon2id, konversi DB) di thread blocking agar event loop tetap jalan.
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, IpcError> + Send + 'static,
+) -> Result<T, IpcError> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| {
+        tracing::error!(error = %e, "task keamanan gagal");
+        IpcError::code(ErrorCode::Internal)
+    })?
+}
+
+/// Status enkripsi; bisa dipanggil saat terkunci.
+#[tauri::command]
+#[specta::specta]
+pub fn security_status(state: State<'_, AppState>) -> Result<SecurityStatusDto, IpcError> {
+    let slot = lock_slot(&state.ledger)?;
+    if let Some(l) = slot.as_ref() {
+        let has_keyfile = l.is_encrypted()
+            && nabungo_app::vault::keyfile_path(&state.data_dir.db_path()).is_file();
+        return Ok(SecurityStatusDto {
+            encrypted: l.is_encrypted(),
+            locked: false,
+            has_keyfile,
+        });
+    }
+    let (encrypted, has_keyfile) = match security::db_state(&state.data_dir.db_path())? {
+        DbState::Plain => (false, false),
+        DbState::Encrypted { has_keyfile } => (true, has_keyfile),
+    };
+    Ok(SecurityStatusDto {
+        encrypted,
+        locked: true,
+        has_keyfile,
+    })
+}
+
+/// Sudah terbuka → tidak melakukan apa-apa.
+fn already_unlocked(app: &AppHandle) -> Result<bool, IpcError> {
+    let state = app.state::<AppState>();
+    Ok(lock_slot(&state.ledger)?.is_some())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn unlock(app: AppHandle, password: String) -> Result<(), IpcError> {
+    blocking(move || {
+        if already_unlocked(&app)? {
+            return Ok(());
+        }
+        let db = app.state::<AppState>().data_dir.db_path();
+        let key = security::unlock_key(&db, &password)?;
+        crate::lifecycle::open_unlocked(&app, Some(key))?;
+        Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn unlock_with_recovery(
+    app: AppHandle,
+    recovery_key: String,
+    new_password: String,
+) -> Result<(), IpcError> {
+    blocking(move || {
+        if already_unlocked(&app)? {
+            return Ok(());
+        }
+        let db = app.state::<AppState>().data_dir.db_path();
+        let key = security::recover_key(&db, &recovery_key, &new_password, KdfParams::DEFAULT)?;
+        crate::lifecycle::open_unlocked(&app, Some(key))?;
+        Ok(())
+    })
+    .await
+}
+
+/// Tutup koneksi DB terenkripsi; kunci hilang dari memori sampai unlock berikutnya.
+#[tauri::command]
+#[specta::specta]
+pub fn lock(state: State<'_, AppState>) -> Result<(), IpcError> {
+    let mut slot = lock_slot(&state.ledger)?;
+    match slot.as_ref() {
+        Some(l) if l.is_encrypted() => {
+            *slot = None;
+            tracing::info!("aplikasi dikunci");
+            Ok(())
+        }
+        Some(_) => Err(AppError::EncryptionState.into()),
+        None => Ok(()),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn enable_encryption(app: AppHandle, password: String) -> Result<String, IpcError> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let backups = state.data_dir.backups_path();
+        Ok(ledger(&state)?.enable_encryption(&password, &backups, KdfParams::DEFAULT)?)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn disable_encryption(app: AppHandle, password: String) -> Result<(), IpcError> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let backups = state.data_dir.backups_path();
+        Ok(ledger(&state)?.disable_encryption(&password, &backups)?)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn change_password(
+    app: AppHandle,
+    old_password: String,
+    new_password: String,
+) -> Result<(), IpcError> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        Ok(ledger(&state)?.change_password(&old_password, &new_password, KdfParams::DEFAULT)?)
+    })
+    .await
 }

@@ -1,16 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { RouteLocationNormalized } from 'vue-router'
-import { onboardingGuard, routes, type RouteName } from '@/router'
+import { onboardingGuard, routes, securityGuard, type RouteName } from '@/router'
 import id from '@/i18n/id'
 import en from '@/i18n/en'
 
 const NAMES: RouteName[] = [
   'dashboard', 'transactions', 'budget', 'allocation', 'reports',
-  'accounts', 'categories', 'scheduled', 'settings', 'onboarding',
+  'accounts', 'categories', 'scheduled', 'settings', 'onboarding', 'unlock',
 ]
 
 describe('router', () => {
-  it('punya sepuluh route bernama', () => {
+  it('punya sebelas route bernama', () => {
     expect(routes.map((r) => r.name)).toEqual(NAMES)
   })
 
@@ -41,6 +41,28 @@ describe('router', () => {
     const g = onboardingGuard(async () => true)
     expect(await run(g, 'onboarding')).toEqual({ name: 'dashboard' })
     expect(await run(g, 'accounts')).toBe(true)
+  })
+
+  it('terkunci → semua route ke unlock', async () => {
+    const g = securityGuard(async () => true)
+    for (const name of NAMES.filter((n) => n !== 'unlock')) {
+      expect(await run(g, name)).toEqual({ name: 'unlock' })
+    }
+    expect(await run(g, 'unlock')).toBe(true)
+  })
+
+  it('tidak terkunci → unlock ke dashboard', async () => {
+    const g = securityGuard(async () => false)
+    expect(await run(g, 'unlock')).toEqual({ name: 'dashboard' })
+    expect(await run(g, 'accounts')).toBe(true)
+  })
+
+  it('terkunci mendahului onboarding', async () => {
+    // Saat terkunci status onboarding tidak bisa dibaca; guard onboarding melewatkan `unlock`.
+    const isOnboarded = vi.fn(async () => false)
+    expect(await run(securityGuard(async () => true), 'onboarding')).toEqual({ name: 'unlock' })
+    expect(await run(onboardingGuard(isOnboarded), 'unlock')).toBe(true)
+    expect(isOnboarded).not.toHaveBeenCalled()
   })
 })
 

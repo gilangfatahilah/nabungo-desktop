@@ -9,14 +9,14 @@ use nabungo_core::{
 };
 use nabungo_storage::account;
 use nabungo_storage::rusqlite::{self, Connection};
-use nabungo_storage::{Lookup, StorageError, category, now_utc, txn};
+use nabungo_storage::{DbKey, Lookup, StorageError, category, now_utc, txn};
 use time::Date;
 use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error(transparent)]
-    Storage(#[from] StorageError),
+    Storage(StorageError),
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -62,6 +62,36 @@ pub enum AppError {
     /// Tujuan/sumber backup adalah DB yang sedang dipakai.
     #[error("backup target is the live database")]
     BackupTargetInvalid,
+    /// Database terkunci: belum dibuka dengan password/recovery key.
+    #[error("database is locked")]
+    Locked,
+    #[error("wrong password")]
+    WrongPassword,
+    #[error("invalid recovery key")]
+    InvalidRecoveryKey,
+    #[error("password is too short")]
+    PasswordTooShort,
+    /// `nabungo.key` rusak atau versinya tidak dikenal.
+    #[error("key file is invalid")]
+    KeyFileInvalid,
+    /// Enable saat sudah terenkripsi / disable saat belum.
+    #[error("encryption is already in that state")]
+    EncryptionState,
+    #[error("invalid auto-lock duration")]
+    InvalidAutoLock,
+    /// Key sudah terverifikasi (key file terbuka) tapi file DB tidak cocok atau rusak.
+    #[error("database file cannot be read with this key")]
+    DatabaseUnreadable,
+}
+
+impl From<StorageError> for AppError {
+    fn from(e: StorageError) -> Self {
+        match e {
+            StorageError::WrongKey => AppError::WrongPassword,
+            StorageError::KeyRequired => AppError::Locked,
+            e => AppError::Storage(e),
+        }
+    }
 }
 
 impl AppError {
@@ -69,7 +99,7 @@ impl AppError {
     pub(crate) fn duplicate_as(entity: &'static str) -> impl Fn(StorageError) -> AppError {
         move |e| match e {
             StorageError::Duplicate => AppError::Duplicate(entity),
-            e => AppError::Storage(e),
+            e => e.into(),
         }
     }
 
@@ -78,7 +108,7 @@ impl AppError {
         match e {
             StorageError::InvalidBackup => AppError::InvalidBackup,
             StorageError::BackupTooNew(_) => AppError::BackupTooNew,
-            e => AppError::Storage(e),
+            e => e.into(),
         }
     }
 }
@@ -157,14 +187,17 @@ pub struct Ledger {
     pub(crate) conn: Connection,
     /// Path file DB; `None` untuk DB in-memory.
     pub(crate) path: Option<PathBuf>,
+    /// Key SQLCipher bila DB terenkripsi.
+    pub(crate) key: Option<DbKey>,
 }
 
 impl Ledger {
     /// Buka + migrasi tanpa backup pra-migrasi (test & alat).
     pub fn open(path: &Path) -> Result<Self, AppError> {
         Ok(Self {
-            conn: nabungo_storage::open(path)?,
+            conn: nabungo_storage::open(path, None)?,
             path: Some(path.to_path_buf()),
+            key: None,
         })
     }
 
@@ -172,6 +205,7 @@ impl Ledger {
         Ok(Self {
             conn: nabungo_storage::open_in_memory()?,
             path: None,
+            key: None,
         })
     }
 

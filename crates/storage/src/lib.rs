@@ -12,6 +12,7 @@ pub mod budget;
 pub mod category;
 pub mod export;
 mod file;
+mod key;
 pub mod payee;
 pub mod report;
 pub mod setting;
@@ -20,9 +21,11 @@ pub mod txn;
 pub mod txn_list;
 
 pub use file::{
-    backup_into, backup_into_unverified, inspect_backup, integrity_check, migrate, migrate_to,
-    open_file, open_file_read_only, restore_from, schema_version,
+    backup_into, backup_into_unverified, convert_file, inspect_backup, integrity_check,
+    is_encrypted_file, migrate, migrate_to, open_file, open_file_read_only, restore_from,
+    schema_version,
 };
+pub use key::DbKey;
 pub use rusqlite;
 
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +42,12 @@ pub enum StorageError {
     InvalidBackup,
     #[error("backup schema version {0} is newer than this app")]
     BackupTooNew(usize),
+    /// File terenkripsi dibuka tanpa key.
+    #[error("database is encrypted")]
+    KeyRequired,
+    /// Key tidak cocok dengan file.
+    #[error("wrong database key")]
+    WrongKey,
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -132,8 +141,8 @@ fn configure(conn: &Connection) -> Result<()> {
 }
 
 /// Buka (atau buat) database di `path`, set PRAGMA, lalu jalankan migrasi.
-pub fn open(path: &Path) -> Result<Connection> {
-    let mut conn = open_file(path)?;
+pub fn open(path: &Path, key: Option<&DbKey>) -> Result<Connection> {
+    let mut conn = open_file(path, key)?;
     migrate(&mut conn)?;
     Ok(conn)
 }

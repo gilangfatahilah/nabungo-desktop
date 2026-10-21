@@ -37,9 +37,11 @@ pub enum LocaleDto {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct UiSettingsDto {
     pub theme: ThemeDto,
     pub locale: LocaleDto,
+    pub auto_lock_minutes: u8,
 }
 
 impl From<Theme> for ThemeDto {
@@ -85,6 +87,7 @@ impl From<UiSettings> for UiSettingsDto {
         Self {
             theme: s.theme.into(),
             locale: s.locale.into(),
+            auto_lock_minutes: s.auto_lock_minutes,
         }
     }
 }
@@ -1345,6 +1348,15 @@ impl From<StartupReport> for StartupReportDto {
             },
         }
     }
+}
+
+/// Status enkripsi untuk UI; tersedia juga saat terkunci.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityStatusDto {
+    pub encrypted: bool,
+    pub locked: bool,
+    pub has_keyfile: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]

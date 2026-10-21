@@ -2,6 +2,7 @@
 import PageHeader from '@/components/PageHeader.vue'
 import BackupSection from '@/components/settings/BackupSection.vue'
 import ExportSection from '@/components/settings/ExportSection.vue'
+import SecuritySection from '@/components/settings/SecuritySection.vue'
 import { Separator } from '@/components/ui/separator'
 import { useI18n } from 'vue-i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -68,6 +69,11 @@ function onDay(v: unknown) {
         <p id="period-hint" class="text-xs text-muted-foreground">{{ t('settings.periodStartDayHint') }}</p>
       </div>
     </div>
+  </section>
+  <Separator class="my-8" />
+  <section aria-labelledby="settings-security">
+    <h2 id="settings-security" class="mb-4 text-heading">{{ t('settings.sections.security') }}</h2>
+    <SecuritySection />
   </section>
   <Separator class="my-8" />
   <section aria-labelledby="settings-backup">

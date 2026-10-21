@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { onBeforeUnmount, onMounted, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import IntegrityAlert from '@/components/IntegrityAlert.vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { useIdleLock } from '@/composables/useIdleLock'
 import { withErrorToast } from '@/lib/notify'
 import { shouldIgnoreAction } from '@/lib/overlay'
 import { createShortcutHandler, type ShortcutAction } from '@/lib/shortcuts'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
+import { useSecurityStore } from '@/stores/security'
 import { useSettingsStore } from '@/stores/settings'
 import { useUiStore } from '@/stores/ui'
 
@@ -22,6 +24,21 @@ const router = useRouter()
 const route = useRoute()
 const accounts = useAccountsStore()
 const categories = useCategoriesStore()
+const security = useSecurityStore()
+
+security.installLockHandler(router)
+
+// Kunci otomatis hanya untuk DB terenkripsi yang sedang terbuka, dan tidak selama recovery key
+// yang baru dibuat masih ditampilkan.
+useIdleLock(
+  toRef(security, 'autoLockMinutes'),
+  toRef(security, 'idleLockActive'),
+  () =>
+    void withErrorToast(async () => {
+      await security.lock()
+      await security.showLockScreen(router)
+    }),
+)
 
 // Akun & kategori baru dimuat setelah onboarding selesai (layar `bare` tidak menampilkan sidebar).
 watch(
@@ -47,7 +64,11 @@ function onAction(a: ShortcutAction) {
 const onKeydown = createShortcutHandler({ onAction })
 
 onMounted(() => {
-  void withErrorToast(() => settings.load())
+  // Terkunci: pengaturan dimuat oleh layar kunci setelah unlock.
+  void withErrorToast(async () => {
+    await security.refresh()
+    if (!security.locked) await settings.load()
+  })
   window.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))

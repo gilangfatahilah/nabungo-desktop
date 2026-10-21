@@ -18,15 +18,32 @@ pub enum Locale {
     En,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UiSettings {
     pub theme: Theme,
     pub locale: Locale,
+    /// Menit tanpa aktivitas sebelum app terkunci; hanya berlaku bila DB terenkripsi.
+    pub auto_lock_minutes: u8,
 }
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            locale: Locale::default(),
+            auto_lock_minutes: DEFAULT_AUTO_LOCK_MINUTES,
+        }
+    }
+}
+
+/// Pilihan durasi kunci otomatis (menit).
+pub const AUTO_LOCK_CHOICES: [u8; 5] = [1, 5, 10, 15, 30];
+const DEFAULT_AUTO_LOCK_MINUTES: u8 = 5;
 
 const KEY_THEME: &str = "ui.theme";
 pub(crate) const KEY_LOCALE: &str = "ui.locale";
 pub(crate) const KEY_PERIOD_START_DAY: &str = "budget.period_start_day";
+const KEY_AUTO_LOCK: &str = "auto_lock_minutes";
 
 impl Theme {
     fn as_str(self) -> &'static str {
@@ -73,7 +90,25 @@ impl Ledger {
         let locale = setting::get_setting(&self.conn, KEY_LOCALE)?
             .and_then(|v| Locale::parse(&v))
             .unwrap_or_default();
-        Ok(UiSettings { theme, locale })
+        let auto_lock_minutes = setting::get_setting(&self.conn, KEY_AUTO_LOCK)?
+            .and_then(|v| v.parse::<u8>().ok())
+            .filter(|m| AUTO_LOCK_CHOICES.contains(m))
+            .unwrap_or(DEFAULT_AUTO_LOCK_MINUTES);
+        Ok(UiSettings {
+            theme,
+            locale,
+            auto_lock_minutes,
+        })
+    }
+
+    pub fn set_auto_lock_minutes(&mut self, minutes: u8) -> Result<(), AppError> {
+        if !AUTO_LOCK_CHOICES.contains(&minutes) {
+            return Err(AppError::InvalidAutoLock);
+        }
+        let tx = self.conn.transaction()?;
+        setting::set_setting(&tx, KEY_AUTO_LOCK, &minutes.to_string())?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn set_theme(&mut self, theme: Theme) -> Result<(), AppError> {
@@ -117,7 +152,8 @@ mod tests {
             l.ui_settings().unwrap(),
             UiSettings {
                 theme: Theme::System,
-                locale: Locale::Id
+                locale: Locale::Id,
+                auto_lock_minutes: 5,
             }
         );
     }
@@ -131,7 +167,8 @@ mod tests {
             l.ui_settings().unwrap(),
             UiSettings {
                 theme: Theme::Dark,
-                locale: Locale::En
+                locale: Locale::En,
+                auto_lock_minutes: 5,
             }
         );
     }
@@ -152,6 +189,26 @@ mod tests {
                 .unwrap();
             assert_eq!(l.period_start_day().unwrap(), PeriodStartDay::FIRST);
         }
+    }
+
+    #[test]
+    fn auto_lock_default_and_roundtrip() {
+        let mut l = Ledger::open_in_memory().unwrap();
+        assert_eq!(l.ui_settings().unwrap().auto_lock_minutes, 5);
+        l.set_auto_lock_minutes(15).unwrap();
+        assert_eq!(l.ui_settings().unwrap().auto_lock_minutes, 15);
+        assert!(matches!(
+            l.set_auto_lock_minutes(7),
+            Err(AppError::InvalidAutoLock)
+        ));
+        assert_eq!(l.ui_settings().unwrap().auto_lock_minutes, 15);
+        l.conn
+            .execute(
+                "UPDATE setting SET value = '7' WHERE key = 'auto_lock_minutes'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(l.ui_settings().unwrap().auto_lock_minutes, 5);
     }
 
     #[test]

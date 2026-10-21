@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use nabungo_app::OffsetDateTime;
+use nabungo_app::{AppError, DbKey, Ledger, OffsetDateTime};
 use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
@@ -89,6 +89,38 @@ pub fn run_auto_backup(ledger: &nabungo_app::Ledger, dir: &Path) {
     }
 }
 
+/// Buka DB (plaintext: `key = None`) dan pasang ke state. Integrity check penuh
+/// dijalankan sekali per proses bila sesi sebelumnya tidak berakhir normal — untuk DB
+/// terenkripsi baru bisa saat unlock pertama.
+pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError> {
+    let state = app.state::<AppState>();
+    let backups = state.data_dir.backups_path();
+    let ledger = Ledger::open_with_backups(
+        &state.data_dir.db_path(),
+        &backups,
+        key.as_ref(),
+        OffsetDateTime::now_utc(),
+    )?;
+    let startup = {
+        let mut startup = state.startup.lock().unwrap_or_else(|e| e.into_inner());
+        if state.unclean_shutdown && startup.integrity == IntegrityStatus::Skipped {
+            startup.integrity = check_integrity(&ledger);
+        }
+        *startup
+    };
+    let auto_backup = auto_backup_allowed(&startup);
+    if auto_backup {
+        run_auto_backup(&ledger, &backups);
+    } else {
+        tracing::warn!("backup otomatis dimatikan untuk sesi ini");
+    }
+    *state.ledger.lock().unwrap_or_else(|e| e.into_inner()) = Some(ledger);
+    if auto_backup {
+        spawn_backup_scheduler(app.clone());
+    }
+    Ok(())
+}
+
 /// Setelah restore sukses: perbarui laporan startup dan hidupkan backup otomatis bila tadi
 /// dimatikan karena integrity check gagal.
 pub fn on_restored(app: &AppHandle) {
@@ -117,7 +149,12 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
                 let state = app.state::<AppState>();
                 let dir = state.data_dir.backups_path();
                 match state.ledger.lock() {
-                    Ok(ledger) => run_auto_backup(&ledger, &dir),
+                    Ok(slot) => {
+                        // Terkunci: tidak ada yang bisa di-backup sampai unlock.
+                        if let Some(ledger) = slot.as_ref() {
+                            run_auto_backup(ledger, &dir);
+                        }
+                    }
                     Err(_) => tracing::warn!("mutex ledger poisoned; backup otomatis dilewati"),
                 };
             }
