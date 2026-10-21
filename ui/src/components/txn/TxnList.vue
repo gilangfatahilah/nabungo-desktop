@@ -125,6 +125,10 @@ function duplicate(r: TxnRowDto) {
   if (isEditable(r.kind)) ui.openDuplicateTxn(r.id)
 }
 
+function makeRecurring(r: TxnRowDto) {
+  if (isEditable(r.kind)) ui.openRuleEditor({ mode: 'fromTxn', txnId: r.id })
+}
+
 function remove(r: TxnRowDto) {
   void withErrorToast(() => store.remove(r.id))
 }
@@ -223,6 +227,9 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
               </DropdownMenuItem>
               <DropdownMenuItem data-testid="txn-menu-duplicate" :disabled="!isEditable(v.item.row.kind)" @select="duplicate(v.item.row)">
                 {{ t('actions.duplicate') }}<DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="txn-menu-recurring" :disabled="!isEditable(v.item.row.kind)" @select="makeRecurring(v.item.row)">
+                {{ t('scheduled.makeRecurring') }}
               </DropdownMenuItem>
               <DropdownMenuItem data-testid="txn-menu-delete" variant="destructive" @select="remove(v.item.row)">
                 {{ t('actions.delete') }}<DropdownMenuShortcut>Del</DropdownMenuShortcut>

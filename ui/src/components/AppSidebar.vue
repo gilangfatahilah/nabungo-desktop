@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Sidebar,
@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -20,7 +21,9 @@ import { ChevronDown, Plus } from '@lucide/vue'
 import AppLogo from '@/components/AppLogo.vue'
 import MoneyText from '@/components/MoneyText.vue'
 import { balanceTone, groupAccounts } from '@/lib/accounts'
+import { withErrorToast } from '@/lib/notify'
 import { useAccountsStore } from '@/stores/accounts'
+import { useScheduledStore } from '@/stores/scheduled'
 import { useUiStore } from '@/stores/ui'
 import type { RouteName } from '@/router'
 
@@ -51,6 +54,9 @@ const ui = useUiStore()
 const current = computed(() => route.name)
 const accounts = useAccountsStore()
 const sections = computed(() => groupAccounts(accounts.overview, { archived: false }))
+const scheduled = useScheduledStore()
+// Memuat jadwal sekaligus menjalankan auto-post saat app dibuka.
+onMounted(() => void withErrorToast(() => scheduled.reload()))
 
 // Item aktif: latar Lembar + garis Zamrud 2px di kiri (docs/design/ui-guidelines.md §7.4).
 const itemClass = 'data-active:bg-background data-active:text-foreground data-active:shadow-[inset_2px_0_0_var(--primary)]'
@@ -117,6 +123,10 @@ const keys = (k: string) => k.split(/[ +]/)
               <SidebarMenuButton as-child :is-active="current === item.name" :class="itemClass">
                 <RouterLink :to="item.to">
                   <span>{{ $t(`nav.${item.name}`) }}</span>
+                  <Badge
+                    v-if="item.name === 'scheduled' && scheduled.dueCount > 0"
+                    variant="secondary" class="num ml-auto" data-testid="nav-scheduled-badge"
+                  >{{ scheduled.dueCount }}</Badge>
                 </RouterLink>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -7,6 +7,7 @@ import AppSidebar from '@/components/AppSidebar.vue'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { i18n } from '@/i18n'
 import { routes } from '@/router'
+import * as ipc from '@/ipc'
 import { useAccountsStore } from '@/stores/accounts'
 
 beforeEach(() => setActivePinia(createPinia()))
@@ -51,5 +52,22 @@ describe('AppSidebar', () => {
     const logo = w.find('[data-testid="app-logo"]')
     expect(logo.text()).toBe('Nabungo')
     expect(logo.find('svg[aria-hidden="true"]').exists()).toBe(true)
+  })
+
+  it('badge jatuh tempo di item Terjadwal: tersembunyi saat 0, menampilkan jumlah', async () => {
+    let w = await mountSidebar('/')
+    expect(w.find('[data-testid="nav-scheduled-badge"]').exists()).toBe(false)
+    w.unmount()
+    const acc = await ipc.createAccount('bank', { name: 'Badge', groupId: null, includeInNetWorth: true, creditLimit: null,
+      statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2020-01-01', contact: null })
+    const cat = await ipc.createCategory('expense', { name: 'Badge', parentId: null, icon: null, color: null })
+    const now = new Date()
+    const back = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+    const date = `${back.getFullYear()}-${String(back.getMonth() + 1).padStart(2, '0')}-01`
+    await ipc.createRule({ form: { kind: 'expense', date, accountId: acc, toAccountId: null, amount: 1000,
+      splits: [{ categoryId: cat, amount: 1000, memo: null }], fee: null, payee: null, note: null, tags: [] },
+      recurrence: { freq: 'monthly', interval: 1, until: null }, autoPost: false })
+    w = await mountSidebar('/')
+    expect(w.find('[data-testid="nav-scheduled-badge"]').text()).toBe('3')
   })
 })
