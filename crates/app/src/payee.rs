@@ -1,11 +1,12 @@
 //! Payee & saran kategori dari transaksi terakhir (CAT-03).
 
-use nabungo_core::normalize_name;
+use nabungo_core::{CatalogError, normalize_name};
+use nabungo_storage::payee::PayeeUsage;
 use nabungo_storage::rusqlite::{Connection, Transaction};
 use nabungo_storage::{account, category, payee};
 use uuid::Uuid;
 
-use crate::ledger::{AppError, Ledger};
+use crate::ledger::{AppError, Ledger, active};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PayeeSuggestion {
@@ -37,7 +38,78 @@ fn active_account(conn: &Connection, id: Uuid) -> Result<bool, AppError> {
     Ok(account::get_account_ref(conn, id)?.is_some_and(|a| !a.archived))
 }
 
+fn check_default_category(tx: &Transaction, id: Option<Uuid>) -> Result<(), AppError> {
+    if let Some(id) = id {
+        active(category::get_category_ref(tx, id)?, "category")?;
+    }
+    Ok(())
+}
+
+fn ensure_payee(tx: &Transaction, id: Uuid) -> Result<(), AppError> {
+    match payee::get_payee_name(tx, id)? {
+        Some(_) => Ok(()),
+        None => Err(AppError::NotFound("payee")),
+    }
+}
+
 impl Ledger {
+    pub fn list_payee_usage(&self) -> Result<Vec<PayeeUsage>, AppError> {
+        Ok(payee::list_payee_usage(&self.conn)?)
+    }
+
+    pub fn create_payee(
+        &mut self,
+        name: &str,
+        default_category_id: Option<Uuid>,
+    ) -> Result<Uuid, AppError> {
+        let name = normalize_name(name)?;
+        let tx = self.conn.transaction()?;
+        check_default_category(&tx, default_category_id)?;
+        let id = payee::insert_payee_with(&tx, &name, default_category_id)
+            .map_err(AppError::duplicate_as("payee"))?;
+        tx.commit()?;
+        Ok(id)
+    }
+
+    pub fn update_payee(
+        &mut self,
+        id: Uuid,
+        name: &str,
+        default_category_id: Option<Uuid>,
+    ) -> Result<(), AppError> {
+        let name = normalize_name(name)?;
+        let tx = self.conn.transaction()?;
+        ensure_payee(&tx, id)?;
+        check_default_category(&tx, default_category_id)?;
+        payee::update_payee(&tx, id, &name, default_category_id)
+            .map_err(AppError::duplicate_as("payee"))?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Termasuk transaksi terhapus, agar undo hapus memakai payee hasil gabung.
+    pub fn merge_payee(&mut self, source: Uuid, target: Uuid) -> Result<(), AppError> {
+        let tx = self.conn.transaction()?;
+        ensure_payee(&tx, source)?;
+        ensure_payee(&tx, target)?;
+        if source == target {
+            return Err(CatalogError::MergeIntoSelf.into());
+        }
+        payee::merge_payee(&tx, source, target)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Transaksi yang memakainya menjadi tanpa payee.
+    pub fn delete_payee(&mut self, id: Uuid) -> Result<(), AppError> {
+        let tx = self.conn.transaction()?;
+        if !payee::delete_payee(&tx, id)? {
+            return Err(AppError::NotFound("payee"));
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Saran akun & kategori untuk payee; `None` bila payee belum dikenal.
     /// Kategori: default payee bila aktif, selain itu dari transaksi terakhir.
     pub fn payee_suggestion(&self, name: &str) -> Result<Option<PayeeSuggestion>, AppError> {
@@ -187,5 +259,110 @@ mod tests {
     fn unknown_payee_has_no_suggestion() {
         let ledger = Ledger::open_in_memory().unwrap();
         assert_eq!(ledger.payee_suggestion("Siapa").unwrap(), None);
+    }
+
+    fn kit() -> crate::testkit::Kit {
+        crate::testkit::Kit::new(1, date!(2026 - 10 - 01))
+    }
+
+    fn usage(ledger: &Ledger, name: &str) -> Uuid {
+        ledger
+            .list_payee_usage()
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == name)
+            .unwrap()
+            .id
+    }
+
+    #[test]
+    fn update_payee_case_only_change() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let id = ledger.create_payee("indomaret", None).unwrap();
+        ledger.update_payee(id, "Indomaret", None).unwrap();
+        assert_eq!(usage(&ledger, "Indomaret"), id);
+        let other = ledger.create_payee("Alfamart", None).unwrap();
+        assert!(matches!(
+            ledger.update_payee(other, " INDOMARET ", None),
+            Err(AppError::Duplicate("payee"))
+        ));
+        assert!(matches!(
+            ledger.create_payee("alfamart", None),
+            Err(AppError::Duplicate("payee"))
+        ));
+        assert!(matches!(
+            ledger.update_payee(Uuid::now_v7(), "x", None),
+            Err(AppError::NotFound("payee"))
+        ));
+    }
+
+    #[test]
+    fn payee_default_category_validated() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let snack = expense_cat(&mut ledger, "Jajan");
+        let id = ledger.create_payee("Warung", None).unwrap();
+        ledger.archive_category(snack).unwrap();
+        assert!(matches!(
+            ledger.update_payee(id, "Warung", Some(snack)),
+            Err(AppError::Archived("category"))
+        ));
+        assert!(matches!(
+            ledger.create_payee("Toko", Some(Uuid::now_v7())),
+            Err(AppError::NotFound("category"))
+        ));
+    }
+
+    #[test]
+    fn default_category_drives_suggestion() {
+        let mut ledger = Ledger::open_in_memory().unwrap();
+        let acc = account(&mut ledger, "BCA");
+        let food = expense_cat(&mut ledger, "Makan");
+        let snack = expense_cat(&mut ledger, "Jajan");
+        spend(&mut ledger, date!(2026 - 10 - 10), acc, food, "Warung");
+        let id = usage(&ledger, "Warung");
+        ledger.update_payee(id, "Warung", Some(snack)).unwrap();
+        let s = ledger.payee_suggestion("Warung").unwrap().unwrap();
+        assert_eq!(s.category_id, Some(snack));
+        let row = ledger.list_payee_usage().unwrap();
+        assert_eq!(row[0].default_category_id, Some(snack));
+    }
+
+    #[test]
+    fn merge_payee_updates_deleted_txns() {
+        let mut kit = kit();
+        let acc = kit.bca;
+        let cat = kit.cat("Kopi & jajan");
+        let t = spend(&mut kit.ledger, date!(2026 - 10 - 10), acc, cat, "Indomart");
+        kit.ledger.delete_txn(t).unwrap();
+        let source = usage(&kit.ledger, "Indomart");
+        let target = kit.ledger.create_payee("Indomaret", None).unwrap();
+        assert!(matches!(
+            kit.ledger.merge_payee(target, target),
+            Err(AppError::Catalog(nabungo_core::CatalogError::MergeIntoSelf))
+        ));
+        kit.ledger.merge_payee(source, target).unwrap();
+        kit.ledger.undo_delete_txn(t).unwrap();
+        assert_eq!(
+            kit.ledger.get_txn(t).unwrap().payee.as_deref(),
+            Some("Indomaret")
+        );
+        assert_eq!(kit.ledger.list_payee_usage().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn delete_payee_clears_txns() {
+        let mut kit = kit();
+        let acc = kit.bca;
+        let cat = kit.cat("Kopi & jajan");
+        let t = spend(&mut kit.ledger, date!(2026 - 10 - 10), acc, cat, "Warung");
+        let id = usage(&kit.ledger, "Warung");
+        kit.ledger.delete_payee(id).unwrap();
+        assert_eq!(kit.ledger.get_txn(t).unwrap().payee, None);
+        assert!(matches!(
+            kit.ledger.delete_payee(id),
+            Err(AppError::NotFound("payee"))
+        ));
+        spend(&mut kit.ledger, date!(2026 - 10 - 11), acc, cat, "Warung");
+        assert_ne!(usage(&kit.ledger, "Warung"), id);
     }
 }

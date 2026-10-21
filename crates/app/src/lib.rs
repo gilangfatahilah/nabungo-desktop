@@ -28,6 +28,7 @@ mod reconcile;
 mod reports;
 pub mod security;
 mod settings;
+mod tags;
 #[cfg(test)]
 mod testkit;
 mod transactions;
@@ -56,6 +57,8 @@ pub use nabungo_storage::allocation::BucketRow;
 pub use nabungo_storage::category::CategoryRow;
 pub use nabungo_storage::contact::ContactRow;
 pub use nabungo_storage::format_utc as format_timestamp;
+pub use nabungo_storage::payee::PayeeUsage;
+pub use nabungo_storage::tag::TagUsage;
 pub use nabungo_storage::txn::PostingRecord;
 pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;

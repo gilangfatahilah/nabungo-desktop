@@ -91,6 +91,15 @@ pub fn list_tag_usage(conn: &Connection) -> Result<Vec<TagUsage>> {
         .collect()
 }
 
+pub fn tag_exists(conn: &Connection, id: Uuid) -> Result<bool> {
+    Ok(conn
+        .query_row("SELECT 1 FROM tag WHERE id = ?1", [id.to_string()], |_| {
+            Ok(())
+        })
+        .optional()?
+        .is_some())
+}
+
 /// Sisipkan tag baru; nama yang sudah ada (NOCASE) → `Duplicate`.
 pub fn insert_tag(tx: &Transaction, name: &str) -> Result<Uuid> {
     let id = Uuid::now_v7();
