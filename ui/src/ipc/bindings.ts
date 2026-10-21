@@ -33,6 +33,33 @@ export const commands = {
 	deleteCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_category", { id })),
 	mergeCategory: (source: string, target: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_category", { source, target })),
 	createTxn: (form: TxnFormDto) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("create_txn", { form })),
+	listRules: () => typedError<RuleDto[], IpcError>(__TAURI_INVOKE("list_rules")),
+	createRule: (input: RuleInputDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_rule", { input })),
+	updateRule: (id: string, input: RuleInputDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_rule", { id, input })),
+	deleteRule: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_rule", { id })),
+	/**  `form` = form yang diedit user; `None` → template apa adanya. */
+	confirmOccurrence: (id: string, date: string, form: {
+	kind: TxnFormKindDto,
+	/**  `YYYY-MM-DD` */
+	date: string,
+	/**  Transfer: akun asal. */
+	accountId: string,
+	/**  Wajib untuk transfer. */
+	toAccountId: string | null,
+	/**  Income/expense: total split (negatif = refund). Transfer: positif. */
+	amount: number,
+	/**  Income/expense; diabaikan untuk transfer. */
+	splits: SplitDto[],
+	/**  Transfer saja. */
+	fee: FeeDto | null,
+	payee: string | null,
+	note: string | null,
+	tags: string[],
+} | null) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("confirm_occurrence", { id, date, form })),
+	skipOccurrence: (id: string, date: string) => typedError<null, IpcError>(__TAURI_INVOKE("skip_occurrence", { id, date })),
+	confirmAllDue: (id: string) => typedError<number, IpcError>(__TAURI_INVOKE("confirm_all_due", { id })),
+	/**  Pratinjau kejadian (maks 12) untuk form jadwal. */
+	previewRecurrence: (recurrence: RecurrenceDto, start: string, count: number) => typedError<string[], IpcError>(__TAURI_INVOKE("preview_recurrence", { recurrence, start, count })),
 	updateTxn: (id: string, form: TxnFormDto) => typedError<BudgetAlertDto[], IpcError>(__TAURI_INVOKE("update_txn", { id, form })),
 	getTxn: (id: string) => typedError<TxnDetailDto, IpcError>(__TAURI_INVOKE("get_txn", { id })),
 	listTxns: (query: TxnQueryDto) => typedError<TxnPageDto, IpcError>(__TAURI_INVOKE("list_txns", { query })),
@@ -343,6 +370,8 @@ export type FeeDto = {
 	categoryId: string | null,
 };
 
+export type FreqDto = "daily" | "weekly" | "monthly" | "yearly";
+
 export type IntegrityStatusDto = "skipped" | "ok" | "failed";
 
 /**  Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`. */
@@ -405,6 +434,32 @@ export type ReconciliationDto = {
 	adjustmentId: string | null,
 	difference: number,
 	marked: number,
+};
+
+/**  Anchor (hari/tanggal) diambil dari tanggal mulai/kejadian berikutnya. */
+export type RecurrenceDto = {
+	freq: FreqDto,
+	interval: number,
+	/**  `YYYY-MM-DD`, inklusif. */
+	until: string | null,
+};
+
+export type RuleDto = {
+	id: string,
+	/**  Template; `date` = kejadian berikutnya. */
+	form: TxnFormDto,
+	recurrence: RecurrenceDto,
+	autoPost: boolean,
+	ended: boolean,
+	/**  Kejadian jatuh tempo (≤ hari ini), urut naik. */
+	due: string[],
+};
+
+export type RuleInputDto = {
+	/**  `date` = tanggal mulai (buat) atau kejadian berikutnya (ubah). */
+	form: TxnFormDto,
+	recurrence: RecurrenceDto,
+	autoPost: boolean,
 };
 
 /**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */
