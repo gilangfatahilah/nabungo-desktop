@@ -42,9 +42,9 @@ pub use nabungo_core::Mapping;
 pub use nabungo_core::date::{format_date, parse_date};
 pub use nabungo_core::{
     AccountKind, AllocationError, AllocationReport, AmountParseError, BucketActual, BudgetError,
-    BudgetPeriod, BudgetTotals, CatalogError, CategoryKind, Fee, FormBody, MoneyError, NetWorth,
-    PeriodError, PeriodStartDay, SiblingWarning, SplitLine, TxnError, TxnKind, Unallocated,
-    parse_amount,
+    BudgetLevel, BudgetPeriod, BudgetTotals, CatalogError, CategoryKind, Fee, FormBody, MoneyError,
+    NetWorth, PeriodError, PeriodStartDay, SiblingWarning, SplitLine, TxnError, TxnKind,
+    Unallocated, parse_amount,
 };
 pub use nabungo_storage::DbKey;
 pub use nabungo_storage::account::{AccountRow, Opening};
