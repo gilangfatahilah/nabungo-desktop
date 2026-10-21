@@ -6,11 +6,11 @@ import en from '@/i18n/en'
 
 const NAMES: RouteName[] = [
   'dashboard', 'transactions', 'budget', 'allocation', 'reports',
-  'accounts', 'categories', 'scheduled', 'settings', 'onboarding', 'unlock',
+  'accounts', 'categories', 'labels', 'scheduled', 'settings', 'onboarding', 'unlock',
 ]
 
 describe('router', () => {
-  it('punya sebelas route bernama', () => {
+  it('punya dua belas route bernama', () => {
     expect(routes.map((r) => r.name)).toEqual(NAMES)
   })
 

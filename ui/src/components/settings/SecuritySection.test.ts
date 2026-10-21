@@ -44,6 +44,12 @@ describe('SecuritySection', () => {
     document.body.innerHTML = ''
   })
 
+  it('menjelaskan bahwa lampiran tidak ikut terenkripsi', async () => {
+    const w = await mountSection()
+    expect(w.text()).toContain(id.security.attachmentsNote)
+    w.unmount()
+  })
+
   it('aktifkan → menampilkan recovery key dari ipc', async () => {
     const spy = vi.spyOn(ipc, 'enableEncryption').mockResolvedValue(KEY)
     const w = await mountSection()

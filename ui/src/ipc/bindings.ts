@@ -43,6 +43,22 @@ export const commands = {
 	categoryId: string | null,
 } | null, IpcError>(__TAURI_INVOKE("payee_suggestion", { name })),
 	searchPayees: (query: string) => typedError<string[], IpcError>(__TAURI_INVOKE("search_payees", { query })),
+	listTagUsage: () => typedError<TagUsageDto[], IpcError>(__TAURI_INVOKE("list_tag_usage")),
+	createTag: (name: string) => typedError<string, IpcError>(__TAURI_INVOKE("create_tag", { name })),
+	renameTag: (id: string, name: string) => typedError<null, IpcError>(__TAURI_INVOKE("rename_tag", { id, name })),
+	mergeTag: (sourceId: string, targetId: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_tag", { sourceId, targetId })),
+	deleteTag: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_tag", { id })),
+	listPayeeUsage: () => typedError<PayeeUsageDto[], IpcError>(__TAURI_INVOKE("list_payee_usage")),
+	createPayee: (name: string, defaultCategoryId: string | null) => typedError<string, IpcError>(__TAURI_INVOKE("create_payee", { name, defaultCategoryId })),
+	updatePayee: (id: string, name: string, defaultCategoryId: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("update_payee", { id, name, defaultCategoryId })),
+	mergePayee: (sourceId: string, targetId: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_payee", { sourceId, targetId })),
+	deletePayee: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_payee", { id })),
+	/**  Pilih file struk (multi), lalu salin ke folder lampiran. Batal → `[]`. */
+	addAttachments: (txnId: string) => typedError<AttachmentDto[], IpcError>(__TAURI_INVOKE("add_attachments", { txnId })),
+	listAttachments: (txnId: string) => typedError<AttachmentDto[], IpcError>(__TAURI_INVOKE("list_attachments", { txnId })),
+	removeAttachment: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("remove_attachment", { id })),
+	/**  Buka lampiran dengan viewer bawaan OS. */
+	openAttachment: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("open_attachment", { id })),
 	listTags: () => typedError<string[], IpcError>(__TAURI_INVOKE("list_tags")),
 	txnFormDefaults: () => typedError<TxnFormDefaultsDto, IpcError>(__TAURI_INVOKE("txn_form_defaults")),
 	/**  Kunci periode budget (`YYYY-MM`) yang memuat `date`. */
@@ -172,6 +188,14 @@ export type AppInfo = {
 	version: string,
 	dataDir: string,
 	portable: boolean,
+};
+
+export type AttachmentDto = {
+	id: string,
+	fileName: string,
+	mime: string,
+	sizeBytes: number,
+	missing: boolean,
 };
 
 export type BackupDto = {
@@ -311,7 +335,7 @@ export type ContactDto = {
 	name: string,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
 
 export type FeeDto = {
 	amount: number,
@@ -362,6 +386,14 @@ export type PayeeSuggestionDto = {
 	categoryId: string | null,
 };
 
+export type PayeeUsageDto = {
+	id: string,
+	name: string,
+	defaultCategoryId: string | null,
+	txnCount: number,
+	lastDate: string | null,
+};
+
 export type PostingDto = {
 	accountId: string,
 	categoryId: string | null,
@@ -402,6 +434,12 @@ export type SplitDto = {
 export type StartupReportDto = {
 	uncleanShutdown: boolean,
 	integrity: IntegrityStatusDto,
+};
+
+export type TagUsageDto = {
+	id: string,
+	name: string,
+	txnCount: number,
 };
 
 export type ThemeDto = "light" | "dark" | "system";
@@ -481,6 +519,7 @@ export type TxnRowDto = {
 	runningBalance: number | null,
 	/**  Hanya saat difilter per akun. */
 	reconciled: boolean | null,
+	attachmentCount: number,
 };
 
 export type UiSettingsDto = {

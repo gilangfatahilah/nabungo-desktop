@@ -6,7 +6,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use nabungo_storage::export::{ExportTxn, for_each_txn};
-use nabungo_storage::{account, account_group, budget, category};
+use nabungo_storage::{account, account_group, attachment, budget, category};
 use serde::Serialize;
 use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
@@ -72,6 +72,15 @@ struct JsonTxn {
     note: Option<String>,
     tags: Vec<String>,
     postings: Vec<JsonPosting>,
+    attachments: Vec<JsonAttachment>,
+}
+
+#[derive(Serialize)]
+struct JsonAttachment {
+    file_name: String,
+    sha256: String,
+    mime: String,
+    size_bytes: u64,
 }
 
 #[derive(Serialize)]
@@ -104,6 +113,16 @@ impl From<ExportTxn> for JsonTxn {
                     currency: p.currency,
                     memo: p.memo,
                     reconciled: p.reconciled,
+                })
+                .collect(),
+            attachments: t
+                .attachments
+                .into_iter()
+                .map(|a| JsonAttachment {
+                    file_name: a.file_name,
+                    sha256: a.sha256,
+                    mime: a.mime,
+                    size_bytes: a.size_bytes,
                 })
                 .collect(),
         }
@@ -243,11 +262,20 @@ impl Ledger {
         Ok(())
     }
 
-    /// Ekspor ke folder CSV baru di `parent` (K13–K15); mengembalikan folder itu.
+    /// Ekspor ke folder CSV baru di `parent` (K13–K15), plus salinan lampiran dari
+    /// `attachments_dir`; mengembalikan folder itu.
     /// Gagal di tengah jalan → folder yang baru dibuat dihapus.
-    pub fn export_csv(&self, parent: &Path, today: Date) -> Result<PathBuf, AppError> {
+    pub fn export_csv(
+        &self,
+        parent: &Path,
+        today: Date,
+        attachments_dir: &Path,
+    ) -> Result<PathBuf, AppError> {
         let dir = create_export_dir(parent, today)?;
-        match self.write_csv_files(&dir) {
+        match self
+            .write_csv_files(&dir)
+            .and_then(|()| self.write_attachments(&dir, attachments_dir))
+        {
             Ok(()) => Ok(dir),
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&dir);
@@ -364,6 +392,60 @@ impl Ledger {
         w.flush()?;
         Ok(())
     }
+
+    /// `attachments.csv` selalu ditulis; `lampiran/<sha256>.<ext>` hanya untuk file yang
+    /// ada. Gagal menyalin satu file → kolom `file` kosong, ekspor jalan terus.
+    fn write_attachments(&self, dir: &Path, attachments_dir: &Path) -> Result<(), AppError> {
+        let mut w = csv_writer(&dir.join("attachments.csv"))?;
+        w.write_record([
+            "txn_id",
+            "file_name",
+            "sha256",
+            "mime",
+            "size_bytes",
+            "file",
+        ])
+        .map_err(csv_err)?;
+        let out = dir.join("lampiran");
+        for a in attachment::for_active_txns(&self.conn)? {
+            let rel = format!(
+                "lampiran/{}.{}",
+                a.sha256,
+                crate::attachments::ext_for(&a.mime)
+            );
+            let src =
+                crate::attachments::blob_path(attachments_dir, &a.sha256).filter(|p| p.is_file());
+            let copied = match src {
+                None => false,
+                Some(src) => {
+                    std::fs::create_dir_all(&out)?;
+                    let target = dir.join(&rel);
+                    // Konten sama (sha sama) cukup disalin sekali.
+                    target.exists()
+                        || match std::fs::copy(&src, &target) {
+                            Ok(_) => true,
+                            Err(e) => {
+                                tracing::warn!(error = %e, sha256 = %a.sha256, "failed to export attachment");
+                                let _ = std::fs::remove_file(&target);
+                                false
+                            }
+                        }
+                }
+            };
+            let file = if copied { rel.as_str() } else { "" };
+            w.write_record([
+                a.txn_id.to_string().as_str(),
+                &cell(&a.file_name),
+                &cell(&a.sha256),
+                &a.mime,
+                &a.size_bytes.to_string(),
+                file,
+            ])
+            .map_err(csv_err)?;
+        }
+        w.flush()?;
+        Ok(())
+    }
 }
 
 fn json_account(a: &AccountRow) -> JsonAccount<'_> {
@@ -394,6 +476,22 @@ mod tests {
 
     const NOW: time::OffsetDateTime = datetime!(2026-10-20 03:15:00 UTC);
     const TODAY: time::Date = date!(2026 - 10 - 20);
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+    fn no_att() -> std::path::PathBuf {
+        std::path::PathBuf::from("/nonexistent/nabungo-attachments")
+    }
+
+    /// Lampirkan satu PNG ke expense baru di folder `att`; kembalikan (txn, sha256).
+    fn attach(k: &mut Kit, att: &Path) -> (crate::Uuid, String) {
+        let txn = k.expense(date!(2026 - 10 - 06), "Makan & Minum", 7_000);
+        let src = att.with_extension("src.png");
+        std::fs::write(&src, PNG).unwrap();
+        k.ledger
+            .add_attachments(txn, std::slice::from_ref(&src), att)
+            .unwrap();
+        (txn, crate::attachments::sha256_file(&src).unwrap())
+    }
 
     /// Expense, transfer + biaya, income, satu transaksi terhapus, budget.
     fn seeded() -> Kit {
@@ -437,14 +535,28 @@ mod tests {
         k.ledger
             .create_account(nabungo_core::AccountKind::Receivable, &f)
             .unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let (with_att, sha) = attach(&mut k, &tmp.path().join("att"));
         let v = json(&k);
         assert_eq!(v["format"], "nabungo-export");
         assert_eq!(v["version"], 1);
         assert_eq!(v["exported_at"], "2026-10-20T03:15:00Z");
         assert_eq!(v["app_version"], crate::version());
         let txns = v["transactions"].as_array().unwrap();
-        // 1 opening + expense + transfer + income; yang terhapus tidak ikut.
-        assert_eq!(txns.len(), 4);
+        // 1 opening + expense + transfer + income + berlampiran; yang terhapus tidak ikut.
+        assert_eq!(txns.len(), 5);
+        for t in txns {
+            let atts = t["attachments"].as_array().unwrap();
+            if t["id"] == with_att.to_string() {
+                assert_eq!(atts.len(), 1);
+                assert_eq!(atts[0]["sha256"], sha);
+                assert_eq!(atts[0]["file_name"], "att.src.png");
+                assert_eq!(atts[0]["mime"], "image/png");
+                assert_eq!(atts[0]["size_bytes"], PNG.len());
+            } else {
+                assert!(atts.is_empty());
+            }
+        }
         let transfer = txns.iter().find(|t| t["kind"] == "transfer").unwrap();
         let sides: Vec<_> = transfer["postings"]
             .as_array()
@@ -482,12 +594,12 @@ mod tests {
     fn csv_export_creates_new_folder_each_time() {
         let k = seeded();
         let dir = tempfile::tempdir().unwrap();
-        let first = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let first = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         assert_eq!(first, dir.path().join("nabungo-export-2026-10-20"));
         let before = std::fs::read(first.join("transactions.csv")).unwrap();
-        let second = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let second = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         assert_eq!(second, dir.path().join("nabungo-export-2026-10-20-2"));
-        let third = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let third = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         assert_eq!(third, dir.path().join("nabungo-export-2026-10-20-3"));
         assert_eq!(
             std::fs::read(first.join("transactions.csv")).unwrap(),
@@ -502,6 +614,7 @@ mod tests {
             files,
             [
                 "accounts.csv",
+                "attachments.csv",
                 "budgets.csv",
                 "categories.csv",
                 "transactions.csv"
@@ -539,7 +652,7 @@ mod tests {
             })
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
-        let out = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let out = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         let headers = [
             (
                 "transactions.csv",
@@ -597,7 +710,7 @@ mod tests {
             })
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
-        let out = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let out = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         let raw = read(&out.join("transactions.csv"));
         assert!(raw.contains("\"'=HYPERLINK(\"\"x\"\")\""), "{raw}");
         assert!(raw.contains("\"a, \"\"b\"\"\nc\""), "{raw}");
@@ -630,11 +743,55 @@ mod tests {
             .unwrap();
         k.expense(date!(2026 - 10 - 02), "Kafe baru", 50_000);
         let dir = tempfile::tempdir().unwrap();
-        let out = k.ledger.export_csv(dir.path(), TODAY).unwrap();
+        let out = k.ledger.export_csv(dir.path(), TODAY, &no_att()).unwrap();
         let cats = records(&out.join("categories.csv"));
         let child = cats.iter().find(|r| &r[1] == "Kafe baru").unwrap();
         assert_eq!(&child[3], "Makan & Minum");
         let rows = records(&out.join("transactions.csv"));
         assert!(rows.iter().any(|r| &r[8] == "Makan & Minum / Kafe baru"));
+    }
+
+    #[test]
+    fn csv_export_includes_attachments() {
+        let mut k = seeded();
+        let tmp = tempfile::tempdir().unwrap();
+        let att = tmp.path().join("att");
+        let (txn, sha) = attach(&mut k, &att);
+        let out = k.ledger.export_csv(tmp.path(), TODAY, &att).unwrap();
+        let text = read(&out.join("attachments.csv"));
+        assert_eq!(
+            text.split("\r\n").next().unwrap(),
+            "txn_id,file_name,sha256,mime,size_bytes,file"
+        );
+        let rows = records(&out.join("attachments.csv"));
+        assert_eq!(rows.len(), 1);
+        let file = format!("lampiran/{sha}.png");
+        assert_eq!(
+            rows[0].iter().collect::<Vec<_>>(),
+            [
+                txn.to_string().as_str(),
+                "att.src.png",
+                &sha,
+                "image/png",
+                &PNG.len().to_string(),
+                &file
+            ]
+        );
+        assert_eq!(std::fs::read(out.join(&file)).unwrap(), PNG);
+    }
+
+    #[test]
+    fn csv_export_tolerates_missing_attachment() {
+        let mut k = seeded();
+        let tmp = tempfile::tempdir().unwrap();
+        let att = tmp.path().join("att");
+        let (_, sha) = attach(&mut k, &att);
+        std::fs::remove_file(att.join(&sha)).unwrap();
+        let out = k.ledger.export_csv(tmp.path(), TODAY, &att).unwrap();
+        let rows = records(&out.join("attachments.csv"));
+        assert_eq!(rows.len(), 1);
+        assert_eq!(&rows[0][2], sha);
+        assert_eq!(&rows[0][5], "");
+        assert!(!out.join("lampiran").exists());
     }
 }

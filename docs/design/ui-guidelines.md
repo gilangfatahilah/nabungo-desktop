@@ -174,6 +174,7 @@ Header tidak sticky, kecuali di Transaksi, di mana header + toolbar filter menem
  Kelola
    Akun
    Kategori
+   Tag & Payee
    Terjadwal
  ─────────────
  Pengaturan            Ctrl ,
@@ -235,7 +236,8 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 
 - Lebar 440px. Footer aksi selalu terlihat (sticky), tidak ikut scroll.
 - Urutan field mengikuti urutan Tab yang sudah diuji e2e: nominal → kategori → … Jangan diubah tanpa memperbarui test.
-- Field opsional (tag, catatan) terlipat secara default dan terbuka otomatis bila sudah berisi (mode edit).
+- Field opsional (tag, catatan, lampiran) terlipat secara default dan terbuka otomatis bila sudah berisi (mode edit, termasuk transaksi yang punya lampiran).
+- Lampiran (Fase 7c) ada setelah catatan: daftar baris 36px (ikon gambar/dokumen, nama, ukuran KB/MB, `Buka`, hapus dengan konfirmasi) + tombol outline `Lampirkan file`. File yang hilang dari folder data ditandai "File hilang" dan `Buka` nonaktif. Saat membuat transaksi baru hanya tampil petunjuk "Simpan dulu untuk melampirkan struk".
 
 ### 8.5 Baris transaksi
 
@@ -251,6 +253,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 - Baris 2 (`text-meta`, Tinta pudar): kategori anak saja, dengan induk di tooltip; akun; tag sebagai teks `#tag`. Pemisah berupa jarak 12px, bukan `·` atau `›`.
 - Kanan: nominal bertanda dengan warna semantik; di bawahnya saldo berjalan (bila filter satu akun).
 - Bila filter satu akun, transaksi yang sudah direkonsiliasi diberi ikon lingkaran centang kecil (14px, Tinta pudar) di akhir baris 2, dengan label/tooltip "Sudah direkonsiliasi". Tanpa filter akun ikon tidak tampil.
+- Transaksi berlampiran diberi ikon klip kecil (14px, Tinta pudar) di baris 2 sebelum ikon rekonsiliasi, dengan label "Ada lampiran".
 - Menu `⋯` hanya terlihat saat hover/fokus baris. Baris bisa difokus (Tab/↑↓), dan `Enter` membuka edit, `Delete` menghapus.
 - Hover: latar Kanvas. Terfokus: ring Zamrud di dalam baris.
 
@@ -341,6 +344,10 @@ Tabel datar per grup (bukan kartu bersarang). Grup berupa header baris dengan su
 ### 9.4 Kategori
 
 Segmented control horizontal **Pengeluaran | Pemasukan** di header (mengganti tab vertikal yang rusak). Daftar pohon: induk 48px, anak menjorok 24px, aksi `+ sub` dan `⋯` saat hover. Kategori terarsip di seksi terlipat.
+
+### 9.4a Tag & Payee (Fase 7c)
+
+Segmented control **Tag | Payee** di header (tab disimpan di query `?tab=payee`) + tombol `+ Tag baru` / `+ Payee baru`. Daftar baris 48px: nama (tag berawalan `#`), meta jumlah transaksi (payee: `· kategori default`), `⋯` saat hover berisi Ubah, Gabungkan…, Lihat transaksi, Hapus. "Lihat transaksi" mereset filter lain lalu membuka Transaksi dengan chip `#tag` / `Payee: nama`. Hapus memakai dialog konfirmasi yang menyebut jumlah transaksi terdampak (tanpa undo; saldo tidak berubah).
 
 ### 9.5 Budget (Fase 5)
 

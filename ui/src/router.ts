@@ -9,6 +9,7 @@ export type RouteName =
   | 'reports'
   | 'accounts'
   | 'categories'
+  | 'labels'
   | 'scheduled'
   | 'settings'
   | 'onboarding'
@@ -24,6 +25,7 @@ export const routes: NamedRoute[] = [
   { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue') },
   { path: '/accounts', name: 'accounts', component: () => import('@/views/AccountsView.vue') },
   { path: '/categories', name: 'categories', component: () => import('@/views/CategoriesView.vue') },
+  { path: '/labels', name: 'labels', component: () => import('@/views/LabelsView.vue') },
   { path: '/scheduled', name: 'scheduled', component: () => import('@/views/ScheduledView.vue') },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
   // `bare`: tanpa sidebar, palette, sheet, dan shortcut global.

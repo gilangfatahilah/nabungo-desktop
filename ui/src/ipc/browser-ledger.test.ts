@@ -623,3 +623,111 @@ describe('browser ledger piutang/hutang & rekonsiliasi (paritas Rust)', () => {
     expect(await L.reconcileAccount(a, '2026-10-10', 2_000_000_000_000)).toMatchObject({ status: 'error', error: { code: 'txn_amount_too_large' } })
   })
 })
+
+describe('browser ledger tag & payee (CAT-04, paritas Rust)', () => {
+  const tagCount = async (name: string) => (await data(L.listTagUsage())).find((t) => t.name === name)?.txnCount
+
+  it('tag tak terpakai tetap terdaftar dan jumlah hanya transaksi aktif', async () => {
+    const a = await account('TG1', 100_000)
+    const c = await category('expense', 'Makan TG1')
+    await data(L.createTag('kosong-tg1'))
+    const t = await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }], tags: ['dipakai-tg1'] })))
+    await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }], tags: ['dipakai-tg1'] })))
+    await data(L.deleteTxn(t.id))
+    expect(await tagCount('kosong-tg1')).toBe(0)
+    expect(await tagCount('dipakai-tg1')).toBe(1)
+    expect(await data(L.listTags())).toContain('kosong-tg1')
+  })
+
+  it('ganti nama tag beda huruf saja berhasil; nama tag lain → duplicate', async () => {
+    const k = await data(L.createTag('kantor-tg2'))
+    await data(L.createTag('rumah-tg2'))
+    expect(await L.createTag('#Kantor-TG2')).toEqual({ status: 'error', error: { code: 'duplicate', entity: 'tag' } })
+    await data(L.renameTag(k, 'Kantor-tg2'))
+    expect(await tagCount('Kantor-tg2')).toBe(0)
+    expect(await L.renameTag(k, 'RUMAH-tg2')).toEqual({ status: 'error', error: { code: 'duplicate', entity: 'tag' } })
+    expect(await L.renameTag(k, ' # ')).toEqual({ status: 'error', error: { code: 'name_empty', entity: null } })
+  })
+
+  it('gabung tag memindah transaksi; gabung ke diri sendiri → merge_into_self', async () => {
+    const a = await account('TG3', 100_000)
+    const c = await category('expense', 'Makan TG3')
+    const t = await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }], tags: ['a-tg3'] })))
+    const usage = await data(L.listTagUsage())
+    const src = usage.find((x) => x.name === 'a-tg3')!.id
+    const dst = await data(L.createTag('b-tg3'))
+    expect(await L.mergeTag(src, src)).toEqual({ status: 'error', error: { code: 'merge_into_self', entity: null } })
+    await data(L.mergeTag(src, dst))
+    expect((await data(L.getTxn(t.id))).tags).toEqual(['b-tg3'])
+    expect(await tagCount('a-tg3')).toBeUndefined()
+    expect(await L.deleteTag(src)).toEqual({ status: 'error', error: { code: 'not_found', entity: 'tag' } })
+  })
+
+  it('hapus payee mengosongkan payee transaksi termasuk yang terhapus', async () => {
+    const a = await account('PY1', 100_000)
+    const c = await category('expense', 'Makan PY1')
+    const t = await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }], payee: 'Warung PY1' })))
+    const p = (await data(L.listPayeeUsage())).find((x) => x.name === 'Warung PY1')!
+    expect(p.txnCount).toBe(1)
+    expect(p.lastDate).toBe('2026-10-02')
+    await data(L.deleteTxn(t.id))
+    await data(L.deletePayee(p.id))
+    await data(L.undoDeleteTxn(t.id))
+    expect((await data(L.getTxn(t.id))).payee).toBeNull()
+    expect((await data(L.listPayeeUsage())).some((x) => x.id === p.id)).toBe(false)
+  })
+
+  it('kategori default payee diarsip → archived; default dipakai saran', async () => {
+    const c = await category('expense', 'Belanja PY2')
+    const old = await category('expense', 'Lama PY2')
+    await data(L.archiveCategory(old))
+    expect(await L.createPayee('Toko PY2', old)).toEqual({ status: 'error', error: { code: 'archived', entity: 'category' } })
+    expect(await L.createPayee('Toko PY2', 'tidak-ada')).toEqual({ status: 'error', error: { code: 'not_found', entity: 'category' } })
+    const p = await data(L.createPayee('Toko PY2', null))
+    await data(L.updatePayee(p, 'TOKO PY2', c))
+    expect((await data(L.payeeSuggestion('toko py2')))?.categoryId).toBe(c)
+    expect(await L.createPayee('toko py2', null)).toEqual({ status: 'error', error: { code: 'duplicate', entity: 'payee' } })
+  })
+
+  it('payee dengan kategori default terarsip tetap bisa diubah namanya', async () => {
+    const c = await category('expense', 'Jajan PY5')
+    const other = await category('expense', 'Lain PY5')
+    const p = await data(L.createPayee('warung PY5', c))
+    await data(L.archiveCategory(c))
+    await data(L.updatePayee(p, 'Warung PY5', c))
+    await data(L.updatePayee(p, 'Warung PY5', other))
+    expect(await L.updatePayee(p, 'Warung PY5', c)).toEqual({ status: 'error', error: { code: 'archived', entity: 'category' } })
+  })
+
+  it('gabung payee memindah transaksi termasuk yang terhapus', async () => {
+    const a = await account('PY3', 100_000)
+    const c = await category('expense', 'Makan PY3')
+    const t = await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }], payee: 'Indomart PY3' })))
+    await data(L.deleteTxn(t.id))
+    const usage = await data(L.listPayeeUsage())
+    const src = usage.find((x) => x.name === 'Indomart PY3')!.id
+    const dst = await data(L.createPayee('Indomaret PY3', null))
+    expect(await L.mergePayee(src, src)).toEqual({ status: 'error', error: { code: 'merge_into_self', entity: null } })
+    await data(L.mergePayee(src, dst))
+    await data(L.undoDeleteTxn(t.id))
+    expect((await data(L.getTxn(t.id))).payee).toBe('Indomaret PY3')
+  })
+})
+
+describe('browser ledger lampiran simulasi (TRX-08)', () => {
+  it('tambah, hitung di daftar, lalu hapus', async () => {
+    const a = await account('LP1', 100_000)
+    const c = await category('expense', 'Makan LP1')
+    const t = await data(L.createTxn(form({ accountId: a, amount: 1_000, splits: [{ categoryId: c, amount: 1_000, memo: null }] })))
+    const added = await data(L.addAttachments(t.id))
+    expect(added).toEqual([{ id: expect.any(String), fileName: 'struk-contoh.jpg', mime: 'image/jpeg', sizeBytes: 1234, missing: false }])
+    expect(await data(L.listAttachments(t.id))).toEqual(added)
+    const row = () => data(L.listTxns({ ...q, accountId: a })).then((p) => p.rows.find((r) => r.id === t.id)!)
+    expect((await row()).attachmentCount).toBe(1)
+    await data(L.openAttachment(added[0]!.id))
+    await data(L.removeAttachment(added[0]!.id))
+    expect((await row()).attachmentCount).toBe(0)
+    expect(await L.removeAttachment(added[0]!.id)).toEqual({ status: 'error', error: { code: 'not_found', entity: 'attachment' } })
+    expect(await L.addAttachments('tidak-ada')).toEqual({ status: 'error', error: { code: 'not_found', entity: 'transaction' } })
+  })
+})

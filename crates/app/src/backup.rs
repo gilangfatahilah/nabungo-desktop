@@ -3,11 +3,12 @@
 use std::path::{Path, PathBuf};
 
 use nabungo_storage::rusqlite::Connection;
-use nabungo_storage::{DbKey, StorageError};
+use nabungo_storage::{DbKey, StorageError, attachment};
 use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
+use crate::attachments::blob_path;
 use crate::vault::keyfile_path;
 use crate::{AppError, Ledger};
 
@@ -203,6 +204,77 @@ fn prune_logged(dir: &Path, kind: BackupKind) {
     }
 }
 
+/// Folder lampiran pendamping backup manual: `<parent>/<stem>-lampiran` (K7).
+pub fn attachments_sidecar(db: &Path) -> PathBuf {
+    let stem = db
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    db.with_file_name(format!("{stem}-lampiran"))
+}
+
+/// Salin setiap lampiran yang dirujuk dan ada ke sidecar `dest`. Folder hanya dibuat
+/// bila ada yang disalin; gagal menyalin satu file hanya dicatat.
+fn copy_to_sidecar(conn: &Connection, attachments_dir: &Path, dest: &Path) -> Result<(), AppError> {
+    let present: Vec<_> = attachment::all_shas(conn)?
+        .into_iter()
+        .filter_map(|sha| blob_path(attachments_dir, &sha).map(|p| (sha, p)))
+        .filter(|(_, p)| p.is_file())
+        .collect();
+    if present.is_empty() {
+        return Ok(());
+    }
+    let sidecar = attachments_sidecar(dest);
+    std::fs::create_dir_all(&sidecar)?;
+    for (sha, path) in present {
+        if let Err(e) = std::fs::copy(path, sidecar.join(&sha)) {
+            tracing::warn!(error = %e, sha256 = %sha, "failed to copy attachment into backup");
+        }
+    }
+    Ok(())
+}
+
+/// Salin lampiran dari sidecar `src` ke `attachments_dir`: hanya file bernama sha256
+/// yang isinya cocok, dan yang belum ada. Seluruhnya best-effort: DB sudah dipulihkan.
+fn restore_sidecar(src: &Path, attachments_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(attachments_sidecar(src)) else {
+        return;
+    };
+    if let Err(e) = std::fs::create_dir_all(attachments_dir) {
+        tracing::warn!(error = %e, "failed to create attachments folder");
+        return;
+    }
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(sha) = name.to_str().filter(|n| crate::attachments::is_sha256(n)) else {
+            continue;
+        };
+        let target = attachments_dir.join(sha);
+        if target.exists() {
+            continue;
+        }
+        let path = entry.path();
+        match crate::attachments::sha256_file(&path) {
+            Ok(actual) if actual == sha => {}
+            Ok(_) => {
+                tracing::warn!(sha256 = %sha, "attachment in backup does not match its hash");
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, sha256 = %sha, "failed to read attachment in backup");
+                continue;
+            }
+        }
+        let partial = attachments_dir.join(format!("{sha}.partial"));
+        let copied =
+            std::fs::copy(&path, &partial).and_then(|_| std::fs::rename(&partial, &target));
+        if let Err(e) = copied {
+            tracing::warn!(error = %e, sha256 = %sha, "failed to restore attachment");
+            let _ = std::fs::remove_file(&partial);
+        }
+    }
+}
+
 /// `path` setelah symlink dan `.`/`..` di-resolve; file boleh belum ada.
 fn resolve(path: &Path) -> Result<PathBuf, AppError> {
     if let Ok(p) = std::fs::canonicalize(path) {
@@ -272,11 +344,12 @@ impl Ledger {
         Ok(())
     }
 
-    /// Backup manual ke path pilihan user (K3), tanpa retensi.
-    pub fn backup_to(&self, dest: &Path) -> Result<(), AppError> {
+    /// Backup manual ke path pilihan user (K3), tanpa retensi. Lampiran ikut disalin ke
+    /// folder `<stem>-lampiran/` di sampingnya (K7).
+    pub fn backup_to(&self, dest: &Path, attachments_dir: &Path) -> Result<(), AppError> {
         self.ensure_not_live(dest)?;
         nabungo_storage::backup_into(&self.conn, dest, self.key.as_ref())?;
-        Ok(())
+        copy_to_sidecar(&self.conn, attachments_dir, dest)
     }
 
     /// Backup otomatis bila jatuh tempo (K5); `None` bila belum waktunya.
@@ -297,9 +370,22 @@ impl Ledger {
         write_backup(&self.conn, self.key.as_ref(), dir, BackupKind::Auto, now).map(Some)
     }
 
+    /// Pulihkan dari file pilihan user, lalu lampiran dari sidecar-nya (K7).
+    pub fn restore_file(
+        &mut self,
+        src: &Path,
+        backup_dir: &Path,
+        attachments_dir: &Path,
+        now: OffsetDateTime,
+    ) -> Result<(), AppError> {
+        self.restore_db(src, backup_dir, now)?;
+        restore_sidecar(src, attachments_dir);
+        Ok(())
+    }
+
     /// Pulihkan dari `src` (K7): periksa → backup pra-restore → salin → migrasi.
     /// File tidak valid tidak mengubah apa pun.
-    pub fn restore_file(
+    fn restore_db(
         &mut self,
         src: &Path,
         backup_dir: &Path,
@@ -332,7 +418,8 @@ impl Ledger {
         if file_name.contains(['/', '\\']) || parse_backup_name(file_name).is_none() {
             return Err(AppError::InvalidBackup);
         }
-        self.restore_file(&backup_dir.join(file_name), backup_dir, now)
+        // Backup app-managed berbagi folder lampiran yang sama; tidak ada sidecar.
+        self.restore_db(&backup_dir.join(file_name), backup_dir, now)
     }
 
     /// Pesan `PRAGMA integrity_check`; kosong = sehat.
@@ -701,6 +788,11 @@ mod tests {
             super::names(dir)
         }
 
+        /// Folder lampiran yang tidak pernah ada; cukup untuk DB tanpa lampiran.
+        fn no_att() -> PathBuf {
+            PathBuf::from("/nonexistent/nabungo-attachments")
+        }
+
         fn backup_files(dir: &Path) -> Vec<String> {
             if !dir.exists() {
                 return vec![];
@@ -713,12 +805,12 @@ mod tests {
             let f = Fixture::new();
             let before = snapshot(&f.ledger);
             let x = f.root.join("x.db");
-            f.ledger.backup_to(&x).unwrap();
+            f.ledger.backup_to(&x, &no_att()).unwrap();
 
             let dir2 = tempfile::tempdir().unwrap();
             let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
             fresh
-                .restore_file(&x, &dir2.path().join("backups"), NOW)
+                .restore_file(&x, &dir2.path().join("backups"), &no_att(), NOW)
                 .unwrap();
             assert_eq!(snapshot(&fresh), before);
             let mode: String = fresh
@@ -732,7 +824,7 @@ mod tests {
         fn restore_overwrites_newer_changes_and_keeps_pre_restore() {
             let mut f = Fixture::new();
             let x = f.root.join("x.db");
-            f.ledger.backup_to(&x).unwrap();
+            f.ledger.backup_to(&x, &no_att()).unwrap();
             let at_backup = snapshot(&f.ledger);
             let bca = f.bca;
             expense(&mut f.ledger, bca, 40_000);
@@ -740,7 +832,7 @@ mod tests {
             assert_ne!(with_new, at_backup);
 
             let backups = f.backups();
-            f.ledger.restore_file(&x, &backups, NOW).unwrap();
+            f.ledger.restore_file(&x, &backups, &no_att(), NOW).unwrap();
             assert_eq!(snapshot(&f.ledger), at_backup);
 
             let pre: Vec<_> = backup_files(&backups)
@@ -761,7 +853,10 @@ mod tests {
             let txt = f.root.join("catatan.db");
             std::fs::write(&txt, "bukan database sqlite, hanya teks biasa").unwrap();
             let backups = f.backups();
-            let err = f.ledger.restore_file(&txt, &backups, NOW).unwrap_err();
+            let err = f
+                .ledger
+                .restore_file(&txt, &backups, &no_att(), NOW)
+                .unwrap_err();
             assert!(matches!(err, AppError::InvalidBackup), "{err:?}");
             assert_eq!(snapshot(&f.ledger), before);
             assert!(backup_files(&backups).is_empty());
@@ -797,7 +892,7 @@ mod tests {
             let f = Fixture::new();
             let mut ledger = f.ledger;
             ledger
-                .restore_file(&old, &f.root.join("backups"), NOW)
+                .restore_file(&old, &f.root.join("backups"), &no_att(), NOW)
                 .unwrap();
             assert_eq!(
                 nabungo_storage::schema_version(&ledger.conn).unwrap(),
@@ -826,12 +921,12 @@ mod tests {
             let backups = f.backups();
             let first = snapshot(&f.ledger);
             let x = f.root.join("x.db");
-            f.ledger.backup_to(&x).unwrap();
+            f.ledger.backup_to(&x, &no_att()).unwrap();
             let bca = f.bca;
             for i in 0..5 {
                 expense(&mut f.ledger, bca, 1_000);
                 f.ledger
-                    .restore_file(&x, &backups, NOW + Duration::minutes(i))
+                    .restore_file(&x, &backups, &no_att(), NOW + Duration::minutes(i))
                     .unwrap();
             }
             // Pre-restore tertua = state awal; harus tetap bisa dipulihkan walau jatah penuh.
@@ -869,7 +964,7 @@ mod tests {
                 targets.push(link);
             }
             for t in targets {
-                let err = f.ledger.backup_to(&t).unwrap_err();
+                let err = f.ledger.backup_to(&t, &no_att()).unwrap_err();
                 assert!(
                     matches!(err, AppError::BackupTargetInvalid),
                     "{t:?}: {err:?}"
@@ -883,7 +978,10 @@ mod tests {
         fn restore_from_live_db_is_rejected() {
             let mut f = Fixture::new();
             let (db, backups) = (f.db(), f.backups());
-            let err = f.ledger.restore_file(&db, &backups, NOW).unwrap_err();
+            let err = f
+                .ledger
+                .restore_file(&db, &backups, &no_att(), NOW)
+                .unwrap_err();
             assert!(matches!(err, AppError::BackupTargetInvalid), "{err:?}");
             assert!(backup_files(&backups).is_empty());
         }
@@ -970,7 +1068,7 @@ mod tests {
             let f = Fixture::new();
             let before = snapshot(&f.ledger);
             let x = f.root.join("x.db");
-            f.ledger.backup_to(&x).unwrap();
+            f.ledger.backup_to(&x, &no_att()).unwrap();
             let (db, backups) = (f.db(), f.backups());
             let Fixture { _dir, ledger, .. } = f;
             drop(ledger);
@@ -978,7 +1076,7 @@ mod tests {
 
             let mut ledger = Ledger::open(&db).unwrap();
             assert!(!matches!(ledger.integrity_check(), Ok(p) if p.is_empty()));
-            ledger.restore_file(&x, &backups, NOW).unwrap();
+            ledger.restore_file(&x, &backups, &no_att(), NOW).unwrap();
             assert_eq!(snapshot(&ledger), before);
             assert!(ledger.integrity_check().unwrap().is_empty());
             let list = backup_files(&backups);
@@ -1038,6 +1136,112 @@ mod tests {
         #[test]
         fn integrity_check_ok_on_seeded_db() {
             assert!(Fixture::new().ledger.integrity_check().unwrap().is_empty());
+        }
+
+        const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+        /// Satu lampiran PNG pada expense baru; kembalikan (txn, sha256).
+        fn attach(f: &mut Fixture) -> (crate::Uuid, String) {
+            let category_id = cat(&f.ledger, "Makan & Minum");
+            let txn = f
+                .ledger
+                .create_txn(&TxnForm {
+                    body: FormBody::Expense {
+                        account_id: f.bca,
+                        amount: 12_000,
+                        splits: vec![SplitLine {
+                            category_id,
+                            amount: 12_000,
+                            memo: None,
+                        }],
+                    },
+                    date: date!(2026 - 10 - 06),
+                    payee: None,
+                    note: None,
+                    tags: vec![],
+                })
+                .unwrap();
+            let src = f.root.join("struk.png");
+            std::fs::write(&src, PNG).unwrap();
+            let att = f.root.join("attachments");
+            f.ledger
+                .add_attachments(txn, std::slice::from_ref(&src), &att)
+                .unwrap();
+            (txn, crate::attachments::sha256_file(&src).unwrap())
+        }
+
+        #[test]
+        fn manual_backup_roundtrip_restores_attachments() {
+            let mut f = Fixture::new();
+            let (txn, sha) = attach(&mut f);
+            let out = tempfile::tempdir().unwrap();
+            let x = out.path().join("cadangan.db");
+            f.ledger.backup_to(&x, &f.root.join("attachments")).unwrap();
+            let sidecar = super::super::attachments_sidecar(&x);
+            assert_eq!(sidecar, out.path().join("cadangan-lampiran"));
+            assert_eq!(files(&sidecar), std::slice::from_ref(&sha));
+
+            let dir2 = tempfile::tempdir().unwrap();
+            let att2 = dir2.path().join("attachments");
+            let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
+            fresh
+                .restore_file(&x, &dir2.path().join("backups"), &att2, NOW)
+                .unwrap();
+            let rows = fresh.list_attachments(txn, &att2).unwrap();
+            assert_eq!(rows.len(), 1);
+            assert!(!rows[0].missing);
+            assert_eq!(std::fs::read(att2.join(&sha)).unwrap(), PNG);
+        }
+
+        #[test]
+        fn backup_ignores_tampered_sha() {
+            let mut f = Fixture::new();
+            attach(&mut f);
+            let outside = tempfile::tempdir().unwrap();
+            let victim = outside.path().join("dokumen.txt");
+            std::fs::write(&victim, b"penting").unwrap();
+            f.ledger
+                .conn
+                .execute(
+                    "UPDATE attachment SET sha256 = ?1",
+                    [victim.to_str().unwrap()],
+                )
+                .unwrap();
+            let out = tempfile::tempdir().unwrap();
+            let x = out.path().join("cadangan.db");
+            f.ledger.backup_to(&x, &f.root.join("attachments")).unwrap();
+            assert_eq!(std::fs::read(&victim).unwrap(), b"penting");
+            assert_eq!(files(out.path()), ["cadangan.db"]);
+        }
+
+        #[test]
+        fn backup_without_attachments_has_no_sidecar() {
+            let f = Fixture::new();
+            let out = tempfile::tempdir().unwrap();
+            let x = out.path().join("cadangan.db");
+            f.ledger.backup_to(&x, &f.root.join("attachments")).unwrap();
+            assert_eq!(files(out.path()), ["cadangan.db"]);
+        }
+
+        #[test]
+        fn restore_skips_corrupted_attachment() {
+            let mut f = Fixture::new();
+            let (txn, sha) = attach(&mut f);
+            let out = tempfile::tempdir().unwrap();
+            let x = out.path().join("cadangan.db");
+            f.ledger.backup_to(&x, &f.root.join("attachments")).unwrap();
+            let sidecar = super::super::attachments_sidecar(&x);
+            std::fs::write(sidecar.join(&sha), b"\x89PNG rusak").unwrap();
+            std::fs::write(sidecar.join("bukan-sha.png"), PNG).unwrap();
+
+            let dir2 = tempfile::tempdir().unwrap();
+            let att2 = dir2.path().join("attachments");
+            let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
+            fresh
+                .restore_file(&x, &dir2.path().join("backups"), &att2, NOW)
+                .unwrap();
+            assert!(fresh.list_attachments(txn, &att2).unwrap()[0].missing);
+            assert!(backup_files(&att2).is_empty());
         }
     }
 }

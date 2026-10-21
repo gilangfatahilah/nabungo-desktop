@@ -8,6 +8,9 @@ import {
   type AllocationOverviewDto,
   type AllocationPointDto,
   type AppInfo,
+  type AttachmentDto,
+  type PayeeUsageDto,
+  type TagUsageDto,
   type BackupDto,
   type BucketFieldsDto,
   type BudgetAlertDto,
@@ -48,6 +51,7 @@ export type {
   AllocationOverviewDto,
   AllocationPointDto,
   AppInfo,
+  AttachmentDto,
   BackupDto,
   BackupKindDto,
   BucketActualDto,
@@ -80,10 +84,12 @@ export type {
   NetWorthDto,
   OnboardingDto,
   PayeeSuggestionDto,
+  PayeeUsageDto,
   PostingDto,
   SecurityStatusDto,
   SplitDto,
   StartupReportDto,
+  TagUsageDto,
   FeeDto,
   ThemeDto,
   TxnDetailDto,
@@ -283,6 +289,67 @@ export function searchPayees(query: string): Promise<string[]> {
 
 export function listTags(): Promise<string[]> {
   return unwrap(api().listTags())
+}
+
+// --- Tag & payee (CAT-04) ---
+
+export function listTagUsage(): Promise<TagUsageDto[]> {
+  return unwrap(api().listTagUsage())
+}
+
+export function createTag(name: string): Promise<string> {
+  return unwrap(api().createTag(name))
+}
+
+export async function renameTag(id: string, name: string): Promise<void> {
+  await unwrap(api().renameTag(id, name))
+}
+
+export async function mergeTag(sourceId: string, targetId: string): Promise<void> {
+  await unwrap(api().mergeTag(sourceId, targetId))
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  await unwrap(api().deleteTag(id))
+}
+
+export function listPayeeUsage(): Promise<PayeeUsageDto[]> {
+  return unwrap(api().listPayeeUsage())
+}
+
+export function createPayee(name: string, defaultCategoryId: string | null): Promise<string> {
+  return unwrap(api().createPayee(name, defaultCategoryId))
+}
+
+export async function updatePayee(id: string, name: string, defaultCategoryId: string | null): Promise<void> {
+  await unwrap(api().updatePayee(id, name, defaultCategoryId))
+}
+
+export async function mergePayee(sourceId: string, targetId: string): Promise<void> {
+  await unwrap(api().mergePayee(sourceId, targetId))
+}
+
+export async function deletePayee(id: string): Promise<void> {
+  await unwrap(api().deletePayee(id))
+}
+
+// --- Lampiran (TRX-08) ---
+
+/** Membuka dialog pilih file; batal → `[]`. */
+export function addAttachments(txnId: string): Promise<AttachmentDto[]> {
+  return unwrap(api().addAttachments(txnId))
+}
+
+export function listAttachments(txnId: string): Promise<AttachmentDto[]> {
+  return unwrap(api().listAttachments(txnId))
+}
+
+export async function removeAttachment(id: string): Promise<void> {
+  await unwrap(api().removeAttachment(id))
+}
+
+export async function openAttachment(id: string): Promise<void> {
+  await unwrap(api().openAttachment(id))
 }
 
 export function txnFormDefaults(): Promise<TxnFormDefaultsDto> {

@@ -15,6 +15,7 @@ pub fn local_today() -> Date {
 
 mod accounts;
 mod allocation;
+mod attachments;
 mod backup;
 mod budget;
 mod budget_alerts;
@@ -28,6 +29,7 @@ mod reconcile;
 mod reports;
 pub mod security;
 mod settings;
+mod tags;
 #[cfg(test)]
 mod testkit;
 mod transactions;
@@ -36,6 +38,7 @@ pub mod vault;
 
 pub use accounts::{AccountFields, AccountsOverview};
 pub use allocation::{AllocationOverview, AllocationPoint, BucketFields};
+pub use attachments::{AttachmentRow, MAX_ATTACHMENT_BYTES};
 pub use backup::{BackupInfo, BackupKind, is_auto_due, list_backups, parse_backup_name};
 pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
@@ -56,6 +59,8 @@ pub use nabungo_storage::allocation::BucketRow;
 pub use nabungo_storage::category::CategoryRow;
 pub use nabungo_storage::contact::ContactRow;
 pub use nabungo_storage::format_utc as format_timestamp;
+pub use nabungo_storage::payee::PayeeUsage;
+pub use nabungo_storage::tag::TagUsage;
 pub use nabungo_storage::txn::PostingRecord;
 pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
 pub use onboarding::OnboardingInput;

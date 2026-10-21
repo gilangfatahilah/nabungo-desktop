@@ -2,12 +2,12 @@
 
 use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
-    AllocationPoint, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert, BudgetLevel,
-    BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount, CategoryFields,
-    CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Locale, NetWorth, NetWorthPoint,
-    OnboardingInput, PayeeSuggestion, PeriodStartDay, PostingRecord, Reconciliation, SplitLine,
-    Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid,
-    ValuationPoint, format_date, parse_date,
+    AllocationPoint, AttachmentRow, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert,
+    BudgetLevel, BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount,
+    CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Locale, NetWorth,
+    NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay, PostingRecord,
+    Reconciliation, SplitLine, TagUsage, Theme, TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage,
+    TxnQuery, UiSettings, Uuid, ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -617,6 +617,7 @@ pub struct TxnRowDto {
     pub running_balance: Option<i64>,
     /// Hanya saat difilter per akun.
     pub reconciled: Option<bool>,
+    pub attachment_count: u32,
 }
 
 impl From<TxnListRow> for TxnRowDto {
@@ -637,6 +638,7 @@ impl From<TxnListRow> for TxnRowDto {
             account_delta: r.account_delta,
             running_balance: r.running_balance,
             reconciled: r.reconciled,
+            attachment_count: r.attachment_count,
         }
     }
 }
@@ -878,6 +880,71 @@ impl From<ContactRow> for ContactDto {
         Self {
             id: c.id.to_string(),
             name: c.name,
+        }
+    }
+}
+
+// --- Tag, payee, lampiran ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TagUsageDto {
+    pub id: String,
+    pub name: String,
+    pub txn_count: u32,
+}
+
+impl From<TagUsage> for TagUsageDto {
+    fn from(t: TagUsage) -> Self {
+        Self {
+            id: t.id.to_string(),
+            name: t.name,
+            txn_count: t.txn_count,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PayeeUsageDto {
+    pub id: String,
+    pub name: String,
+    pub default_category_id: Option<String>,
+    pub txn_count: u32,
+    pub last_date: Option<String>,
+}
+
+impl From<PayeeUsage> for PayeeUsageDto {
+    fn from(p: PayeeUsage) -> Self {
+        Self {
+            id: p.id.to_string(),
+            name: p.name,
+            default_category_id: p.default_category_id.map(|c| c.to_string()),
+            txn_count: p.txn_count,
+            last_date: p.last_date.map(format_date),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentDto {
+    pub id: String,
+    pub file_name: String,
+    pub mime: String,
+    // u64 → number aman: dibatasi 10 MiB.
+    pub size_bytes: u64,
+    pub missing: bool,
+}
+
+impl From<AttachmentRow> for AttachmentDto {
+    fn from(a: AttachmentRow) -> Self {
+        Self {
+            id: a.id.to_string(),
+            file_name: a.file_name,
+            mime: a.mime,
+            size_bytes: a.size_bytes,
+            missing: a.missing,
         }
     }
 }
@@ -1502,6 +1569,7 @@ mod tests {
             account_delta: Some(-206_500),
             running_balance: Some(5_768_500),
             reconciled: None,
+            attachment_count: 0,
         };
         let v = serde_json::to_value(TxnRowDto::from(row)).unwrap();
         assert_eq!(v["kind"], "transfer");

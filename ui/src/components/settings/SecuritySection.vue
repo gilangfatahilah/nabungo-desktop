@@ -171,6 +171,7 @@ async function submitDisable() {
         <Button variant="outline" :disabled="busy" @click="openDisable">{{ t('security.disable') }}</Button>
       </div>
     </template>
+    <p class="max-w-prose text-meta text-muted-foreground">{{ t('security.attachmentsNote') }}</p>
 
     <Dialog v-model:open="enableOpen">
       <DialogContent class="sm:max-w-md">

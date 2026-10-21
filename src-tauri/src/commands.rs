@@ -7,15 +7,16 @@ use nabungo_app::vault::KdfParams;
 use nabungo_app::{AppError, OffsetDateTime, PeriodStartDay, Uuid};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-    AllocationPointDto, AppInfo, BackupDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto,
-    CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
-    ContactDto, LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, ReconciliationDto,
-    SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto, ThemeDto, TxnDetailDto,
-    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
-    parse_day, parse_id, parse_period,
+    AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BucketFieldsDto, BudgetAlertDto,
+    BudgetOverviewDto, CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto,
+    CategoryKindDto, ContactDto, LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto,
+    PayeeUsageDto, ReconciliationDto, SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto,
+    TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto,
+    UiSettingsDto, ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
@@ -613,6 +614,158 @@ pub fn startup_report(state: State<'_, AppState>) -> StartupReportDto {
     (*state.startup.lock().unwrap_or_else(|e| e.into_inner())).into()
 }
 
+// --- Tag & payee (CAT-04) ---
+
+fn parse_opt_id(id: Option<String>, entity: &str) -> Result<Option<Uuid>, IpcError> {
+    id.map(|s| parse_id(&s, entity)).transpose()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_tag_usage(state: State<'_, AppState>) -> Result<Vec<TagUsageDto>, IpcError> {
+    let list = ledger(&state)?.list_tag_usage()?;
+    Ok(list.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_tag(state: State<'_, AppState>, name: String) -> Result<String, IpcError> {
+    Ok(ledger(&state)?.create_tag(&name)?.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn rename_tag(state: State<'_, AppState>, id: String, name: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "tag")?;
+    Ok(ledger(&state)?.rename_tag(id, &name)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn merge_tag(
+    state: State<'_, AppState>,
+    source_id: String,
+    target_id: String,
+) -> Result<(), IpcError> {
+    let source = parse_id(&source_id, "tag")?;
+    let target = parse_id(&target_id, "tag")?;
+    Ok(ledger(&state)?.merge_tag(source, target)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_tag(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "tag")?;
+    Ok(ledger(&state)?.delete_tag(id)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_payee_usage(state: State<'_, AppState>) -> Result<Vec<PayeeUsageDto>, IpcError> {
+    let list = ledger(&state)?.list_payee_usage()?;
+    Ok(list.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_payee(
+    state: State<'_, AppState>,
+    name: String,
+    default_category_id: Option<String>,
+) -> Result<String, IpcError> {
+    let category = parse_opt_id(default_category_id, "category")?;
+    Ok(ledger(&state)?.create_payee(&name, category)?.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_payee(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+    default_category_id: Option<String>,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "payee")?;
+    let category = parse_opt_id(default_category_id, "category")?;
+    Ok(ledger(&state)?.update_payee(id, &name, category)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn merge_payee(
+    state: State<'_, AppState>,
+    source_id: String,
+    target_id: String,
+) -> Result<(), IpcError> {
+    let source = parse_id(&source_id, "payee")?;
+    let target = parse_id(&target_id, "payee")?;
+    Ok(ledger(&state)?.merge_payee(source, target)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_payee(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "payee")?;
+    Ok(ledger(&state)?.delete_payee(id)?)
+}
+
+// --- Lampiran (TRX-08) ---
+
+/// Pilih file struk (multi), lalu salin ke folder lampiran. Batal → `[]`.
+#[tauri::command]
+#[specta::specta]
+pub async fn add_attachments(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    txn_id: String,
+) -> Result<Vec<AttachmentDto>, IpcError> {
+    let txn_id = parse_id(&txn_id, "transaction")?;
+    let sources = pick_files(&app).await?;
+    if sources.is_empty() {
+        return Ok(vec![]);
+    }
+    let dir = state.data_dir.attachments_path();
+    std::fs::create_dir_all(&dir).map_err(AppError::Io)?;
+    let rows = ledger(&state)?.add_attachments(txn_id, &sources, &dir)?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_attachments(
+    state: State<'_, AppState>,
+    txn_id: String,
+) -> Result<Vec<AttachmentDto>, IpcError> {
+    let txn_id = parse_id(&txn_id, "transaction")?;
+    let rows = ledger(&state)?.list_attachments(txn_id, &state.data_dir.attachments_path())?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn remove_attachment(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "attachment")?;
+    Ok(ledger(&state)?.remove_attachment(id, &state.data_dir.attachments_path())?)
+}
+
+/// Buka lampiran dengan viewer bawaan OS.
+#[tauri::command]
+#[specta::specta]
+pub fn open_attachment(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "attachment")?;
+    let path = ledger(&state)?.attachment_path(id, &state.data_dir.attachments_path())?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| {
+            tracing::error!(error = %e, "gagal membuka lampiran");
+            IpcError::code(ErrorCode::FileIo)
+        })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn list_backups(state: State<'_, AppState>) -> Result<Vec<BackupDto>, IpcError> {
@@ -649,6 +802,27 @@ async fn pick_path(app: &AppHandle, dialog: Dialog) -> Result<Option<PathBuf>, I
     picked.map(file_path).transpose()
 }
 
+/// Dialog multi-pilih untuk lampiran; batal → kosong.
+async fn pick_files(app: &AppHandle) -> Result<Vec<PathBuf>, IpcError> {
+    let app = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("struk", &["jpg", "jpeg", "png", "webp", "pdf"])
+            .blocking_pick_files()
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "dialog task gagal");
+        IpcError::code(ErrorCode::Internal)
+    })?;
+    picked
+        .unwrap_or_default()
+        .into_iter()
+        .map(file_path)
+        .collect()
+}
+
 fn file_path(p: FilePath) -> Result<PathBuf, IpcError> {
     p.into_path().map_err(|e| {
         tracing::error!(error = %e, "path dialog tidak valid");
@@ -673,7 +847,7 @@ pub async fn backup_now(
     let Some(dest) = pick_path(&app, Dialog::Save { name, ext: "db" }).await? else {
         return Ok(None);
     };
-    ledger(&state)?.backup_to(&dest)?;
+    ledger(&state)?.backup_to(&dest, &state.data_dir.attachments_path())?;
     Ok(Some(display(&dest)))
 }
 
@@ -700,7 +874,8 @@ pub async fn restore_backup_from_file(
         return Ok(false);
     };
     let dir = state.data_dir.backups_path();
-    ledger(&state)?.restore_file(&src, &dir, OffsetDateTime::now_utc())?;
+    let att = state.data_dir.attachments_path();
+    ledger(&state)?.restore_file(&src, &dir, &att, OffsetDateTime::now_utc())?;
     crate::lifecycle::on_restored(&app);
     Ok(true)
 }
@@ -731,7 +906,8 @@ pub async fn export_csv(
     let Some(parent) = pick_path(&app, Dialog::Folder).await? else {
         return Ok(None);
     };
-    let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today())?;
+    let att = state.data_dir.attachments_path();
+    let dir = ledger(&state)?.export_csv(&parent, nabungo_app::local_today(), &att)?;
     Ok(Some(display(&dir)))
 }
 

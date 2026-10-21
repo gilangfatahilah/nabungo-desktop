@@ -85,6 +85,15 @@ describe('TxnList', () => {
     expect(rowEl(expenseId).querySelector('[data-testid="txn-reconciled"]')).toBeNull()
   })
 
+  it('ikon lampiran hanya pada baris yang punya lampiran', async () => {
+    await ipc.addAttachments(expenseId)
+    await useTransactionsStore().reload()
+    await mountList()
+    const icon = rowEl(expenseId).querySelector('[data-testid="txn-attachment"]')
+    expect(icon?.getAttribute('aria-label')).toBe('Ada lampiran')
+    expect(rowEl(transferId).querySelector('[data-testid="txn-attachment"]')).toBeNull()
+  })
+
   it('Delete pada baris fokus memanggil store.remove', async () => {
     await mountList()
     const store = useTransactionsStore()

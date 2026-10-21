@@ -8,6 +8,7 @@ use rusqlite_migration::{M, Migrations};
 pub mod account;
 pub mod account_group;
 pub mod allocation;
+pub mod attachment;
 pub mod budget;
 pub mod category;
 pub mod contact;
@@ -125,6 +126,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0004_txn_indexes.sql"),
     include_str!("../migrations/0005_allocation_names.sql"),
     include_str!("../migrations/0006_contact.sql"),
+    include_str!("../migrations/0007_tags_attachments.sql"),
 ];
 
 /// Versi skema terbaru (`user_version` setelah semua migrasi).
@@ -255,6 +257,35 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn migration_0007_schema() {
+        let conn = open_in_memory().unwrap();
+        let n: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name = 'tag_name_nocase'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+        conn.execute("INSERT INTO tag (id, name) VALUES ('a', 'a')", [])
+            .unwrap();
+        assert!(
+            conn.execute("INSERT INTO tag (id, name) VALUES ('b', 'A')", [])
+                .is_err()
+        );
+        for col in ["size_bytes", "created_at"] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM pragma_table_info('attachment') WHERE name = ?1",
+                    [col],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "missing column {col}");
+        }
     }
 
     #[test]

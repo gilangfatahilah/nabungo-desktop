@@ -17,6 +17,7 @@ import type { FormKind, TxnFormState } from '@/lib/txnForm'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useTransactionsStore } from '@/stores/transactions'
+import AttachmentList from './AttachmentList.vue'
 import CategoryCombobox from './CategoryCombobox.vue'
 import PayeeCombobox from './PayeeCombobox.vue'
 import SplitEditor from './SplitEditor.vue'
@@ -39,7 +40,8 @@ function focusAmount() {
   void nextTick(() => document.getElementById('txn-amount')?.focus())
 }
 
-// Tag & catatan terlipat kecuali sudah berisi (mode edit/duplikat), ui-guidelines §8.4.
+// Tag, catatan & lampiran terlipat kecuali sudah berisi (mode edit/duplikat), ui-guidelines §8.4.
+// Lampiran dimuat oleh AttachmentList (tetap ter-mount saat terlipat) lalu membuka seksi bila ada.
 const showMore = ref(s.tags.length > 0 || s.note.trim() !== '')
 
 const touched = reactive({ category: s.categoryId !== null || s.split, account: props.id !== null })
@@ -191,6 +193,7 @@ async function submit() {
       <Button v-else type="button" variant="ghost" size="sm" class="self-start text-muted-foreground" data-testid="txn-more" @click="showMore = true">
         <PlusIcon /> {{ t('txn.addDetails') }}
       </Button>
+      <AttachmentList v-show="showMore" :txn-id="id" @loaded="(n) => { if (n > 0) showMore = true }" />
 
       <p v-if="error" class="text-meta text-destructive" role="alert">{{ error }}</p>
     </div>

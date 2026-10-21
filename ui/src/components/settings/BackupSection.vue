@@ -7,6 +7,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { backupNow, listBackups, restoreBackup, restoreBackupFromFile, type BackupDto } from '@/ipc'
+import { formatBytes } from '@/lib/bytes'
 import { formatTimestamp } from '@/lib/date'
 import { withErrorToast } from '@/lib/notify'
 import { reloadApp } from '@/lib/reload'
@@ -32,10 +33,7 @@ const confirmTitle = computed(() =>
   pending.value ? t('settings.backup.restoreTitle', { time: when(pending.value) }) : t('settings.backup.restoreFileTitle'),
 )
 
-function formatSize(bytes: number): string {
-  const nf = new Intl.NumberFormat(settings.locale === 'id' ? 'id-ID' : 'en-US', { maximumFractionDigits: 1 })
-  return bytes >= 1024 * 1024 ? `${nf.format(bytes / (1024 * 1024))} MB` : `${nf.format(Math.max(bytes, 1) / 1024)} KB`
-}
+const formatSize = (bytes: number) => formatBytes(bytes, settings.locale)
 
 async function run(fn: () => Promise<unknown>) {
   busy.value = true

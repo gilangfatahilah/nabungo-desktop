@@ -16,6 +16,16 @@ pub struct ExportTxn {
     pub note: Option<String>,
     pub tags: Vec<String>,
     pub postings: Vec<ExportPosting>,
+    pub attachments: Vec<ExportAttachment>,
+}
+
+/// Metadata lampiran saja; isi file ada di folder lampiran.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportAttachment {
+    pub file_name: String,
+    pub sha256: String,
+    pub mime: String,
+    pub size_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +62,12 @@ pub fn for_each_txn<E: From<StorageError>>(
              WHERE tt.txn_id = ?1 ORDER BY g.name",
         )
         .map_err(StorageError::from)?;
+    let mut attachments = conn
+        .prepare(
+            "SELECT file_name, sha256, mime, size_bytes FROM attachment
+             WHERE txn_id = ?1 ORDER BY created_at, id",
+        )
+        .map_err(StorageError::from)?;
     let mut rows = stmt.query([]).map_err(StorageError::from)?;
     let mut current: Option<ExportTxn> = None;
     while let Some(r) = rows.next().map_err(StorageError::from)? {
@@ -83,6 +99,17 @@ pub fn for_each_txn<E: From<StorageError>>(
                     .query_map([id.to_string()], |r| r.get(0))
                     .and_then(|rows| rows.collect::<rusqlite::Result<Vec<String>>>())
                     .map_err(StorageError::from)?;
+                let atts = attachments
+                    .query_map([id.to_string()], |r| {
+                        Ok(ExportAttachment {
+                            file_name: r.get(0)?,
+                            sha256: r.get(1)?,
+                            mime: r.get(2)?,
+                            size_bytes: u64::try_from(r.get::<_, i64>(3)?).unwrap_or(0),
+                        })
+                    })
+                    .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
+                    .map_err(StorageError::from)?;
                 current = Some(ExportTxn {
                     id,
                     kind: r.get(1).map_err(StorageError::from)?,
@@ -92,6 +119,7 @@ pub fn for_each_txn<E: From<StorageError>>(
                     note: r.get(5).map_err(StorageError::from)?,
                     tags: tag_names,
                     postings: vec![posting],
+                    attachments: atts,
                 });
             }
         }
