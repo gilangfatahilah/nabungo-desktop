@@ -54,6 +54,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::period_of,
             commands::budget_overview,
             commands::set_budget,
+            commands::set_budget_rollover,
             commands::copy_budgets,
             commands::record_valuation,
             commands::valuation_history,

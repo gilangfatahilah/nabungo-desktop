@@ -32,8 +32,8 @@ export const commands = {
 	unarchiveCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("unarchive_category", { id })),
 	deleteCategory: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_category", { id })),
 	mergeCategory: (source: string, target: string) => typedError<null, IpcError>(__TAURI_INVOKE("merge_category", { source, target })),
-	createTxn: (form: TxnFormDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_txn", { form })),
-	updateTxn: (id: string, form: TxnFormDto) => typedError<null, IpcError>(__TAURI_INVOKE("update_txn", { id, form })),
+	createTxn: (form: TxnFormDto) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("create_txn", { form })),
+	updateTxn: (id: string, form: TxnFormDto) => typedError<BudgetAlertDto[], IpcError>(__TAURI_INVOKE("update_txn", { id, form })),
 	getTxn: (id: string) => typedError<TxnDetailDto, IpcError>(__TAURI_INVOKE("get_txn", { id })),
 	listTxns: (query: TxnQueryDto) => typedError<TxnPageDto, IpcError>(__TAURI_INVOKE("list_txns", { query })),
 	deleteTxn: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_txn", { id })),
@@ -50,6 +50,8 @@ export const commands = {
 	budgetOverview: (period: string) => typedError<BudgetOverviewDto, IpcError>(__TAURI_INVOKE("budget_overview", { period })),
 	/**  `amount = null` menghapus budget kategori di periode itu. */
 	setBudget: (categoryId: string, period: string, amount: number | null) => typedError<null, IpcError>(__TAURI_INVOKE("set_budget", { categoryId, period, amount })),
+	/**  Nyalakan/matikan rollover budget kategori di periode itu (budget harus ada). */
+	setBudgetRollover: (categoryId: string, period: string, on: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("set_budget_rollover", { categoryId, period, on })),
 	/**  Salin budget periode sebelumnya ke kategori yang belum punya budget. Mengembalikan jumlah baris. */
 	copyBudgets: (period: string) => typedError<number, IpcError>(__TAURI_INVOKE("copy_budgets", { period })),
 	/**  Catat nilai akun investasi per akhir `date`; yang disimpan adalah selisih terhadap saldo. */
@@ -204,6 +206,15 @@ export type BucketFieldsDto = {
 	color: string | null,
 };
 
+export type BudgetAlertDto = {
+	categoryId: string,
+	period: string,
+	level: BudgetLevelDto,
+	percent: number | null,
+};
+
+export type BudgetLevelDto = "ok" | "warning" | "exceeded";
+
 /**  `prev`/`next` adalah kunci periode agar UI tidak menghitung bulan sendiri. */
 export type BudgetOverviewDto = {
 	period: string,
@@ -212,6 +223,8 @@ export type BudgetOverviewDto = {
 	from: string,
 	/**  Inklusif. */
 	to: string,
+	/**  Hari tersisa termasuk hari ini; `null` bila hari ini di luar periode. */
+	daysLeft: number | null,
 	rows: BudgetRowDto[],
 	total: BudgetTotalDto,
 };
@@ -220,16 +233,29 @@ export type BudgetRowDto = {
 	categoryId: string,
 	parentId: string | null,
 	budget: number | null,
+	/**  Sisa periode ini dibawa ke periode berikutnya. */
+	rollover: boolean,
+	/**  Bawaan dari periode sebelumnya (bisa negatif). */
+	carry: number,
+	/**  `budget + carry`; `null` tanpa budget. */
+	available: number | null,
 	/**  Positif = terpakai; parent mencakup child. */
 	spent: number,
-	/**  `budget − spent`; negatif = lewat budget. */
+	/**  `available − spent`; negatif = lewat budget. */
 	remaining: number | null,
+	level: BudgetLevelDto | null,
+	percent: number | null,
+	/**  `null` tanpa budget atau di luar periode berjalan. */
+	perDay: number | null,
 };
 
 export type BudgetTotalDto = {
 	budget: number,
+	carry: number,
+	available: number,
 	spent: number,
 	remaining: number,
+	perDay: number | null,
 };
 
 export type CashflowPointDto = {
@@ -326,6 +352,12 @@ export type PostingDto = {
 	categoryId: string | null,
 	amount: number,
 	memo: string | null,
+};
+
+/**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */
+export type SavedTxnDto = {
+	id: string,
+	alerts: BudgetAlertDto[],
 };
 
 /**  Status enkripsi untuk UI; tersedia juga saat terkunci. */
