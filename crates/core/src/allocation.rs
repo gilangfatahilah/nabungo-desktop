@@ -122,8 +122,8 @@ fn fit(v: i128) -> Result<i64, MoneyError> {
     i64::try_from(v).map_err(|_| MoneyError::Overflow)
 }
 
-/// Porsi aktual tiap bucket vs target. Hanya akun aset yang dihitung di net worth yang masuk
-/// `gross`; mapping dari akun lain diabaikan. Urutan `buckets` dipertahankan.
+/// Porsi aktual tiap bucket vs target. Hanya akun aset (lihat
+/// [`AccountKind::counts_as_liability`]) yang dihitung di net worth yang masuk `gross`; mapping dari akun lain diabaikan. Urutan `buckets` dipertahankan.
 pub fn allocation_report(
     buckets: &[Bucket],
     mappings: &[Mapping],
@@ -133,7 +133,7 @@ pub fn allocation_report(
     let (mut gross, mut liabilities) = (0i128, 0i128);
     let mut counted = HashMap::new();
     for a in accounts.iter().filter(|a| a.include_in_net_worth) {
-        if a.kind.is_liability() {
+        if a.kind.counts_as_liability(a.balance) {
             liabilities -= i128::from(a.balance);
         } else {
             gross += i128::from(a.balance);
@@ -321,6 +321,21 @@ mod tests {
         assert_eq!(row(&r, saham).diff_amount, 9_000_000 - 6_300_000);
         assert!(r.unallocated.is_empty());
         assert_eq!((r.unallocated_total, r.unallocated_bp), (0, 0));
+    }
+
+    #[test]
+    fn allocation_skips_negative_receivable() {
+        let (b, _, _, _, liquid) = tree();
+        let (bca, budi) = (id(), id());
+        let maps = [map(bca, liquid, 10000), map(budi, liquid, 10000)];
+        let accts = [
+            acct(bca, AccountKind::Bank, 1_000),
+            acct(budi, AccountKind::Receivable, -500),
+        ];
+        let r = allocation_report(&b, &maps, &accts).unwrap();
+        assert_eq!(r.gross, 1_000);
+        assert_eq!(r.liabilities, 500);
+        assert_eq!(row(&r, liquid).actual, 1_000);
     }
 
     #[test]
