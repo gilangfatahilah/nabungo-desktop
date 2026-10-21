@@ -15,6 +15,7 @@ pub mod kinds;
 pub mod money;
 pub mod networth;
 pub mod period;
+pub mod recurrence;
 pub mod txn;
 
 pub use allocation::{
