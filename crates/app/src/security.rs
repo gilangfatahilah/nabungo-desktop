@@ -108,7 +108,7 @@ pub fn recover_key(
 }
 
 /// Ubah status enkripsi tiap backup di `dir` ke status `to`; best-effort, kegagalan dicatat.
-fn convert_backups(dir: &Path, from: Option<&DbKey>, to: Option<&DbKey>) {
+pub(crate) fn convert_backups(dir: &Path, from: Option<&DbKey>, to: Option<&DbKey>) {
     let list = match list_backups(dir) {
         Ok(list) => list,
         Err(e) => {
@@ -544,6 +544,36 @@ mod tests {
         assert!(matches!(
             l.backup_to(&keyfile_path(&e.db)),
             Err(AppError::BackupTargetInvalid)
+        ));
+    }
+
+    #[test]
+    fn reopen_encrypts_backups_left_plain_by_failed_conversion() {
+        let e = env();
+        let (l, _) = encrypted(&e);
+        let key = l.key.clone().unwrap();
+        drop(l);
+        // Konversi saat enable gagal untuk file ini (mis. disk penuh) → masih plaintext.
+        let plain = e.db.with_file_name("plain.db");
+        let mut p = Ledger::open_with_backups(&plain, &e.backups, None, NOW).unwrap();
+        add_account(&mut p, "Lama", 10);
+        drop(p);
+        std::fs::create_dir_all(&e.backups).unwrap();
+        let leftover = e.backups.join("auto-20261019T031500Z.db");
+        std::fs::copy(&plain, &leftover).unwrap();
+        let _l = reopen(&e, &key);
+        assert!(is_encrypted_file(&leftover).unwrap());
+    }
+
+    #[test]
+    fn open_with_key_of_other_db_is_database_unreadable() {
+        let e = env();
+        let (l, _) = encrypted(&e);
+        drop(l);
+        // Password benar (key file terbuka) tapi file DB bukan pasangannya / rusak.
+        assert!(matches!(
+            Ledger::open_with_backups(&e.db, &e.backups, Some(&DbKey::generate()), NOW),
+            Err(AppError::DatabaseUnreadable)
         ));
     }
 }

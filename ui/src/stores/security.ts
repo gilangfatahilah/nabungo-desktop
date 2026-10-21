@@ -1,6 +1,6 @@
 import { isTauri } from '@tauri-apps/api/core'
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
 import {
   changePassword as ipcChangePassword,
@@ -21,6 +21,9 @@ export const useSecurityStore = defineStore('security', () => {
   const locked = ref(false)
   const hasKeyfile = ref(false)
   const autoLockMinutes = ref(5)
+  /** Recovery key baru belum dikonfirmasi tersimpan; ditampilkan sekali, jadi auto-lock ditahan. */
+  const recoveryPending = ref(false)
+  const idleLockActive = computed(() => encrypted.value && !locked.value && !recoveryPending.value)
 
   /** Status dari backend; durasi auto-lock hanya terbaca saat tidak terkunci. */
   async function refresh() {
@@ -49,8 +52,13 @@ export const useSecurityStore = defineStore('security', () => {
   /** Mengembalikan recovery key untuk ditampilkan sekali. */
   async function enable(password: string): Promise<string> {
     const key = await enableEncryption(password)
+    recoveryPending.value = true
     await refresh()
     return key
+  }
+
+  function recoverySaved() {
+    recoveryPending.value = false
   }
 
   async function disable(password: string) {
@@ -88,8 +96,8 @@ export const useSecurityStore = defineStore('security', () => {
   }
 
   return {
-    encrypted, locked, hasKeyfile, autoLockMinutes,
-    refresh, unlock, unlockWithRecovery, lock, enable, disable, changePassword, setAutoLock,
+    encrypted, locked, hasKeyfile, autoLockMinutes, recoveryPending, idleLockActive,
+    refresh, unlock, unlockWithRecovery, lock, enable, recoverySaved, disable, changePassword, setAutoLock,
     showLockScreen, installLockHandler,
   }
 })

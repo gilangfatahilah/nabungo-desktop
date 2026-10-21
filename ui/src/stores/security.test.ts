@@ -27,6 +27,19 @@ describe('security store (fallback browser)', () => {
     expect(s.encrypted).toBe(false)
   })
 
+  it('auto-lock ditahan sampai recovery key disimpan', async () => {
+    const s = useSecurityStore()
+    await s.enable(PW)
+    // Kunci otomatis saat dialog recovery key terbuka = reload = kunci hilang selamanya.
+    expect(s.idleLockActive).toBe(false)
+    s.recoverySaved()
+    expect(s.idleLockActive).toBe(true)
+    await s.lock()
+    expect(s.idleLockActive).toBe(false)
+    await s.unlock(PW)
+    await s.disable(PW)
+  })
+
   it('unlock salah → wrong_password, tetap locked', async () => {
     const s = useSecurityStore()
     await s.enable(PW)

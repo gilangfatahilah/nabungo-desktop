@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
+import { useSecurityStore } from '@/stores/security'
 import RecoveryKeyDialog from './RecoveryKeyDialog.vue'
 
 const KEY = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345-6789-ABCD-EFGH-JKMN-PQRS-TVWX'
@@ -37,6 +38,7 @@ describe('RecoveryKeyDialog', () => {
   })
 
   it('Selesai nonaktif sampai checkbox dicentang', async () => {
+    useSecurityStore().recoveryPending = true
     const w = await open()
     expect(button(id.security.recoveryDialog.done).disabled).toBe(true)
     ;(document.body.querySelector('#recovery-saved') as HTMLElement).click()
@@ -45,6 +47,7 @@ describe('RecoveryKeyDialog', () => {
     button(id.security.recoveryDialog.done).click()
     await flushPromises()
     expect(w.emitted('done')).toHaveLength(1)
+    expect(useSecurityStore().recoveryPending).toBe(false)
     expect(w.emitted('update:open')!.at(-1)).toEqual([false])
   })
 

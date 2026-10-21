@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
-import { computed, onBeforeUnmount, onMounted, toRef, watch } from 'vue'
+import { onBeforeUnmount, onMounted, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
@@ -28,10 +28,11 @@ const security = useSecurityStore()
 
 security.installLockHandler(router)
 
-// Kunci otomatis hanya untuk DB terenkripsi yang sedang terbuka.
+// Kunci otomatis hanya untuk DB terenkripsi yang sedang terbuka, dan tidak selama recovery key
+// yang baru dibuat masih ditampilkan.
 useIdleLock(
   toRef(security, 'autoLockMinutes'),
-  computed(() => security.encrypted && !security.locked),
+  toRef(security, 'idleLockActive'),
   () =>
     void withErrorToast(async () => {
       await security.lock()

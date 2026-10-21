@@ -413,6 +413,7 @@ export default {
     key_file_invalid: 'Key file is damaged or missing; use the recovery key',
     encryption_state: 'Encryption state already changed; reload the page',
     invalid_auto_lock: 'Invalid auto-lock duration',
+    database_unreadable: 'The password is correct, but the database file cannot be read (damaged or mismatched). Restore it from a backup',
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema

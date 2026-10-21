@@ -79,6 +79,9 @@ pub enum AppError {
     EncryptionState,
     #[error("invalid auto-lock duration")]
     InvalidAutoLock,
+    /// Key sudah terverifikasi (key file terbuka) tapi file DB tidak cocok atau rusak.
+    #[error("database file cannot be read with this key")]
+    DatabaseUnreadable,
 }
 
 impl From<StorageError> for AppError {

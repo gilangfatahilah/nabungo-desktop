@@ -2,8 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use nabungo_storage::DbKey;
 use nabungo_storage::rusqlite::Connection;
+use nabungo_storage::{DbKey, StorageError};
 use time::format_description::FormatItem;
 use time::macros::format_description;
 use time::{Duration, OffsetDateTime, PrimitiveDateTime, UtcOffset};
@@ -225,12 +225,21 @@ impl Ledger {
         key: Option<&DbKey>,
         now: OffsetDateTime,
     ) -> Result<Self, AppError> {
-        let mut conn = nabungo_storage::open_file(path, key)?;
+        // Key yang diberikan sudah diverifikasi pemanggil (key file / recovery key), jadi
+        // "key salah" di sini berarti file DB-nya yang tidak cocok atau rusak.
+        let mut conn = nabungo_storage::open_file(path, key).map_err(|e| match e {
+            StorageError::WrongKey => AppError::DatabaseUnreadable,
+            e => e.into(),
+        })?;
         let version = nabungo_storage::schema_version(&conn)?;
         if version > 0 && version < nabungo_storage::latest_version() {
             write_backup(&conn, key, backup_dir, BackupKind::PreMigration, now)?;
         }
         nabungo_storage::migrate(&mut conn)?;
+        // Ulangi konversi backup yang gagal saat enable (idempoten: file terenkripsi dilewati).
+        if let Some(key) = key {
+            crate::security::convert_backups(backup_dir, None, Some(key));
+        }
         Ok(Self {
             conn,
             path: Some(path.to_path_buf()),

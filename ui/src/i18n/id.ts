@@ -413,6 +413,7 @@ export default {
     key_file_invalid: 'File kunci rusak atau hilang; pakai recovery key',
     encryption_state: 'Status enkripsi sudah berubah; muat ulang halaman',
     invalid_auto_lock: 'Durasi kunci otomatis tidak valid',
+    database_unreadable: 'Password benar, tapi file database tidak bisa dibaca (rusak atau bukan pasangannya). Pulihkan dari backup',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }

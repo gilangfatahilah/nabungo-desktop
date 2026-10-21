@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { formatDateInput, todayIso } from '@/lib/date'
+import { useSecurityStore } from '@/stores/security'
 import { useSettingsStore } from '@/stores/settings'
 
 const open = defineModel<boolean>('open', { required: true })
@@ -14,6 +15,7 @@ const props = defineProps<{ recoveryKey: string }>()
 const emit = defineEmits<{ done: [] }>()
 const { t } = useI18n()
 const settings = useSettingsStore()
+const security = useSecurityStore()
 
 const saved = ref(false)
 watch(open, (v) => v && (saved.value = false))
@@ -35,6 +37,7 @@ function print() {
 }
 
 function done() {
+  security.recoverySaved()
   open.value = false
   emit('done')
 }

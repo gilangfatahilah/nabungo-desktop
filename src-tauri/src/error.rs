@@ -76,6 +76,7 @@ pub enum ErrorCode {
     KeyFileInvalid,
     EncryptionState,
     InvalidAutoLock,
+    DatabaseUnreadable,
     Internal,
 }
 
@@ -219,6 +220,7 @@ impl From<AppError> for IpcError {
             AppError::KeyFileInvalid => Self::code(ErrorCode::KeyFileInvalid),
             AppError::EncryptionState => Self::code(ErrorCode::EncryptionState),
             AppError::InvalidAutoLock => Self::code(ErrorCode::InvalidAutoLock),
+            AppError::DatabaseUnreadable => Self::code(ErrorCode::DatabaseUnreadable),
         }
     }
 }
@@ -248,6 +250,7 @@ mod tests {
             (AppError::KeyFileInvalid, ErrorCode::KeyFileInvalid),
             (AppError::EncryptionState, ErrorCode::EncryptionState),
             (AppError::InvalidAutoLock, ErrorCode::InvalidAutoLock),
+            (AppError::DatabaseUnreadable, ErrorCode::DatabaseUnreadable),
         ] {
             assert_eq!(IpcError::from(e).code, code);
         }
