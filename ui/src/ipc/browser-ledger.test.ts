@@ -560,6 +560,18 @@ describe('browser ledger piutang/hutang & rekonsiliasi (paritas Rust)', () => {
     expect(await throughOf(laci)).toBeNull()
   })
 
+  it('saldo per tanggal tidak menghitung transaksi sesudahnya', async () => {
+    const c = (await data(L.listCategories())).find((x) => x.kind === 'expense')!.id
+    const laci = await data(L.createAccount('cash', {
+      name: 'Laci Saldo', groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
+      icon: null, color: null, openingBalance: 50_000, openingDate: '2026-10-01', contact: null,
+    }))
+    await spendOn(laci, c, '2026-10-20', 10_000)
+    expect(await data(L.accountBalanceAsOf(laci, '2026-10-10'))).toBe(50_000)
+    expect(await data(L.accountBalanceAsOf(laci, '2026-10-20'))).toBe(40_000)
+    expect(await L.accountBalanceAsOf('nope', '2026-10-20')).toMatchObject({ status: 'error', error: { code: 'not_found' } })
+  })
+
   it('kontak dipakai ulang tanpa beda huruf', async () => {
     const a = await receivable('Piutang Budi 1', 10_000, 'Budi')
     const b = await receivable('Piutang Budi 2', 10_000, ' budi')

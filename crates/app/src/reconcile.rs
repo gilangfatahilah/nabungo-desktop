@@ -22,6 +22,12 @@ pub struct Reconciliation {
 }
 
 impl Ledger {
+    /// Saldo tercatat akun per akhir `date` (bertanda), untuk dialog rekonsiliasi bertanggal mundur.
+    pub fn balance_as_of(&self, account_id: Uuid, date: Date) -> Result<i64, AppError> {
+        account::get_account_ref(&self.conn, account_id)?.ok_or(AppError::NotFound("account"))?;
+        Ok(report::account_balance_as_of(&self.conn, account_id, date)?)
+    }
+
     /// Saldo riil akun per akhir `date` adalah `balance` (bertanda, liabilitas negatif).
     /// Selisih dicatat sebagai `adjustment`, lalu posting akun s.d. `date` ditandai (K5, K6).
     pub fn reconcile_account(
@@ -123,6 +129,23 @@ mod tests {
         assert!(r.marked > 0);
         assert_eq!(txn_count(&k), count);
         assert_eq!(through(&k, bca), Some(date!(2026 - 10 - 05)));
+    }
+
+    #[test]
+    fn balance_as_of_excludes_later_postings() {
+        let mut k = kit();
+        let bca = k.bca;
+        let as_of = k.ledger.balance(bca).unwrap();
+        k.expense(date!(2026 - 10 - 20), "Makan & Minum", 40_000);
+        assert_eq!(k.ledger.balance_as_of(bca, D).unwrap(), as_of);
+        assert_eq!(
+            k.ledger.balance_as_of(bca, date!(2026 - 10 - 20)).unwrap(),
+            as_of - 40_000
+        );
+        assert!(matches!(
+            k.ledger.balance_as_of(Uuid::now_v7(), D),
+            Err(AppError::NotFound("account"))
+        ));
     }
 
     #[test]

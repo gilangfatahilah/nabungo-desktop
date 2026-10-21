@@ -205,7 +205,7 @@ export default {
   },
   reconcile: {
     title: 'Rekonsiliasi {name}',
-    recorded: 'Saldo tercatat saat ini',
+    recorded: 'Saldo tercatat per tanggal ini',
     real: 'Saldo riil',
     date: 'Per tanggal',
     submit: 'Rekonsiliasi',

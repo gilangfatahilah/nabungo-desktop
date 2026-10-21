@@ -335,7 +335,7 @@ Tabel datar per grup (bukan kartu bersarang). Grup berupa header baris dengan su
 
 - Akun Piutang/Hutang: meta menampilkan arah dari tanda saldo ("Piutang" bila positif, "Hutang" bila negatif, "Lunas" bila 0) menggantikan nama jenis, dan saldo tampil tanpa tanda minus (Hutang tetap berwarna Bata). Nama kontak menyusul di meta.
 - Meta juga memuat "Direkonsiliasi s.d. {tanggal}" bila akun pernah direkonsiliasi. Bagian meta dipisah ` · `.
-- Menu `⋯` berisi "Rekonsiliasi…" untuk semua jenis kecuali investasi (investasi memakai "Perbarui nilai…"). Dialog rekonsiliasi menampilkan saldo tercatat, input saldo riil (utang diketik positif) dan tanggal; hasilnya disampaikan lewat toast (selisih yang dicatat, atau saldo cocok).
+- Menu `⋯` berisi "Rekonsiliasi…" untuk semua jenis kecuali investasi (investasi memakai "Perbarui nilai…"). Dialog rekonsiliasi menampilkan saldo tercatat per tanggal terpilih (dibaca ulang saat tanggal diganti), input saldo riil (utang diketik positif) dan tanggal; hasilnya disampaikan lewat toast (selisih yang dicatat, atau saldo cocok).
 - Form akun Piutang/Hutang punya input Kontak (saran dari kontak yang ada) dan segmented control arah "Mereka berutang ke saya | Saya berutang ke mereka".
 
 ### 9.4 Kategori

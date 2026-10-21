@@ -205,7 +205,7 @@ export default {
   },
   reconcile: {
     title: 'Reconcile {name}',
-    recorded: 'Current recorded balance',
+    recorded: 'Recorded balance as of this date',
     real: 'Actual balance',
     date: 'As of',
     submit: 'Reconcile',

@@ -331,6 +331,10 @@ export function reconcileAccount(accountId: string, date: string, balance: numbe
   return unwrap(api().reconcileAccount(accountId, date, balance))
 }
 
+export function accountBalanceAsOf(accountId: string, date: string): Promise<number> {
+  return unwrap(api().accountBalanceAsOf(accountId, date))
+}
+
 export function listContacts(): Promise<ContactDto[]> {
   return unwrap(api().listContacts())
 }

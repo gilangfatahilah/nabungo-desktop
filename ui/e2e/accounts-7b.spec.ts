@@ -48,7 +48,7 @@ test('rekonsiliasi akun bank', async ({ page }) => {
   await row.getByRole('button', { name: 'Aksi lain' }).click()
   await page.locator('[data-testid="account-reconcile"]').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('Saldo tercatat saat ini')
+  await expect(dialog).toContainText('Saldo tercatat per tanggal ini')
   await dialog.locator('#rec-balance').fill('990000')
   await dialog.getByRole('button', { name: 'Rekonsiliasi' }).click()
   await expect(dialog).toBeHidden()

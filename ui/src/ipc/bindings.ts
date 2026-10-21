@@ -60,6 +60,8 @@ export const commands = {
 	valuationHistory: (accountId: string) => typedError<ValuationPointDto[], IpcError>(__TAURI_INVOKE("valuation_history", { accountId })),
 	/**  Samakan saldo akun per akhir `date` dengan `balance` (ACC-04). */
 	reconcileAccount: (accountId: string, date: string, balance: number) => typedError<ReconciliationDto, IpcError>(__TAURI_INVOKE("reconcile_account", { accountId, date, balance })),
+	/**  Saldo tercatat akun per akhir `date` (bertanda). */
+	accountBalanceAsOf: (accountId: string, date: string) => typedError<number, IpcError>(__TAURI_INVOKE("account_balance_as_of", { accountId, date })),
 	listContacts: () => typedError<ContactDto[], IpcError>(__TAURI_INVOKE("list_contacts")),
 	listAllocation: () => typedError<AllocationOverviewDto, IpcError>(__TAURI_INVOKE("list_allocation")),
 	createBucket: (fields: BucketFieldsDto) => typedError<string, IpcError>(__TAURI_INVOKE("create_bucket", { fields })),

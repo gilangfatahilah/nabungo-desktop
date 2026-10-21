@@ -465,6 +465,19 @@ pub fn reconcile_account(
         .into())
 }
 
+/// Saldo tercatat akun per akhir `date` (bertanda).
+#[tauri::command]
+#[specta::specta]
+pub fn account_balance_as_of(
+    state: State<'_, AppState>,
+    account_id: String,
+    date: String,
+) -> Result<i64, IpcError> {
+    let account_id = parse_id(&account_id, "account")?;
+    let date = parse_day(&date)?;
+    Ok(ledger(&state)?.balance_as_of(account_id, date)?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn list_contacts(state: State<'_, AppState>) -> Result<Vec<ContactDto>, IpcError> {

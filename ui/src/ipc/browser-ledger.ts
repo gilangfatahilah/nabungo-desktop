@@ -915,6 +915,10 @@ export const browserLedger = {
     }
     return ok({ adjustmentId, difference, marked })
   },
+  accountBalanceAsOf: async (accountId: string, date: string): Promise<Result<number>> => {
+    if (!state.accounts.some((x) => x.id === accountId)) return notFound('account')
+    return ok(balanceOf(accountId, date))
+  },
   listContacts: async (): Promise<Result<ContactDto[]>> =>
     ok([...state.contacts].sort((x, y) => (x.name.toLowerCase() < y.name.toLowerCase() ? -1 : x.name.toLowerCase() > y.name.toLowerCase() ? 1 : 0))),
   valuationHistory: async (accountId: string): Promise<Result<ValuationPointDto[]>> => {

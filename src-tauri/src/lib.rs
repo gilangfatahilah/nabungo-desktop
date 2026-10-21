@@ -59,6 +59,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::record_valuation,
             commands::valuation_history,
             commands::reconcile_account,
+            commands::account_balance_as_of,
             commands::list_contacts,
             commands::list_allocation,
             commands::create_bucket,
