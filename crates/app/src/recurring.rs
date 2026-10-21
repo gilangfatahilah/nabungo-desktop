@@ -194,24 +194,28 @@ impl Ledger {
     fn rule_write(
         tx: &nabungo_storage::rusqlite::Transaction,
         input: &RuleInput,
-    ) -> Result<(String, String), AppError> {
-        let rule = Recurrence::new(input.freq, input.interval, input.form.date, input.until)?;
+        old: Option<&Recurrence>,
+    ) -> Result<(String, Recurrence), AppError> {
+        let mut rule = Recurrence::new(input.freq, input.interval, input.form.date, input.until)?;
+        if let Some(old) = old {
+            rule = rule.keep_day_of(input.form.date, old);
+        }
         let txn_input = form_input(&input.form)?;
         ValidTxn::new(resolve(tx, &txn_input, &HashSet::new())?)?;
         for t in &input.form.tags {
             normalize_tag(t)?;
         }
-        Ok((to_template(&input.form), rule.to_rrule()))
+        Ok((to_template(&input.form), rule))
     }
 
     pub fn create_rule(&mut self, input: &RuleInput) -> Result<Uuid, AppError> {
         let tx = self.conn.transaction()?;
-        let (template, rrule) = Self::rule_write(&tx, input)?;
+        let (template, rule) = Self::rule_write(&tx, input, None)?;
         let id = repo::insert_rule(
             &tx,
             &RuleWrite {
                 template: &template,
-                rrule: &rrule,
+                rrule: &rule.to_rrule(),
                 next_date: input.form.date,
                 auto_post: input.auto_post,
             },
@@ -221,17 +225,31 @@ impl Ledger {
     }
 
     /// Ganti template/aturan; `next_date` = tanggal form dan jadwal aktif lagi.
+    ///
+    /// Form edit diisi dari `next_date`, jadi dua kasus memakai data jadwal lama: tanggal
+    /// akhir bulan yang ter-clamp mempertahankan anchor lama (tgl 31 tetap 31), dan pada
+    /// jadwal yang sudah selesai, `next_date` adalah kejadian terakhir yang sudah ditangani
+    /// sehingga mulai dari kejadian sesudahnya (tidak dicatat dua kali).
     pub fn update_rule(&mut self, id: Uuid, input: &RuleInput) -> Result<(), AppError> {
         let tx = self.conn.transaction()?;
-        let (template, rrule) = Self::rule_write(&tx, input)?;
+        let old = repo::get_rule(&tx, id)?.ok_or(AppError::NotFound("recurring_rule"))?;
+        let old_rule = parse_rule(&old).ok();
+        let (template, rule) = Self::rule_write(&tx, input, old_rule.as_ref())?;
+        let handled = old.ended_at.is_some() && input.form.date == old.next_date;
+        let next = if handled {
+            rule.next_after(input.form.date)
+        } else {
+            Some(input.form.date)
+        };
         let w = RuleWrite {
             template: &template,
-            rrule: &rrule,
-            next_date: input.form.date,
+            rrule: &rule.to_rrule(),
+            next_date: next.unwrap_or(input.form.date),
             auto_post: input.auto_post,
         };
-        if !repo::update_rule(&tx, id, &w)? {
-            return Err(AppError::NotFound("recurring_rule"));
+        repo::update_rule(&tx, id, &w)?;
+        if next.is_none() {
+            repo::advance_rule(&tx, id, None, &now_utc())?;
         }
         tx.commit()?;
         Ok(())
@@ -388,7 +406,6 @@ mod tests {
     use crate::testkit::Kit;
     use nabungo_core::recurrence::RecurrenceError;
     use nabungo_core::{Fee, FormBody, SplitLine};
-    use nabungo_storage::{now_utc, recurring as repo};
     use time::macros::date;
 
     const TODAY: Date = date!(2026 - 10 - 21);
@@ -534,23 +551,56 @@ mod tests {
     #[test]
     fn update_reactivates_ended_rule() {
         let mut kit = Kit::new(1, date!(2026 - 01 - 01));
-        let mut input = monthly(expense_form(&kit, date!(2026 - 09 - 25), 10_000));
+        let mut input = monthly(expense_form(&kit, date!(2026 - 08 - 25), 10_000));
         input.until = Some(date!(2026 - 09 - 25));
         let id = kit.ledger.create_rule(&input).unwrap();
-        {
-            let tx = kit.ledger.conn.transaction().unwrap();
-            repo::advance_rule(&tx, id, None, &now_utc()).unwrap();
-            tx.commit().unwrap();
-        }
-        let row = &kit.ledger.list_rules(TODAY).unwrap()[0];
-        assert!(row.ended);
-        assert!(row.due.is_empty());
+        assert_eq!(kit.ledger.confirm_all_due(id, TODAY).unwrap(), 2);
+        let r = row(&kit, id);
+        assert!(r.ended);
+        assert!(r.due.is_empty());
+        // Form edit diisi dari daftar: tanggal = next_date (kejadian terakhir yang sudah tercatat).
+        input.form.date = r.form.date;
+        kit.ledger.update_rule(id, &input).unwrap();
+        assert!(
+            row(&kit, id).ended,
+            "UNTIL tidak diperpanjang: tetap selesai"
+        );
         input.until = Some(date!(2026 - 12 - 31));
         kit.ledger.update_rule(id, &input).unwrap();
-        let row = &kit.ledger.list_rules(TODAY).unwrap()[0];
-        assert!(!row.ended);
-        assert_eq!(row.due, vec![date!(2026 - 09 - 25)]);
-        assert_eq!(row.until, Some(date!(2026 - 12 - 31)));
+        let r = row(&kit, id);
+        assert!(!r.ended);
+        assert_eq!(r.form.date, date!(2026 - 10 - 25));
+        assert!(r.due.is_empty());
+        assert_eq!(r.until, Some(date!(2026 - 12 - 31)));
+        assert_eq!(
+            rule_txns(&kit, id),
+            vec![date!(2026 - 08 - 25), date!(2026 - 09 - 25)]
+        );
+    }
+
+    #[test]
+    fn update_at_clamped_date_keeps_month_end_day() {
+        let mut kit = Kit::new(1, date!(2025 - 01 - 01));
+        let mut input = monthly(expense_form(&kit, date!(2026 - 01 - 31), 10_000));
+        let id = kit.ledger.create_rule(&input).unwrap();
+        kit.ledger
+            .skip_occurrence(id, date!(2026 - 01 - 31))
+            .unwrap();
+        assert_eq!(row(&kit, id).form.date, date!(2026 - 02 - 28));
+        // Ubah nominal saja; tanggal form = next_date yang ter-clamp.
+        input.form = expense_form(&kit, date!(2026 - 02 - 28), 12_000);
+        kit.ledger.update_rule(id, &input).unwrap();
+        kit.ledger
+            .skip_occurrence(id, date!(2026 - 02 - 28))
+            .unwrap();
+        assert_eq!(row(&kit, id).form.date, date!(2026 - 03 - 31));
+        // Tanggal diubah sengaja (bukan akhir bulan) → anchor baru.
+        input.form = expense_form(&kit, date!(2026 - 04 - 15), 12_000);
+        kit.ledger.update_rule(id, &input).unwrap();
+        kit.ledger
+            .skip_occurrence(id, date!(2026 - 04 - 15))
+            .unwrap();
+        assert_eq!(row(&kit, id).form.date, date!(2026 - 05 - 15));
     }
 
     #[test]

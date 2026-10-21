@@ -13,7 +13,7 @@ import type {
   AttachmentDto, PayeeUsageDto, TagUsageDto,
   RecurrenceDto, RuleDto, RuleInputDto,
 } from './bindings'
-import { nextAfter, occurrences } from './browser-recurrence'
+import { keepDay, nextAfter, occurrences } from './browser-recurrence'
 import { todayIso } from '@/lib/date'
 import { countsAsLiability, isLiability } from '@/lib/accounts'
 
@@ -943,9 +943,13 @@ export const browserLedger = {
     if (!r) return notFound('recurring_rule')
     const c = checkRule(input)
     if (c.status === 'error') return c
+    // Seperti `update_rule`: anchor lama dipertahankan di tanggal ter-clamp; jadwal selesai
+    // mulai dari kejadian sesudah yang terakhir ditangani.
+    const anchor = keepDay(input.recurrence, input.form.date, r.recurrence, r.anchor)
+    const next = r.ended && input.form.date === r.next ? nextAfter(input.recurrence, anchor, r.next) : input.form.date
     Object.assign(r, {
       form: { ...input.form, tags: [...input.form.tags] }, recurrence: { ...input.recurrence },
-      autoPost: input.autoPost, anchor: input.form.date, next: input.form.date, ended: false,
+      autoPost: input.autoPost, anchor, next: next ?? input.form.date, ended: next === null,
     })
     return ok(null)
   },

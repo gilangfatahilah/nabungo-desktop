@@ -33,6 +33,19 @@ export function nextAfter(rec: RecurrenceDto, anchor: string, d: string): string
   return rec.until !== null && next > rec.until ? null : next
 }
 
+/**
+ * Port `Recurrence::keep_day_of`: ubah jadwal dari tanggal akhir bulan yang ter-clamp
+ * mempertahankan tanggal anchor lama (frekuensi, dan bulan untuk tahunan, harus sama).
+ * Anchor hanya dibaca per bagian, jadi `2026-02-31` sah di sini.
+ */
+export function keepDay(rec: RecurrenceDto, start: string, old: RecurrenceDto, oldAnchor: string): string {
+  const [y, m, d] = parts(start)
+  const [, om, od] = parts(oldAnchor)
+  const sameMonth = rec.freq === 'monthly' || (rec.freq === 'yearly' && m === om)
+  if (rec.freq !== old.freq || !sameMonth || d !== monthLength(y, m) || od <= d) return start
+  return fmt(y, m, od)
+}
+
 /** Hingga `n` kejadian pertama mulai `start` (inklusif). */
 export function occurrences(rec: RecurrenceDto, start: string, n: number): string[] {
   const out: string[] = []

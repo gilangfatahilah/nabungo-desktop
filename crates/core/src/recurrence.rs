@@ -197,6 +197,33 @@ impl Recurrence {
         self.until
     }
 
+    /// Saat jadwal diubah dari tanggal yang ter-clamp (mis. 28 Feb untuk tagihan tgl 31),
+    /// pertahankan tanggal anchor lama agar tagihan tidak bergeser permanen. Hanya berlaku
+    /// bila `start` adalah hari terakhir bulannya dan frekuensi (serta bulan, untuk tahunan) sama.
+    #[must_use]
+    pub fn keep_day_of(mut self, start: Date, old: &Recurrence) -> Self {
+        let last_day = start.day() == start.month().length(start.year());
+        self.anchor = match (self.anchor, old.anchor) {
+            (Anchor::Monthly { day }, Anchor::Monthly { day: old_day })
+                if last_day && old_day > day =>
+            {
+                Anchor::Monthly { day: old_day }
+            }
+            (
+                Anchor::Yearly { month, day },
+                Anchor::Yearly {
+                    month: old_month,
+                    day: old_day,
+                },
+            ) if last_day && month == old_month && old_day > day => Anchor::Yearly {
+                month,
+                day: old_day,
+            },
+            (a, _) => a,
+        };
+        self
+    }
+
     /// Kejadian setelah `d` (kejadian sebelumnya); `None` bila melewati UNTIL atau
     /// di luar rentang tanggal yang didukung.
     pub fn next_after(&self, d: Date) -> Option<Date> {
@@ -251,6 +278,34 @@ mod tests {
 
     fn rec(freq: Freq, interval: u8, anchor: Date, until: Option<Date>) -> Recurrence {
         Recurrence::new(freq, interval, anchor, until).unwrap()
+    }
+
+    #[test]
+    fn keep_day_restores_clamped_anchor() {
+        let old = rec(Freq::Monthly, 1, date!(2026 - 01 - 31), None);
+        let kept = rec(Freq::Monthly, 2, date!(2026 - 02 - 28), None)
+            .keep_day_of(date!(2026 - 02 - 28), &old);
+        assert_eq!(kept.to_rrule(), "FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=31");
+        let moved = rec(Freq::Monthly, 1, date!(2026 - 02 - 27), None)
+            .keep_day_of(date!(2026 - 02 - 27), &old);
+        assert_eq!(moved.to_rrule(), "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=27");
+        let leap = rec(Freq::Yearly, 1, date!(2028 - 02 - 29), None);
+        let kept = rec(Freq::Yearly, 1, date!(2027 - 02 - 28), None)
+            .keep_day_of(date!(2027 - 02 - 28), &leap);
+        assert_eq!(
+            kept.to_rrule(),
+            "FREQ=YEARLY;INTERVAL=1;BYMONTH=2;BYMONTHDAY=29"
+        );
+        // Bulan berbeda atau frekuensi berbeda: tidak diwarisi.
+        let other = rec(Freq::Yearly, 1, date!(2027 - 04 - 30), None)
+            .keep_day_of(date!(2027 - 04 - 30), &old);
+        assert_eq!(
+            other.to_rrule(),
+            "FREQ=YEARLY;INTERVAL=1;BYMONTH=4;BYMONTHDAY=30"
+        );
+        let weekly = rec(Freq::Weekly, 1, date!(2026 - 02 - 28), None)
+            .keep_day_of(date!(2026 - 02 - 28), &old);
+        assert_eq!(weekly.to_rrule(), "FREQ=WEEKLY;INTERVAL=1;BYDAY=SA");
     }
 
     #[test]
