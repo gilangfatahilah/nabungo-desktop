@@ -2,6 +2,9 @@
 import { isTauri } from '@tauri-apps/api/core'
 import {
   commands,
+  type RecurrenceDto,
+  type RuleDto,
+  type RuleInputDto,
   type AccountFieldsDto,
   type AccountKindDto,
   type AccountsOverviewDto,
@@ -71,6 +74,10 @@ export type {
   ValuationPointDto,
   ContactDto,
   ReconciliationDto,
+  FreqDto,
+  RecurrenceDto,
+  RuleDto,
+  RuleInputDto,
   WarningDto,
   BudgetRowDto,
   BudgetTotalDto,
@@ -261,6 +268,40 @@ export function createTxn(form: TxnFormDto): Promise<SavedTxnDto> {
 /** Mengembalikan peringatan budget yang baru terlewati. */
 export function updateTxn(id: string, form: TxnFormDto): Promise<BudgetAlertDto[]> {
   return unwrap(api().updateTxn(id, form))
+}
+
+export function listRules(): Promise<RuleDto[]> {
+  return unwrap(api().listRules())
+}
+
+export function createRule(input: RuleInputDto): Promise<string> {
+  return unwrap(api().createRule(input))
+}
+
+export async function updateRule(id: string, input: RuleInputDto): Promise<void> {
+  await unwrap(api().updateRule(id, input))
+}
+
+export async function deleteRule(id: string): Promise<void> {
+  await unwrap(api().deleteRule(id))
+}
+
+/** `form = null` → template apa adanya pada `date`. */
+export function confirmOccurrence(id: string, date: string, form: TxnFormDto | null): Promise<SavedTxnDto> {
+  return unwrap(api().confirmOccurrence(id, date, form))
+}
+
+export async function skipOccurrence(id: string, date: string): Promise<void> {
+  await unwrap(api().skipOccurrence(id, date))
+}
+
+/** Mengembalikan jumlah transaksi yang dicatat. */
+export function confirmAllDue(id: string): Promise<number> {
+  return unwrap(api().confirmAllDue(id))
+}
+
+export function previewRecurrence(recurrence: RecurrenceDto, start: string, count: number): Promise<string[]> {
+  return unwrap(api().previewRecurrence(recurrence, start, count))
 }
 
 export function getTxn(id: string): Promise<TxnDetailDto> {
