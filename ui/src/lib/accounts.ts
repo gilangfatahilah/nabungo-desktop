@@ -30,8 +30,17 @@ export function countsAsLiability(kind: AccountKindDto, balance: number): boolea
   return isLiability(kind) || (kind === 'receivable' && balance < 0)
 }
 
-/** Form meminta utang sebagai angka positif; saldo awal liabilitas disimpan negatif. */
-export const openingSign = (kind: AccountKindDto) => (isLiability(kind) ? -1 : 1)
+/**
+ * Form meminta utang sebagai angka positif; saldo liabilitas disimpan negatif. Piutang/hutang
+ * memakai arah pilihan user: `iOwe` = user yang berutang (saldo negatif, D10).
+ */
+export const openingSign = (kind: AccountKindDto, iOwe = false) =>
+  (isLiability(kind) || (kind === 'receivable' && iOwe) ? -1 : 1)
+
+/** Label arah saldo akun piutang/hutang untuk daftar akun. */
+export function receivableLabel(balance: number): 'receivableLabel' | 'payableLabel' | 'settled' {
+  return balance > 0 ? 'receivableLabel' : balance < 0 ? 'payableLabel' : 'settled'
+}
 
 const bySort = <T extends { sortOrder: number }>(a: T, b: T) => a.sortOrder - b.sortOrder
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightIcon, ArrowRightLeftIcon, EllipsisIcon, FlagIcon, PlusIcon, ScaleIcon, SplitIcon } from '@lucide/vue'
+import { ArrowRightIcon, ArrowRightLeftIcon, CircleCheckIcon, EllipsisIcon, FlagIcon, PlusIcon, ScaleIcon, SplitIcon } from '@lucide/vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { type Component, computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -189,6 +189,10 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
               </span>
               <span v-for="tag in v.item.row.tags" :key="tag" data-testid="txn-tag" class="shrink-0">#{{ tag }}</span>
               <span v-if="v.item.row.fee" class="shrink-0">{{ t('txn.fee') }} <MoneyText :amount="v.item.row.fee" /></span>
+              <CircleCheckIcon
+                v-if="v.item.row.reconciled" data-testid="txn-reconciled" class="size-3.5 shrink-0"
+                role="img" :aria-label="t('txn.reconciled')"
+              ><title>{{ t('txn.reconciled') }}</title></CircleCheckIcon>
             </span>
           </div>
           <div class="flex flex-col items-end">

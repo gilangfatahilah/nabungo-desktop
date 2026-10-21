@@ -9,10 +9,12 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import type { AccountDto } from '@/ipc'
-import { balanceTone, KIND_ICONS } from '@/lib/accounts'
+import { balanceTone, KIND_ICONS, receivableLabel } from '@/lib/accounts'
 import { colorClass } from '@/lib/colors'
+import { formatDateInput } from '@/lib/date'
 import { iconFor } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { useSettingsStore } from '@/stores/settings'
 
 // Satu list per group; seret lintas list lewat `group: 'accounts'` milik Sortable.
 const props = defineProps<{ groupId: string | null; accounts: AccountDto[]; archived?: boolean }>()
@@ -20,12 +22,17 @@ const emit = defineEmits<{
   move: [accountId: string, groupId: string | null, index: number]
   edit: [account: AccountDto]
   valuate: [account: AccountDto]
+  reconcile: [account: AccountDto]
   archive: [account: AccountDto]
   restore: [account: AccountDto]
   delete: [account: AccountDto]
 }>()
 
 const el = useTemplateRef<HTMLElement>('list')
+const settings = useSettingsStore()
+
+// Piutang/hutang: arah dibaca dari label, jadi nominal tampil tanpa tanda (D10).
+const shownBalance = (a: AccountDto) => (a.kind === 'receivable' ? Math.abs(a.balance) : a.balance)
 
 function onEnd(e: SortableEvent) {
   const { item, from, to, oldIndex, newIndex } = e
@@ -64,10 +71,16 @@ if (!props.archived) {
       <span class="min-w-0 flex-1">
         <span class="block truncate">{{ a.name }}</span>
         <span class="block text-meta text-muted-foreground">
-          {{ $t(`accountKinds.${a.kind}`) }}<template v-if="!a.includeInNetWorth"> · ∉ {{ $t('accounts.netWorth') }}</template>
+          {{ a.kind === 'receivable' ? $t(`accounts.${receivableLabel(a.balance)}`) : $t(`accountKinds.${a.kind}`) }}<template
+            v-if="a.contact"
+          > · {{ a.contact }}</template><template
+            v-if="a.reconciledThrough"
+          > · {{ $t('reconcile.through', { date: formatDateInput(a.reconciledThrough, settings.locale) }) }}</template><template
+            v-if="!a.includeInNetWorth"
+          > · ∉ {{ $t('accounts.netWorth') }}</template>
         </span>
       </span>
-      <MoneyText :amount="a.balance" :kind="balanceTone(a)" />
+      <MoneyText :amount="shownBalance(a)" :kind="balanceTone(a)" />
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
           <Button
@@ -85,6 +98,9 @@ if (!props.archived) {
             <DropdownMenuItem @select="emit('edit', a)">{{ $t('actions.edit') }}</DropdownMenuItem>
             <DropdownMenuItem v-if="a.kind === 'investment'" data-testid="account-valuate" @select="emit('valuate', a)">
               {{ $t('accounts.updateValue') }}
+            </DropdownMenuItem>
+            <DropdownMenuItem v-else data-testid="account-reconcile" @select="emit('reconcile', a)">
+              {{ $t('accounts.reconcile') }}
             </DropdownMenuItem>
             <DropdownMenuItem :disabled="i === 0" @select="emit('move', a.id, groupId, i - 1)">
               {{ $t('actions.moveUp') }}

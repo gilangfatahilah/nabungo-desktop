@@ -74,6 +74,17 @@ describe('TxnList', () => {
     expect(running!.textContent).toContain('775.000')
   })
 
+  it('ikon reconciled hanya pada baris yang sudah direkonsiliasi', async () => {
+    // Saldo BCA per 3 Okt = 1.000.000 − 200.000: cocok, menandai opening + transfer saja.
+    await ipc.reconcileAccount(bca, '2026-10-03', 800_000)
+    await mountList()
+    expect(document.body.querySelector('[data-testid="txn-reconciled"]')).toBeNull()
+    await useTransactionsStore().setQuery({ accountId: bca })
+    await settle()
+    expect(rowEl(transferId).querySelector('[data-testid="txn-reconciled"]')).not.toBeNull()
+    expect(rowEl(expenseId).querySelector('[data-testid="txn-reconciled"]')).toBeNull()
+  })
+
   it('Delete pada baris fokus memanggil store.remove', async () => {
     await mountList()
     const store = useTransactionsStore()
