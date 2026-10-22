@@ -82,7 +82,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   </template>
   <SidebarProvider v-else>
     <AppSidebar />
-    <!-- Konten rata kiri, max-width 1120 + padding 32 (docs/design/ui-guidelines.md §7.1). -->
+    <!-- Konten rata kiri, max-width 1120 + padding 32 (docs/design/design.md §6.1). -->
     <SidebarInset class="h-screen overflow-auto bg-background">
       <div
         class="flex min-h-0 w-full flex-1 flex-col px-8 pt-6 pb-8"

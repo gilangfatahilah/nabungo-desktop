@@ -10,7 +10,7 @@ import { formatDateInput, parseDateInput } from '@/lib/date'
 import { useSettingsStore } from '@/stores/settings'
 
 // Pengganti <input type="date">: tampil "17 Okt 2026" sesuai locale, nilai tetap `YYYY-MM-DD`.
-// Teks bebas di-parse saat blur/Enter (docs/design/ui-guidelines.md §8.3).
+// Teks bebas di-parse saat blur/Enter (docs/design/design.md §7.3).
 const props = withDefaults(defineProps<{ modelValue: string | null; nullable?: boolean }>(), { nullable: false })
 const emit = defineEmits<{ 'update:modelValue': [value: string | null] }>()
 defineOptions({ inheritAttrs: false })

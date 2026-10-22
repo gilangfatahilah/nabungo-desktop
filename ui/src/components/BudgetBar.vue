@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { BudgetLevelDto } from '@/ipc'
 import { cn } from '@/lib/utils'
 
-// Bar realisasi budget (docs/design/ui-guidelines.md §8.10): warna dari `level` backend
+// Bar realisasi budget (docs/design/design.md §7.10): warna dari `level` backend
 // (pudar < 80%, waspada ≥ 80%, bahaya ≥ 100%); `budget` = tersedia (budget + bawaan).
 const props = defineProps<{ spent: number; budget: number; level: BudgetLevelDto }>()
 

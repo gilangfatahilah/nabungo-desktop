@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// Grafik garis sederhana (docs/design/ui-guidelines.md §9.6); seri `dashed` untuk garis target.
+// Grafik garis sederhana (docs/design/design.md §8.8); seri `dashed` untuk garis target.
 const props = defineProps<{
   labels: string[]
   series: { key: string; label: string; color: string; values: number[]; dashed?: boolean }[]

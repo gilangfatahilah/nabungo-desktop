@@ -58,7 +58,7 @@ const scheduled = useScheduledStore()
 // Memuat jadwal sekaligus menjalankan auto-post saat app dibuka.
 onMounted(() => void withErrorToast(() => scheduled.reload()))
 
-// Item aktif: latar Lembar + garis Zamrud 2px di kiri (docs/design/ui-guidelines.md §7.4).
+// Item aktif: latar Lembar + garis Zamrud 2px di kiri (docs/design/design.md §6.2).
 const itemClass = 'data-active:bg-background data-active:text-foreground data-active:shadow-[inset_2px_0_0_var(--primary)]'
 // Petunjuk shortcut hanya saat hover/fokus atau item aktif.
 const hintClass = 'ml-auto opacity-0 transition-opacity group-hover/menu-button:opacity-100 group-focus-visible/menu-button:opacity-100 group-data-active/menu-button:opacity-100'

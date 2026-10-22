@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// Donut porsi (docs/design/ui-guidelines.md §9.6); angka lengkap selalu ada di tabel di bawahnya.
+// Donut porsi (docs/design/design.md §8.8); angka lengkap selalu ada di tabel di bawahnya.
 const props = defineProps<{ segments: { key: string; label: string; value: number; color: string }[]; label: string }>()
 
 const C = 60

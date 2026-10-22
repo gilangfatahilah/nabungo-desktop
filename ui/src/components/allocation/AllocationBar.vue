@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// Porsi aktual sebagai isi bar, target sebagai garis penanda 2px (docs/design/ui-guidelines.md §9.5).
+// Porsi aktual sebagai isi bar, target sebagai garis penanda 2px (docs/design/design.md §8.8).
 const props = defineProps<{ actualBp: number; targetBp: number; color: string }>()
 
 const clamp = (bp: number) => Math.min(Math.max(bp / 100, 0), 100)

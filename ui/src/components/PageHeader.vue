@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Header wajib setiap halaman (docs/design/ui-guidelines.md §7.2).
+// Header wajib setiap halaman (docs/design/design.md §6.4).
 defineProps<{ title: string }>()
 </script>
 

@@ -32,7 +32,7 @@ const accounts = useAccountsStore()
 const settings = useSettingsStore()
 const { t } = useI18n()
 
-// Palet chart (ui-guidelines §9.6): root bergiliran --chart-1..4, --chart-5 khusus "Belum dialokasikan".
+// Palet chart (design.md §8.8): root bergiliran --chart-1..4, --chart-5 khusus "Belum dialokasikan".
 const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)']
 const UNALLOCATED = 'var(--chart-5)'
 // Kolom: bucket | target | aktual % | aktual Rp | selisih poin | selisih Rp | bar | menu.

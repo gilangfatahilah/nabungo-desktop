@@ -191,7 +191,7 @@ async function saveGroup() {
       <Button @click="newAccount()"><Plus /> {{ t('accounts.new') }}</Button>
     </template>
   </PageHeader>
-  <!-- Tabel datar per grup, header grup dengan subtotal (docs/design/ui-guidelines.md §9.3). -->
+  <!-- Tabel datar per grup, header grup dengan subtotal (docs/design/design.md §8.3). -->
   <div class="-mx-2 flex flex-col gap-6">
     <section v-for="(s, si) in sections" :key="s.group?.id ?? 'none'">
       <div data-testid="account-group" class="group/head flex h-10 items-center gap-3 border-b px-2">

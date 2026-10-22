@@ -23,7 +23,7 @@ import CategoryCombobox from './CategoryCombobox.vue'
 
 // Filter disimpan di store (bukan URL). Payee dicari lewat kotak pencarian; filter payeeId
 // (dari layar Tag & Payee) hanya tampil sebagai chip.
-// Toolbar satu baris (ui-guidelines §8.6): cari, periode, akun selalu terlihat; sisanya di "+ Filter" + chip.
+// Toolbar satu baris (design.md §7.6): cari, periode, akun selalu terlihat; sisanya di "+ Filter" + chip.
 const { t } = useI18n()
 const store = useTransactionsStore()
 const accounts = useAccountsStore()

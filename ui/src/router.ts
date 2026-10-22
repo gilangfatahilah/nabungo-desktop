@@ -36,7 +36,7 @@ export const routes: NamedRoute[] = [
 declare module 'vue-router' {
   interface RouteMeta {
     bare?: boolean
-    /** Konten melebar penuh, tanpa max-width (docs/design/ui-guidelines.md §7.1). */
+    /** Konten melebar penuh, tanpa max-width (docs/design/design.md §6.1). */
     wide?: boolean
   }
 }

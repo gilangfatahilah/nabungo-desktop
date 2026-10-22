@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Rata kiri di posisi konten pertama, tanpa ilustrasi (docs/design/ui-guidelines.md §8.7).
+// Rata kiri di posisi konten pertama, tanpa ilustrasi (docs/design/design.md §7.7).
 defineProps<{ title: string; description?: string }>()
 </script>
 

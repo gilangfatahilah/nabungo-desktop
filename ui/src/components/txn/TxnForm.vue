@@ -46,7 +46,7 @@ function focusAmount() {
   void nextTick(() => document.getElementById('txn-amount')?.focus())
 }
 
-// Tag, catatan & lampiran terlipat kecuali sudah berisi (mode edit/duplikat), ui-guidelines §8.4.
+// Tag, catatan & lampiran terlipat kecuali sudah berisi (mode edit/duplikat), design.md §7.4.
 // Lampiran dimuat oleh AttachmentList (tetap ter-mount saat terlipat) lalu membuka seksi bila ada.
 const showMore = ref(s.tags.length > 0 || s.note.trim() !== '')
 

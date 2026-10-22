@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// Sidebar menampilkan angka tanpa prefiks Rp (docs/design/ui-guidelines.md §7.4).
+// Sidebar menampilkan angka tanpa prefiks Rp (docs/design/design.md §6.2).
 const amount = (n: string) => new RegExp(`(^|[^\\d.])${n.replaceAll('.', '\\.')}$`)
 
 async function onboard(page: Page) {
