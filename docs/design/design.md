@@ -326,7 +326,7 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 
 - Section cards (§7.11): **Sisa periode ini** (pemasukan − pengeluaran periode budget berjalan, dari laporan arus kas), **Pemasukan**, **Pengeluaran**, **Kekayaan bersih** (dari riwayat kekayaan bersih). Tren dibanding periode sebelumnya.
 - Chart card "Arus kas" (§7.12): pemasukan vs pengeluaran per periode, rentang 3/6/12 periode (default 6).
-- Grid bawah `@5xl/main:grid-cols-3`: Transaksi terakhir (`col-span-2`, tabel 8 baris, klik → layar Transaksi), kolom kanan: kartu Akun (akun aktif per grup dengan subtotal, saldo `num`, warna mengikuti `balanceTone`) dan Budget perlu dilihat (maks 5, persen tertinggi, `BudgetBar`; kartu disembunyikan bila belum ada budget).
+- Grid bawah `@5xl/main:grid-cols-3`: Transaksi terakhir (`col-span-2`, tabel 8 baris, klik/Enter membuka sheet edit, "Lihat semua" → layar Transaksi), kolom kanan: kartu Akun (akun aktif per grup dengan subtotal, saldo `num`, warna mengikuti `balanceTone`) dan Budget perlu dilihat (maks 5, persen tertinggi, `BudgetBar`; kartu disembunyikan bila belum ada budget).
 - Belum ada transaksi: empty state §7.7 menggantikan chart & tabel; section cards tetap tampil.
 - Data dimuat ulang setelah aksi tulis (`ledgerVersion` di store transaksi).
 

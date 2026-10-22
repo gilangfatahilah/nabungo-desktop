@@ -1,6 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 
-// Sidebar menampilkan angka tanpa prefiks Rp (docs/design/design.md §6.2).
+// Sidebar & kartu Akun Dasbor menampilkan angka tanpa prefiks Rp (docs/design/design.md §6.2, §8.1).
 const amount = (n: string) => new RegExp(`(^|[^\\d.])${n.replaceAll('.', '\\.')}$`)
 
 async function onboard(page: Page) {
@@ -11,8 +11,13 @@ async function onboard(page: Page) {
   await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('1.000.000'))
 }
 
-const sidebarAccount = (page: Page, name: string) =>
-  page.locator('[data-sidebar="menu-button"]').filter({ hasText: name })
+const netWorth = (page: Page) => page.locator('[data-testid="sidebar-net-worth"]')
+
+/** Saldo per akun ada di kartu Akun Dasbor (docs/design/design.md §8.1). */
+async function dashboardAccount(page: Page, name: string) {
+  await page.evaluate(() => { location.hash = '#/' })
+  return page.locator('[data-testid="dashboard-account"]').filter({ hasText: name })
+}
 
 async function goTransactions(page: Page) {
   await page.evaluate(() => { location.hash = '#/transactions' })
@@ -39,7 +44,11 @@ test('expense via keyboard', async ({ page }) => {
   const row = page.locator('[data-txn-id]').filter({ hasText: 'Kopi' })
   await expect(row).toBeVisible()
   await expect(row.locator('[data-testid="txn-amount"]')).toHaveText(/[−-]Rp\s25\.000/)
-  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('975.000'))
+  await expect(netWorth(page)).toHaveText(amount('975.000'))
+
+  // Dasbor: transaksi baru muncul di "Transaksi terakhir", saldo akun ikut berubah.
+  await expect(await dashboardAccount(page, 'BCA')).toHaveText(amount('975.000'))
+  await expect(page.locator('[data-testid="recent-txn"]').first()).toContainText('Kopi')
 })
 
 test('transfer with fee', async ({ page }) => {
@@ -49,7 +58,7 @@ test('transfer with fee', async ({ page }) => {
   const dialog = page.getByRole('dialog')
   await dialog.locator('#acc-name').fill('Dompet')
   await dialog.locator('button[type="submit"]').click()
-  await expect(sidebarAccount(page, 'Dompet')).toBeVisible()
+  await expect(page.getByText('Dompet', { exact: true }).first()).toBeVisible()
   await page.locator('#acc-name').waitFor({ state: 'detached' })
 
   await page.locator('body').press('n')
@@ -63,8 +72,8 @@ test('transfer with fee', async ({ page }) => {
   await page.locator('#txn-amount').press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()
 
-  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('793.500'))
-  await expect(sidebarAccount(page, 'Dompet')).toHaveText(amount('200.000'))
+  await expect(await dashboardAccount(page, 'BCA')).toHaveText(amount('793.500'))
+  await expect(await dashboardAccount(page, 'Dompet')).toHaveText(amount('200.000'))
 })
 
 test('delete and undo', async ({ page }) => {
@@ -75,8 +84,8 @@ test('delete and undo', async ({ page }) => {
   await row.focus()
   await page.keyboard.press('Delete')
   await expect(row).toHaveCount(0)
-  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('1.000.000'))
+  await expect(netWorth(page)).toHaveText(amount('1.000.000'))
   await page.getByRole('button', { name: 'Urungkan' }).click()
   await expect(row).toBeVisible()
-  await expect(sidebarAccount(page, 'BCA')).toHaveText(amount('975.000'))
+  await expect(netWorth(page)).toHaveText(amount('975.000'))
 })

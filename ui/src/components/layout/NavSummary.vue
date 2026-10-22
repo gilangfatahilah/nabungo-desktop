@@ -35,7 +35,7 @@ function lockNow() {
       <SidebarMenuButton as-child size="lg" :tooltip="tooltip">
         <RouterLink to="/accounts">
           <PiggyBank />
-          <span class="grid min-w-0 flex-1 leading-tight">
+          <span class="grid min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
             <span class="truncate text-meta text-muted-foreground">{{ $t('accounts.netWorth') }}</span>
             <MoneyText :amount="net" :currency="false" class="truncate font-semibold" data-testid="sidebar-net-worth" />
           </span>
