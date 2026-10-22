@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PageHeader from '@/components/PageHeader.vue'
 import BackupSection from '@/components/settings/BackupSection.vue'
 import ExportSection from '@/components/settings/ExportSection.vue'
 import SecuritySection from '@/components/settings/SecuritySection.vue'
@@ -30,7 +29,6 @@ function onDay(v: unknown) {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.settings')" />
   <section aria-labelledby="settings-general" class="max-w-md">
     <h2 id="settings-general" class="mb-4 text-heading">{{ t('settings.sections.general') }}</h2>
     <div class="flex flex-col gap-5">

@@ -98,7 +98,7 @@ function onConfirm() {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.labels')">
+  <PageHeader>
     <template #actions>
       <Tabs v-model="tab">
         <TabsList>

@@ -57,7 +57,7 @@ export default {
     later: 'Nanti',
     openBackups: 'Buka backup',
   },
-  sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi baru' },
+  sidebar: { main: 'Utama', manage: 'Kelola', newTransaction: 'Transaksi baru', search: 'Cari', toggle: 'Buka atau ciutkan sidebar' },
   txn: {
     new: 'Transaksi baru',
     title: { create: 'Transaksi baru', edit: 'Ubah transaksi', duplicate: 'Duplikat transaksi' },

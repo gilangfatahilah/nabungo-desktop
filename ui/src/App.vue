@@ -3,7 +3,8 @@ import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { onBeforeUnmount, onMounted, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AppSidebar from '@/components/AppSidebar.vue'
+import AppSidebar from '@/components/layout/AppSidebar.vue'
+import SiteHeader from '@/components/layout/SiteHeader.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
 import IntegrityAlert from '@/components/IntegrityAlert.vue'
 import NewTxnSheet from '@/components/NewTxnSheet.vue'
@@ -80,14 +81,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <RouterView />
     <Toaster :visible-toasts="1" />
   </template>
-  <SidebarProvider v-else>
+  <SidebarProvider v-else :style="{ '--header-height': '3rem' }">
     <AppSidebar />
-    <!-- Konten rata kiri, max-width 1120 + padding 32 (docs/design/design.md §6.1). -->
-    <SidebarInset class="h-screen overflow-auto bg-background">
-      <div
-        class="flex min-h-0 w-full flex-1 flex-col px-8 pt-6 pb-8"
-        :class="!route.meta.wide && 'max-w-[calc(1120px+4rem)]'"
-      >
+    <!-- Inset Lembar dengan SiteHeader tetap di atas; scroll hanya di area konten (docs/design/design.md §6.1). -->
+    <SidebarInset class="h-svh overflow-hidden md:h-[calc(100svh-1rem)]">
+      <SiteHeader />
+      <div class="@container/main flex min-h-0 w-full flex-1 flex-col overflow-auto px-4 py-4 md:py-6 lg:px-6">
         <RouterView />
       </div>
     </SidebarInset>

@@ -57,7 +57,7 @@ export default {
     later: 'Later',
     openBackups: 'Open backups',
   },
-  sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'New transaction' },
+  sidebar: { main: 'Main', manage: 'Manage', newTransaction: 'New transaction', search: 'Search', toggle: 'Expand or collapse sidebar' },
   txn: {
     new: 'New transaction',
     title: { create: 'New transaction', edit: 'Edit transaction', duplicate: 'Duplicate transaction' },

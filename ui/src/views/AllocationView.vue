@@ -119,7 +119,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
 </script>
 
 <template>
-  <PageHeader :title="t('nav.allocation')">
+  <PageHeader>
     <template v-if="o">
       {{ t('allocation.summary', { gross: num(o.gross), liabilities: num(o.liabilities) }) }}
     </template>

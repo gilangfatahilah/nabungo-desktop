@@ -3,12 +3,13 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import AppSidebar from '@/components/AppSidebar.vue'
+import AppSidebar from '@/components/layout/AppSidebar.vue'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { i18n } from '@/i18n'
 import { routes } from '@/router'
 import * as ipc from '@/ipc'
 import { useAccountsStore } from '@/stores/accounts'
+import { useSecurityStore } from '@/stores/security'
 
 beforeEach(() => setActivePinia(createPinia()))
 
@@ -34,7 +35,21 @@ describe('AppSidebar', () => {
   it('angka di sidebar tanpa prefiks Rp', async () => {
     const w = await mountSidebar('/')
     expect(w.find('[data-testid="sidebar-net-worth"]').text()).toBe('4.343.000')
-    expect(w.find('[data-testid="sidebar-accounts"]').text()).not.toContain('Rp')
+  })
+
+  it('daftar saldo per akun tidak lagi di sidebar (pindah ke Dasbor)', async () => {
+    const w = await mountSidebar('/')
+    expect(w.find('[data-testid="sidebar-accounts"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('BCA')
+  })
+
+  it('tombol kunci hanya tampil bila DB terenkripsi', async () => {
+    let w = await mountSidebar('/')
+    expect(w.find('[data-testid="sidebar-lock"]').exists()).toBe(false)
+    w.unmount()
+    useSecurityStore().encrypted = true
+    w = await mountSidebar('/')
+    expect(w.find('[data-testid="sidebar-lock"]').attributes('aria-label')).toBe('Kunci sekarang')
   })
 
   it('tombol utama berlabel "Transaksi baru"', async () => {

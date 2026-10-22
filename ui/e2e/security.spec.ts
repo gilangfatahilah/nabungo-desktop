@@ -9,8 +9,10 @@ async function go(page: Page, hash: string) {
 }
 
 async function lockNow(page: Page) {
+  // Kunci dari footer sidebar setelah Pengaturan tampil, agar redirect setelah buka kembali ke sini.
   await go(page, '#/settings')
-  await page.getByRole('button', { name: 'Kunci sekarang' }).click()
+  await expect(page).toHaveURL(/#\/settings/)
+  await page.locator('[data-testid="sidebar-lock"]').click()
   await expect(page.getByRole('heading', { name: 'Nabungo terkunci' })).toBeVisible()
 }
 

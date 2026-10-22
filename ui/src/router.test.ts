@@ -67,7 +67,7 @@ describe('router', () => {
 })
 
 describe('route meta', () => {
-  it('hanya Transaksi yang melebar penuh (tanpa max-width konten)', () => {
-    expect(routes.filter((r) => r.meta?.wide).map((r) => r.name)).toEqual(['transactions'])
+  it('hanya onboarding & kunci yang tampil tanpa kerangka aplikasi', () => {
+    expect(routes.filter((r) => r.meta?.bare).map((r) => r.name)).toEqual(['onboarding', 'unlock'])
   })
 })

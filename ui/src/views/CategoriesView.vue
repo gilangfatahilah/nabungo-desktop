@@ -131,7 +131,7 @@ function restore(c: CategoryDto) {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.categories')">
+  <PageHeader>
     <template #actions>
       <!-- Segmented control jenis kategori di header (docs/design/design.md §8.4). -->
       <Tabs v-model="tab">

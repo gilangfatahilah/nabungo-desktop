@@ -72,7 +72,7 @@ function copy() {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.budget')">
+  <PageHeader>
     <template v-if="o">{{ formatRange(o.from, o.to, settings.locale) }}</template>
     <template #actions>
       <Button variant="ghost" size="icon" :aria-label="t('budget.prev')" @click="withErrorToast(() => store.go('prev'))">

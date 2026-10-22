@@ -184,7 +184,7 @@ async function saveGroup() {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.accounts')">
+  <PageHeader>
     {{ t('accounts.netWorth') }} <MoneyText :amount="store.overview.netWorth.net" class="font-medium text-foreground" />
     <template #actions>
       <Button variant="outline" @click="openGroup(null)">{{ t('accounts.newGroup') }}</Button>
