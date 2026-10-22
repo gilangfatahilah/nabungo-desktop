@@ -125,7 +125,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 
 ```
  ◓ nabungo                        ← AppLogo dalam SidebarMenuButton (ciut: tanda koin saja)
- [ + Transaksi baru    N ][ 🔍 ]  ← Quick Create: tombol Zamrud + tombol ikon Cari (palette)
+ [ + Transaksi baru         N ]  ← Quick Create: tombol Zamrud (Cari hanya di SiteHeader)
  ▣ Dasbor                    G D  ← NavMain: ikon 16px + label, Kbd saat hover/aktif
  ▣ Transaksi                 G T
  ▣ Budget                    G B
@@ -156,7 +156,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 `ui/src/components/layout/SiteHeader.vue`. Tinggi 48px, `border-b`, isi `px-4 lg:px-6`:
 
 - `SidebarTrigger` · `Separator` vertikal 16px · **h1** judul halaman (`text-heading` 500, sama dengan label navigasi `nav.<route>`).
-- Kanan: aksi global saja (tombol hantu "Cari" + `Kbd` `Ctrl K` yang membuka command palette). Aksi khusus halaman **tidak** di sini.
+- Kanan: aksi global saja (pemicu Cari berbentuk kolom isian — `outline`, tinggi 36px, lebar 224px / 320px di `lg`, teks "Cari…" + `Kbd` `Ctrl K` — yang membuka command palette; satu-satunya tombol Cari di aplikasi). Aksi khusus halaman **tidak** di sini.
 
 ### 6.4 PageHeader
 

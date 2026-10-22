@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Plus,
   ReceiptText,
-  Search,
   Settings,
   Shapes,
   Tags,
@@ -25,7 +24,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import AppLogo from '@/components/AppLogo.vue'
 import NavLinks, { type NavItem } from '@/components/layout/NavLinks.vue'
@@ -73,7 +71,7 @@ const manage = computed<NavItem[]>(() => [
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem class="flex items-center gap-2">
+            <SidebarMenuItem>
               <SidebarMenuButton
                 :tooltip="$t('sidebar.newTransaction')"
                 class="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
@@ -84,16 +82,6 @@ const manage = computed<NavItem[]>(() => [
                 <span>{{ $t('sidebar.newTransaction') }}</span>
                 <Kbd class="ml-auto border-current/35 text-current/75">N</Kbd>
               </SidebarMenuButton>
-              <Button
-                size="icon"
-                variant="outline"
-                class="size-8 shrink-0 group-data-[collapsible=icon]:opacity-0"
-                :aria-label="$t('sidebar.search')"
-                :title="$t('sidebar.search')"
-                @click="ui.paletteOpen = true"
-              >
-                <Search />
-              </Button>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>

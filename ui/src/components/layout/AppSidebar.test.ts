@@ -57,6 +57,11 @@ describe('AppSidebar', () => {
     expect(w.find('[data-testid="new-txn"]').text()).toContain('Transaksi baru')
   })
 
+  it('tidak ada tombol Cari di sidebar (hanya di SiteHeader)', async () => {
+    const w = await mountSidebar('/')
+    expect(w.find('[aria-label="Cari"]').exists()).toBe(false)
+  })
+
   it('item aktif ditandai aria-current', async () => {
     const w = await mountSidebar('/transactions')
     expect(w.find('a[aria-current="page"]').text()).toContain('Transaksi')
