@@ -1,6 +1,6 @@
 //! Bucket alokasi modal dan mapping akun → bucket (PRD §4.5). Porsi aktual dihitung di core.
 
-use nabungo_core::Mapping;
+use nabungo_core::{Mapping, Target};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use uuid::Uuid;
 
@@ -10,7 +10,7 @@ use crate::{Result, map_unique, parse_uuid};
 pub struct NewBucket {
     pub parent_id: Option<Uuid>,
     pub name: String,
-    pub target_bp: i64,
+    pub target: Target,
     pub color: Option<String>,
     pub sort_order: i64,
 }
@@ -20,21 +20,32 @@ pub struct BucketRow {
     pub id: Uuid,
     pub parent_id: Option<Uuid>,
     pub name: String,
-    pub target_bp: i64,
+    pub target: Target,
     pub color: Option<String>,
     pub sort_order: i64,
 }
 
+/// Kolom `(target_bp, target_amount)`: bucket nominal disimpan dengan `target_bp = 0`.
+fn target_columns(target: Target) -> (i64, Option<i64>) {
+    match target {
+        Target::Percent(bp) => (bp, None),
+        Target::Amount(n) => (0, Some(n)),
+    }
+}
+
 pub fn insert_bucket(tx: &Transaction, new: &NewBucket) -> Result<Uuid> {
     let id = Uuid::now_v7();
+    let (bp, amount) = target_columns(new.target);
     tx.execute(
-        "INSERT INTO allocation_bucket (id, parent_id, name, target_bp, color, sort_order)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO allocation_bucket
+           (id, parent_id, name, target_bp, target_amount, color, sort_order)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             id.to_string(),
             new.parent_id.map(|p| p.to_string()),
             new.name,
-            new.target_bp,
+            bp,
+            amount,
             new.color,
             new.sort_order
         ],
@@ -44,16 +55,19 @@ pub fn insert_bucket(tx: &Transaction, new: &NewBucket) -> Result<Uuid> {
 }
 
 pub fn update_bucket(tx: &Transaction, id: Uuid, new: &NewBucket) -> Result<bool> {
+    let (bp, amount) = target_columns(new.target);
     let changed = tx
         .execute(
             "UPDATE allocation_bucket
-             SET parent_id = ?2, name = ?3, target_bp = ?4, color = ?5, sort_order = ?6
+             SET parent_id = ?2, name = ?3, target_bp = ?4, target_amount = ?5, color = ?6,
+                 sort_order = ?7
              WHERE id = ?1",
             params![
                 id.to_string(),
                 new.parent_id.map(|p| p.to_string()),
                 new.name,
-                new.target_bp,
+                bp,
+                amount,
                 new.color,
                 new.sort_order
             ],
@@ -72,10 +86,18 @@ pub fn delete_bucket(tx: &Transaction, id: Uuid) -> Result<bool> {
     Ok(tx.execute("DELETE FROM allocation_bucket WHERE id = ?1", [&key])? == 1)
 }
 
-const ROW_SQL: &str =
-    "SELECT id, parent_id, name, target_bp, color, sort_order FROM allocation_bucket";
+const ROW_SQL: &str = "SELECT id, parent_id, name, target_bp, target_amount, color, sort_order
+     FROM allocation_bucket";
 
-type RawBucket = (String, Option<String>, String, i64, Option<String>, i64);
+type RawBucket = (
+    String,
+    Option<String>,
+    String,
+    i64,
+    Option<i64>,
+    Option<String>,
+    i64,
+);
 
 fn raw(r: &rusqlite::Row) -> rusqlite::Result<RawBucket> {
     Ok((
@@ -85,10 +107,13 @@ fn raw(r: &rusqlite::Row) -> rusqlite::Result<RawBucket> {
         r.get(3)?,
         r.get(4)?,
         r.get(5)?,
+        r.get(6)?,
     ))
 }
 
-fn to_row((id, parent_id, name, target_bp, color, sort_order): RawBucket) -> Result<BucketRow> {
+fn to_row(
+    (id, parent_id, name, target_bp, target_amount, color, sort_order): RawBucket,
+) -> Result<BucketRow> {
     Ok(BucketRow {
         id: parse_uuid("allocation_bucket", &id)?,
         parent_id: parent_id
@@ -96,7 +121,7 @@ fn to_row((id, parent_id, name, target_bp, color, sort_order): RawBucket) -> Res
             .map(|p| parse_uuid("allocation_bucket", p))
             .transpose()?,
         name,
-        target_bp,
+        target: target_amount.map_or(Target::Percent(target_bp), Target::Amount),
         color,
         sort_order,
     })
@@ -185,13 +210,13 @@ mod tests {
     use super::*;
     use crate::account::{NewAccount, insert_account};
     use crate::{StorageError, now_utc, open_in_memory};
-    use nabungo_core::{AccountKind, CurrencyCode};
+    use nabungo_core::{AccountKind, CurrencyCode, Target};
 
     fn new(parent_id: Option<Uuid>, name: &str, target_bp: i64) -> NewBucket {
         NewBucket {
             parent_id,
             name: name.into(),
-            target_bp,
+            target: Target::Percent(target_bp),
             color: None,
             sort_order: 0,
         }
@@ -248,5 +273,48 @@ mod tests {
         replace_account_mappings(&tx, a, &[]).unwrap();
         assert!(list_mappings(&tx).unwrap().is_empty());
         assert!(get_bucket(&tx, x).unwrap().is_none());
+    }
+
+    #[test]
+    fn bucket_target_roundtrip() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut b = NewBucket {
+            target: Target::Amount(30_000_000),
+            ..new(None, "Darurat", 0)
+        };
+        let id = insert_bucket(&tx, &b).unwrap();
+        assert_eq!(
+            get_bucket(&tx, id).unwrap().unwrap().target,
+            Target::Amount(30_000_000)
+        );
+        b.target = Target::Percent(2500);
+        assert!(update_bucket(&tx, id, &b).unwrap());
+        assert_eq!(
+            get_bucket(&tx, id).unwrap().unwrap().target,
+            Target::Percent(2500)
+        );
+        let amount: Option<i64> = tx
+            .query_row(
+                "SELECT target_amount FROM allocation_bucket WHERE id = ?1",
+                [id.to_string()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(amount, None);
+    }
+
+    #[test]
+    fn target_amount_check_rejects_zero() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let id = insert_bucket(&tx, &new(None, "X", 5000)).unwrap();
+        assert!(
+            tx.execute(
+                "UPDATE allocation_bucket SET target_amount = 0 WHERE id = ?1",
+                [id.to_string()],
+            )
+            .is_err()
+        );
     }
 }

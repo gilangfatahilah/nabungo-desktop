@@ -128,6 +128,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0005_allocation_names.sql"),
     include_str!("../migrations/0006_contact.sql"),
     include_str!("../migrations/0007_tags_attachments.sql"),
+    include_str!("../migrations/0008_bucket_target_amount.sql"),
 ];
 
 /// Versi skema terbaru (`user_version` setelah semua migrasi).
