@@ -16,7 +16,6 @@ export default {
     unlock: 'Buka kunci',
     onboarding: 'Mulai',
   },
-  common: { comingSoon: 'Segera hadir' },
   dateInput: { openCalendar: 'Buka kalender' },
   settings: {
     theme: 'Tema',

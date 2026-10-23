@@ -16,7 +16,6 @@ export default {
     unlock: 'Unlock',
     onboarding: 'Get started',
   },
-  common: { comingSoon: 'Coming soon' },
   dateInput: { openCalendar: 'Open calendar' },
   settings: {
     theme: 'Theme',
