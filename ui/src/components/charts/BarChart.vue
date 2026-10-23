@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-// Batang berkelompok per label (docs/design/ui-guidelines.md §9.6). Setiap kelompok bisa
+// Batang berkelompok per label (docs/design/design.md §8.8). Setiap kelompok bisa
 // difokus: Enter/Spasi memilih, panah kiri/kanan memindah fokus.
 const props = defineProps<{
   labels: string[]

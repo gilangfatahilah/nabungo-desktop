@@ -87,7 +87,7 @@ function onConfirm() {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.scheduled')">
+  <PageHeader>
     <template #actions>
       <Button data-testid="rule-new" @click="ui.openRuleEditor({ mode: 'create' })"><Plus /> {{ t('scheduled.new') }}</Button>
     </template>

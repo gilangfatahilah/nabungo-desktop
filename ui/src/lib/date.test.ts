@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateInput, formatPeriod, formatRange, formatTimestamp, parseDateInput, todayIso } from './date'
+import { formatDateInput, formatPeriod, formatRange, formatShortDate, formatTimestamp, parseDateInput, todayIso } from './date'
 
 describe('todayIso', () => {
   it('memakai tanggal lokal dengan nol di depan', () => {
@@ -57,6 +57,11 @@ describe('formatPeriod / formatRange', () => {
   it('rentang tanggal tanpa tahun', () => {
     expect(formatRange('2026-09-25', '2026-10-24', 'id')).toBe('25 Sep – 24 Okt')
     expect(formatRange('2026-09-25', '2026-10-24', 'en')).toBe('Sep 25 – Oct 24')
+  })
+
+  it('tanggal pendek tanpa tahun', () => {
+    expect(formatShortDate('2026-10-17', 'id')).toBe('17 Okt')
+    expect(formatShortDate('2026-10-17', 'en')).toBe('Oct 17')
   })
 })
 

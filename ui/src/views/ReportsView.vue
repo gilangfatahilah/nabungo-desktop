@@ -66,7 +66,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
 </script>
 
 <template>
-  <PageHeader :title="t('nav.reports')">{{ t('reports.lastPeriods', { count: REPORT_PERIODS }) }}</PageHeader>
+  <PageHeader>{{ t('reports.lastPeriods', { count: REPORT_PERIODS }) }}</PageHeader>
 
   <div class="flex flex-col gap-10">
     <section class="flex flex-col gap-4">

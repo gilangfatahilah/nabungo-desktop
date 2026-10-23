@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ArrowRightIcon, ArrowRightLeftIcon, CircleCheckIcon, EllipsisIcon, FlagIcon, PaperclipIcon, PlusIcon, ScaleIcon, SplitIcon } from '@lucide/vue'
+import { ArrowRightIcon, CircleCheckIcon, EllipsisIcon, PaperclipIcon, PlusIcon } from '@lucide/vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { type Component, computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/EmptyState.vue'
 import MoneyText from '@/components/MoneyText.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Kbd } from '@/components/ui/kbd'
-import type { TxnKindDto, TxnRowDto } from '@/ipc'
-import { colorClass } from '@/lib/colors'
-import { iconFor } from '@/lib/icons'
+import type { TxnRowDto } from '@/ipc'
+import { useTxnRowDisplay } from '@/composables/useTxnRowDisplay'
 import { activeFilterCount } from '@/lib/txnFilter'
 import { formatDateHeader, groupByDate } from '@/lib/txnList'
 import { isEditable } from '@/lib/txnForm'
@@ -39,47 +38,8 @@ onMounted(() => withErrorToast(async () => {
 const items = computed(() => groupByDate(store.rows))
 const showRunning = computed(() => store.query.accountId !== null)
 
-const accountName = computed(() => new Map(accounts.overview.accounts.map((a) => [a.id, a.name])))
-const categoryById = computed(() => new Map(categories.list.map((c) => [c.id, c])))
+const { accountName, categoryPath, categoryLabel, tile, title, showCategory, tone } = useTxnRowDisplay()
 const hasFilter = computed(() => activeFilterCount(store.query) > 0)
-
-/** Nama lengkap "Induk › Anak" untuk tooltip; baris hanya menampilkan anak (§8.5). */
-function categoryPath(id: string | null): string {
-  const c = id ? categoryById.value.get(id) : undefined
-  if (!c) return ''
-  const parent = c.parentId ? categoryById.value.get(c.parentId) : undefined
-  return parent ? `${parent.name} › ${c.name}` : c.name
-}
-
-function categoryLabel(r: TxnRowDto): string {
-  if (r.kind === 'transfer') return t('txn.kinds.transfer')
-  if (r.kind === 'opening') return t('txn.opening')
-  if (r.splitCount > 1) return t('txn.splitCount', { n: r.splitCount })
-  return (r.categoryId && categoryById.value.get(r.categoryId)?.name) || ''
-}
-
-const KIND_ICONS: Partial<Record<TxnKindDto, Component>> = {
-  transfer: ArrowRightLeftIcon, opening: FlagIcon, adjustment: ScaleIcon, valuation: ScaleIcon,
-}
-
-/** Tile 28px: ikon & warna kategori; transfer/saldo awal/penyesuaian/split di tile netral. */
-function tile(r: TxnRowDto): { icon: Component; class: string } {
-  const kindIcon = KIND_ICONS[r.kind]
-  if (kindIcon) return { icon: kindIcon, class: colorClass(null) }
-  if (r.splitCount > 1) return { icon: SplitIcon, class: colorClass(null) }
-  const c = r.categoryId ? categoryById.value.get(r.categoryId) : undefined
-  return { icon: iconFor(c?.icon ?? null), class: colorClass(c?.color ?? null) }
-}
-
-const title = (r: TxnRowDto) => r.payee ?? r.note ?? categoryLabel(r)
-/** Kategori di baris 2 hanya bila judul bukan kategori itu sendiri. */
-const showCategory = (r: TxnRowDto) => r.kind !== 'transfer' && (r.payee ?? r.note) !== null
-
-/** Transfer & saldo awal netral; lainnya mengikuti tanda (refund pengeluaran tampil hijau). */
-function tone(r: TxnRowDto): 'neutral' | 'expense' | 'income' {
-  if (r.kind === 'transfer' || r.kind === 'opening') return 'neutral'
-  return r.amount < 0 ? 'expense' : r.amount > 0 ? 'income' : 'neutral'
-}
 
 // --- Virtualisasi ---
 const scroller = useTemplateRef<HTMLElement>('scroller')

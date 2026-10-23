@@ -44,7 +44,7 @@ const encSubmitted = ref(false)
 const recoveryKey = ref('')
 const recoveryOpen = ref(false)
 
-// Tombol tetap aktif; validasi tampil di field (docs/design/ui-guidelines.md §9.7).
+// Tombol tetap aktif; validasi tampil di field (docs/design/design.md §8.9).
 watch(name, () => (nameError.value = null))
 watch(encrypt, () => (encSubmitted.value = false))
 
@@ -114,7 +114,7 @@ async function onRecoveryDone() {
 </script>
 
 <template>
-  <!-- Satu kolom 440px, rata kiri, di tengah layar (docs/design/ui-guidelines.md §9.7). -->
+  <!-- Satu kolom 440px, rata kiri, di tengah layar (docs/design/design.md §8.9). -->
   <main class="mx-auto flex min-h-screen w-full max-w-[440px] flex-col justify-center gap-8 px-4 py-10">
     <header>
       <h1 class="text-title font-semibold tracking-tight">{{ t('onboarding.title') }}</h1>

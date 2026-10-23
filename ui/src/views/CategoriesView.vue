@@ -131,9 +131,9 @@ function restore(c: CategoryDto) {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.categories')">
+  <PageHeader>
     <template #actions>
-      <!-- Segmented control jenis kategori di header (docs/design/ui-guidelines.md §9.4). -->
+      <!-- Segmented control jenis kategori di header (docs/design/design.md §8.4). -->
       <Tabs v-model="tab">
         <TabsList>
           <TabsTrigger v-for="k in KINDS" :key="k" :value="k" class="px-3">{{ t(`categories.${k}`) }}</TabsTrigger>

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { moneyParts } from '@/lib/money'
 import { useSettingsStore } from '@/stores/settings'
 
-// Prefiks mata uang dibuat lebih pudar dari angkanya (docs/design/ui-guidelines.md §5).
+// Prefiks mata uang dibuat lebih pudar dari angkanya (docs/design/design.md §4).
 const props = withDefaults(
   defineProps<{
     amount: number

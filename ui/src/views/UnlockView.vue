@@ -25,7 +25,7 @@ const confirmPassword = ref('')
 const error = ref<string | null>(null)
 const busy = ref(false)
 
-// Error menempel di field yang salah (docs/design/ui-guidelines.md §8.3).
+// Error menempel di field yang salah (docs/design/design.md §7.3).
 const errorField = ref<'password' | 'recovery' | 'new' | 'confirm' | null>(null)
 
 watch([password, recoveryKey, newPassword, confirmPassword, mode], () => {
@@ -98,7 +98,7 @@ const invalid = (field: NonNullable<typeof errorField.value>) => (errorField.val
 </script>
 
 <template>
-  <!-- Layar `bare` satu kolom 440px di tengah, seperti onboarding (docs/design/ui-guidelines.md §9.7). -->
+  <!-- Layar `bare` satu kolom 440px di tengah, seperti onboarding (docs/design/design.md §8.9). -->
   <main class="mx-auto flex min-h-screen w-full max-w-[440px] flex-col justify-center gap-8 px-4 py-10">
     <header class="flex flex-col gap-6">
       <AppLogo />

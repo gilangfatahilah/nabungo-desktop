@@ -29,14 +29,15 @@ export function formatPeriod(key: string, locale: LocaleDto): string {
   return new Intl.DateTimeFormat(intlLocale(locale), { month: 'short', year: 'numeric' }).format(new Date(y!, m! - 1, 1))
 }
 
+/** Tanggal tanpa tahun → "17 Okt" / "Oct 17". */
+export function formatShortDate(value: string, locale: LocaleDto): string {
+  const [y, m, d] = value.split('-').map(Number)
+  return new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short' }).format(new Date(y!, m! - 1, d!))
+}
+
 /** Rentang inklusif tanpa tahun → "25 Sep – 24 Okt" / "Sep 25 – Oct 24". */
 export function formatRange(from: string, to: string, locale: LocaleDto): string {
-  const f = new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short' })
-  const at = (v: string) => {
-    const [y, m, d] = v.split('-').map(Number)
-    return f.format(new Date(y!, m! - 1, d!))
-  }
-  return `${at(from)} – ${at(to)}`
+  return `${formatShortDate(from, locale)} – ${formatShortDate(to, locale)}`
 }
 
 function valid(y: number, m: number, d: number): string | null {

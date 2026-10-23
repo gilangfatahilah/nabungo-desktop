@@ -19,7 +19,7 @@ type NamedRoute = RouteRecordRaw & { name: RouteName }
 
 export const routes: NamedRoute[] = [
   { path: '/', name: 'dashboard', component: () => import('@/views/DashboardView.vue') },
-  { path: '/transactions', name: 'transactions', component: () => import('@/views/TransactionsView.vue'), meta: { wide: true } },
+  { path: '/transactions', name: 'transactions', component: () => import('@/views/TransactionsView.vue') },
   { path: '/budget', name: 'budget', component: () => import('@/views/BudgetView.vue') },
   { path: '/allocation', name: 'allocation', component: () => import('@/views/AllocationView.vue') },
   { path: '/reports', name: 'reports', component: () => import('@/views/ReportsView.vue') },
@@ -36,8 +36,6 @@ export const routes: NamedRoute[] = [
 declare module 'vue-router' {
   interface RouteMeta {
     bare?: boolean
-    /** Konten melebar penuh, tanpa max-width (docs/design/ui-guidelines.md §7.1). */
-    wide?: boolean
   }
 }
 
