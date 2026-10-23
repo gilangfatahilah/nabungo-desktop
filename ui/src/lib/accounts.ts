@@ -37,6 +37,19 @@ export function countsAsLiability(kind: AccountKindDto, balance: number): boolea
 export const openingSign = (kind: AccountKindDto, iOwe = false) =>
   (isLiability(kind) || (kind === 'receivable' && iOwe) ? -1 : 1)
 
+/**
+ * Aset per jenis akun (urutan `ACCOUNT_KINDS`, jenis bernilai 0 dibuang) untuk komposisi kekayaan
+ * di Dasbor. Saringan sama dengan `accounts_overview` + `net_worth` di Rust, jadi totalnya = `netWorth.assets`.
+ */
+export function assetsByKind(o: AccountsOverviewDto): { kind: AccountKindDto; amount: number }[] {
+  const sums = new Map<AccountKindDto, number>()
+  for (const a of o.accounts) {
+    if (!a.includeInNetWorth || countsAsLiability(a.kind, a.balance)) continue
+    sums.set(a.kind, (sums.get(a.kind) ?? 0) + a.balance)
+  }
+  return ACCOUNT_KINDS.filter((k) => (sums.get(k) ?? 0) !== 0).map((kind) => ({ kind, amount: sums.get(kind)! }))
+}
+
 /** Label arah saldo akun piutang/hutang untuk daftar akun. */
 export function receivableLabel(balance: number): 'receivableLabel' | 'payableLabel' | 'settled' {
   return balance > 0 ? 'receivableLabel' : balance < 0 ? 'payableLabel' : 'settled'

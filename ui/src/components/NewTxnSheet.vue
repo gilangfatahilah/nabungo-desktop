@@ -37,7 +37,8 @@ async function prepare() {
   const defaults = await ipc.txnFormDefaults()
   let state: TxnFormState
   if (ed.mode === 'create' || !ed.id) {
-    state = emptyForm('expense', { accountId: defaultAccountId(accounts.overview.accounts, defaults.lastAccountId), feeCategoryId: defaults.feeCategoryId, today: todayIso() })
+    const accountId = ed.preset?.accountId ?? defaultAccountId(accounts.overview.accounts, defaults.lastAccountId)
+    state = emptyForm(ed.preset?.kind ?? 'expense', { accountId, feeCategoryId: defaults.feeCategoryId, today: todayIso() })
   } else {
     const d = await ipc.getTxn(ed.id)
     state = ed.mode === 'edit' ? fromDetail(d) : duplicateOf(d, todayIso())

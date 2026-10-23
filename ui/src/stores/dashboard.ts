@@ -7,14 +7,14 @@ import { EMPTY_FILTER } from '@/stores/transactions'
 
 /** Baris tabel "Transaksi terakhir" (docs/design/design.md §8.1). */
 export const RECENT_LIMIT = 8
-/** Baris kartu "Top kategori pengeluaran". */
+/** Kategori bernama di donut kartu "Pengeluaran periode ini"; sisanya digabung jadi "Lainnya". */
 export const TOP_LIMIT = 5
 
 // Data Dasbor di luar laporan (arus kas & kekayaan bersih ada di store reports); semua angka dari backend.
 export const useDashboardStore = defineStore('dashboard', () => {
   const recent = ref<TxnRowDto[]>([])
   const budget = ref<BudgetOverviewDto | null>(null)
-  const topCategories = ref<CategoryAmountDto[]>([])
+  const expenses = ref<CategoryAmountDto[]>([])
   const allocation = ref<AllocationOverviewDto | null>(null)
 
   async function load() {
@@ -28,9 +28,9 @@ export const useDashboardStore = defineStore('dashboard', () => {
     recent.value = page.rows
     budget.value = overview
     // Urutan dari backend: nominal turun, lalu nama.
-    topCategories.value = breakdown.slice(0, TOP_LIMIT)
+    expenses.value = breakdown
     allocation.value = alloc
   }
 
-  return { recent, budget, topCategories, allocation, load }
+  return { recent, budget, expenses, allocation, load }
 })

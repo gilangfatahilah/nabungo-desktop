@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import type { TxnFormKindDto } from '@/ipc'
 
 export interface TxnEditor {
   mode: 'create' | 'edit' | 'duplicate'
   id?: string
+  /** Mode create: jenis & akun awal (aksi cepat kartu akun di Dasbor). */
+  preset?: { kind: TxnFormKindDto; accountId: string }
 }
 
 /** Sheet jadwal berulang (TRX-06, K14). */
@@ -23,7 +26,7 @@ export const useUiStore = defineStore('ui', () => {
     paletteOpen,
     txnEditor,
     newTxnOpen,
-    openNewTxn: () => { txnEditor.value = { mode: 'create' } },
+    openNewTxn: (preset?: TxnEditor['preset']) => { txnEditor.value = { mode: 'create', preset } },
     openEditTxn: (id: string) => { txnEditor.value = { mode: 'edit', id } },
     openDuplicateTxn: (id: string) => { txnEditor.value = { mode: 'duplicate', id } },
     closeTxnEditor: () => { txnEditor.value = null },

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BudgetBar from '@/components/BudgetBar.vue'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { BudgetOverviewDto } from '@/ipc'
 import { useCategoriesStore } from '@/stores/categories'
 
@@ -18,6 +18,8 @@ const rows = computed(() =>
     .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0))
     .slice(0, WATCH_LIMIT),
 )
+// Diurutkan menurun: bila baris teratas masih `ok`, semua budget aman.
+const safe = computed(() => rows.value[0]?.level === 'ok')
 </script>
 
 <template>
@@ -26,6 +28,7 @@ const rows = computed(() =>
       <CardTitle class="text-heading">
         <RouterLink to="/budget" class="hover:underline">{{ $t('dashboard.budgetWatch') }}</RouterLink>
       </CardTitle>
+      <CardDescription v-if="safe" data-testid="budget-watch-safe">{{ $t('dashboard.budgetSafe') }}</CardDescription>
     </CardHeader>
     <CardContent class="flex flex-col gap-3">
       <div v-for="r in rows" :key="r.categoryId" class="flex flex-col gap-1.5" data-testid="budget-watch-row">

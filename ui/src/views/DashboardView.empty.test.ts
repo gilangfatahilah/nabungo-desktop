@@ -26,7 +26,11 @@ it('kartu baru tersembunyi tanpa data', async () => {
   await nextTick()
   await flushPromises()
   expect(document.body.querySelector('[data-testid="kpi-income"]')).not.toBeNull()
-  for (const id of ['dashboard-top-categories', 'dashboard-due', 'dashboard-allocation']) {
+  for (const id of ['dashboard-expense', 'budget-watch', 'dashboard-due', 'dashboard-allocation', 'dashboard-networth']) {
     expect(document.body.querySelector(`[data-testid="${id}"]`)).toBeNull()
   }
+  // Tanpa budget: kartu Budget periode ini mengajak mengatur budget, bukan menghilang.
+  const cta = document.body.querySelector<HTMLAnchorElement>('[data-testid="budget-total-empty"] a')!
+  expect(cta.textContent).toContain('Atur budget')
+  expect(cta.getAttribute('href')).toContain('/budget')
 })

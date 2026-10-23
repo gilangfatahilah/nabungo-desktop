@@ -290,7 +290,7 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 
 ### 7.12 Chart card
 
-- `Card` dengan `CardHeader` (judul `text-heading`, deskripsi meta) dan pemilih rentang `ToggleGroup` (outline, ukuran sm) di `CardAction`.
+- `Card` dengan `CardHeader` (judul `text-heading`, deskripsi meta) dan pemilih rentang dropdown `Select` (trigger `size="sm"`, label santai: "3 bulan terakhir", "6 bulan terakhir", "1 tahun terakhir") di `CardAction`.
 - Chart memakai komponen di `ui/src/components/charts/` (SVG sendiri). Area di bawah garis berisi 15% alfa warna seri. Seri masuk/keluar memakai `--income`/`--expense`; seri lain `--chart-1..5` (Zamrud, Biru `#24508F`/`#8FB0E8`, Keluar, Waspada, Tinta pudar).
 - Tidak ada gradient atau 3D. Chart di layar Laporan tetap punya tabel angka di bawahnya.
 
@@ -304,40 +304,45 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 
 ### 8.1 Dasbor
 
+Susunan "balance details": hero kekayaan bersih di atas, lalu grid kartu 12 kolom. Semua angka dari backend; UI hanya membagi untuk persen/lebar batang.
+
 ```
  SiteHeader: [≡] │ Dasbor                                  [🔍 Cari  Ctrl K]
- Periode 25 Sep – 24 Okt                                   [+ Transaksi baru]
+ Periode 1 Okt – 31 Okt                                    [+ Transaksi baru]
 
- ┌ Sisa periode ini ┐ ┌ Pemasukan ──────┐ ┌ Pengeluaran ────┐ ┌ Kekayaan bersih ┐
- │ Rp 3.412.000     │ │ Rp 8.500.000    │ │ Rp 5.088.000    │ │ Rp 4.597.000    │
- └──────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘
+ Kekayaan bersih                          │ Sisa periode   Pemasukan    Pengeluaran
+ Rp 4.597.000  [↗ +3%]                    │ 3.412.000 ↗    8.500.000    5.088.000 ↘
+ Aset dikurangi liabilitas                │
 
- ┌ Arus kas ───────────────────────────────────────────── [3 | 6 | 12 periode] ┐
- │  area pemasukan vs pengeluaran per periode budget                          │
- └────────────────────────────────────────────────────────────────────────────┘
-
- ┌ Transaksi terakhir ─────────────── Lihat semua ┐ ┌ Akun ──────────────────┐
- │ 17 Okt   Janji Jiwa   Kopi   BCA   −Rp 22.000  │ │ Bank         4.343.000 │
- │ …  (8 baris)                                   │ │   BCA        4.343.000 │
- └────────────────────────────────────────────────┘ ├ Budget perlu dilihat ──┤
-                                                    │ Makan  ▓▓▓▓▓▓▓░ 86%    │
-                                                    └────────────────────────┘
-
- ┌ Top kategori pengeluaran ┐ ┌ Terjadwal jatuh tempo ┐ ┌ Ringkasan alokasi ──┐
- │ 🍴 Makan    1.250.000    │ │ 15 Okt  PLN  −350.000 │ │ Aset  62% / target 70% │
- │ ▓▓▓▓▓▓▓▓▓▓▓▓             │ │ …  (maks 5)           │ │ ▓▓▓▓▓▓▓▓░│░          │
- │ …  (maks 5)              │ │ Lihat semua (7)       │ │ Belum dialokasikan 8% │
- └──────────────────────────┘ └───────────────────────┘ └──────────────────────┘
+ ┌ Akun ────────────── [+] ┐ ┌ [Masuk][Transfer][Keluar] ┐ ┌ Tren ─ [6 bulan ▾] ────┐
+ │ ◉ 🏛 BCA       4.343.000 │ │ BCA · Bank                │ │ Arus kas │ Kekayaan bersih│
+ │   Bank                   │ │ Rp 4.343.000              │ │  ╱╲  ╱───╱             │
+ │ ○ 💵 Dompet      250.000 │ │ Grup Harian  Rekon 15 Okt │ │ ╱  ╲╱                  │
+ │ ○ 💳 Kartu     −1.200.000│ ├ Budget periode ini ───────┤ │                        │
+ │   (maks tinggi, scroll)  │ │ ▓▓▓▓▓▓▓▓▓░░░░░  62%       │ │                        │
+ └──────────────────────────┘ └───────────────────────────┘ └────────────────────────┘
+ ┌ Transaksi terakhir ─── Lihat semua ┐ ┌ Pengeluaran periode ini ┐ ┌ Komposisi kekayaan ┐
+ │ 17 Okt  Janji Jiwa  Kopi  −22.000  │ │ Ini   Lalu   Sisa budget │ │      ◯             │
+ │ …  (8 baris)                       │ │  ◯   ● Makan   1.250.000 │ │ ● Bank   78%       │
+ │                                    │ │      ● Lainnya   300.000 │ │ Aset · Liab · Net  │
+ │                                    │ ├ Budget perlu dilihat ────┤ │                    │
+ │                                    │ │ Makan  ▓▓▓▓▓▓▓░ 86%      │ │                    │
+ └────────────────────────────────────┘ └──────────────────────────┘ └────────────────────┘
+ ┌ Terjadwal jatuh tempo ────────────┐ ┌ Ringkasan alokasi ────────────────┐
+ └───────────────────────────────────┘ └───────────────────────────────────┘
 ```
 
-- Section cards (§7.11): **Sisa periode ini** (pemasukan − pengeluaran periode budget berjalan, dari laporan arus kas), **Pemasukan**, **Pengeluaran**, **Kekayaan bersih** (dari riwayat kekayaan bersih). Tren dibanding periode sebelumnya.
-- Chart card "Arus kas" (§7.12): pemasukan vs pengeluaran per periode, rentang 3/6/12 periode (default 6).
-- Grid bawah `@5xl/main:grid-cols-3`: Transaksi terakhir (`col-span-2`, tabel 8 baris, klik/Enter membuka sheet edit, "Lihat semua" → layar Transaksi), kolom kanan: kartu Akun (akun aktif per grup dengan subtotal, saldo `num`, warna mengikuti `balanceTone`) dan Budget perlu dilihat (maks 5, persen tertinggi, `BudgetBar`; kartu disembunyikan bila belum ada budget).
-- Baris kartu ringkas `@3xl/main:grid-cols-2 @5xl/main:grid-cols-3` (urutan: Top kategori, Jatuh tempo, Alokasi); tiap kartu disembunyikan sendiri bila datanya kosong:
-  - **Top kategori pengeluaran**: 5 kategori root teratas periode berjalan (urutan backend), tile ikon/warna kategori, nominal `num`, batang `bg-chart-1` dengan lebar relatif ke baris pertama (presentasi saja). Judul → Laporan.
-  - **Terjadwal jatuh tempo**: kejadian jatuh tempo diurutkan tanggal lalu nama, maks 5; nominal bertanda dan berwarna sesuai jenis template (seperti layar Terjadwal). Footer "Lihat semua (n)" → Terjadwal bila lebih dari 5. Aksi catat/lewati tetap di layar Terjadwal.
-  - **Ringkasan alokasi**: bucket root dengan "aktual% / target%" dan `AllocationBar` (palet §8.8), lalu "Belum dialokasikan x%" dan satu baris `text-warning` bila ada peringatan target. Judul → Alokasi.
-- Belum ada transaksi: empty state §7.7 menggantikan chart & tabel; section cards dan baris kartu ringkas tetap tampil.
+- **Hero** (tanpa kartu): label meta, Kekayaan bersih `text-display` 600 + badge tren (§7.11), keterangan "Aset dikurangi liabilitas". Di kanan (≥ `@3xl/main`, di bawah pada layar sempit) tiga statistik ringkas dipisah garis vertikal: Sisa periode ini, Pemasukan, Pengeluaran, masing-masing nominal `text-heading` + badge tren. Periode berjalan tetap di PageHeader.
+- **Grid**: `grid-cols-1 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12`, gap 16/24. Baris 1: Akun `col-span-4`, kolom tengah `col-span-3` (Detail akun + Budget periode ini), Tren `col-span-5` (di 2 kolom: Tren `col-span-2`). Baris 2: Transaksi terakhir `col-span-5` (2 kolom: `col-span-2`), kolom tengah `col-span-4` (Pengeluaran + Budget perlu dilihat), Komposisi kekayaan `col-span-3`. Baris 3 `@3xl/main:grid-cols-2`: Jatuh tempo, Alokasi. Kartu yang datanya kosong menyembunyikan dirinya; kolom yang kosong ikut hilang. Grid item meregang setinggi baris, dan di kolom bertumpuk kartu terakhir `flex-1`, jadi tepi bawah satu baris selalu sejajar (isi kartu tetap rata atas).
+- **Akun**: akun aktif (urutan grup lalu `sortOrder`) sebagai baris yang bisa dipilih: radio, tile ikon jenis/ikon akun, nama + jenis, saldo `num` (`balanceTone`). Baris terpilih `border-primary bg-primary/5`. Isi kartu di-scroll bila melebihi ±22rem. Tombol [+] di `CardAction` → layar Akun. Pilihan default: akun aset aktif pertama.
+- **Detail akun** (akun terpilih): tiga aksi cepat (Pemasukan, Transfer, Pengeluaran) membuka sheet transaksi baru dengan jenis dan akun itu terisi. Lalu nama · jenis, saldo `text-title`, dan baris meta: grup, status rekonsiliasi (badge "Rekon s.d. tanggal" / "Belum direkonsiliasi"); kartu kredit menambah limit dan tanggal tagihan.
+- **Budget periode ini**: total terpakai dari tersedia periode berjalan, batang dua nada (`bg-primary` terpakai, `bg-primary/15` sisa; `bg-expense` bila lewat), persen dibulatkan. Belum ada budget: kartu tetap tampil dengan keterangan "Belum ada budget untuk periode ini." dan tombol outline sm **Atur budget** → layar Budget.
+- **Tren**: `Tabs` varian `line` Arus kas | Kekayaan bersih (default Arus kas), rentang 3/6/12 periode (default 6) di `CardAction`. Kekayaan bersih = satu seri `--chart-1` dengan area; Arus kas = pemasukan vs pengeluaran (§7.12).
+- **Transaksi terakhir**: seperti sebelumnya (8 baris, klik/Enter → sheet edit). Tanpa transaksi: empty state §7.7 di dalam kartu.
+- **Pengeluaran periode ini**: tiga angka (Periode ini, Periode lalu, Sisa budget bila ada budget), lalu `DonutChart` 5 kategori root teratas + "Lainnya" (palet `--chart-1..5`, Lainnya `--muted-foreground`) dengan kategori terbesar di tengah donut, legenda nama + nominal `num`. Judul → Laporan. Disembunyikan bila belum ada pengeluaran (kolom ini ikut hilang).
+- **Budget perlu dilihat**: maks 5, persen tertinggi, `BudgetBar`. Bila semua level `ok`, deskripsi kartu "Semua budget masih aman.". Disembunyikan bila belum ada budget (ajakannya sudah ada di Budget periode ini).
+- **Komposisi kekayaan**: `DonutChart` porsi aset per jenis akun (saringan sama dengan net worth Rust: akun `includeInNetWorth`, termasuk arsip, tanpa liabilitas), legenda jenis + nominal + persen; warna tetap per jenis (Bank `--chart-1`, E-wallet `--chart-2`, Investasi `--chart-3`, Tunai `--chart-4`, Piutang `--chart-5`). Di bawahnya Aset, Liabilitas, Kekayaan bersih. Kartu sempit: donut di atas legenda (`@container/card`). Disembunyikan bila aset ≤ 0. Judul → Akun.
+- **Terjadwal jatuh tempo** dan **Ringkasan alokasi**: seperti sebelumnya (maks 5 / bucket root).
 - Data dimuat ulang setelah aksi tulis (`ledgerVersion` di store transaksi).
 
 ### 8.2 Transaksi
@@ -395,6 +400,11 @@ Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Ter
 - Kolom Target di tabel selalu persen efektif terhadap total aset; bucket nominal menampilkan baris keterangan `text-meta` muted "Nominal tetap Rp…" di bawah nama (menggantikan keterangan "x% dari parent").
 - Peringatan di atas tabel (`text-warning`, `role="status"`): Σ target persen per tingkat ≠ 100% (hanya bila tingkat itu punya bucket persen) dan Σ target nominal melebihi basisnya (total aset atau target parent). Peringatan tidak memblokir penyimpanan.
 - Laporan: chart sesuai §7.12, setiap chart punya tabel angka di bawahnya.
+- **Sumbu Y**: tick dibulatkan ke integer tanpa label kembar (`charts/axis.ts`); tanpa data hanya tick 0.
+- **Tooltip chart** (`ChartTooltip`, semua chart SVG): kotak `bg-popover` border `shadow-md` `text-meta`, baris titik warna seri + label muted + nilai `num`. Garis/batang: ditambatkan ke titik data dan terbuka menjauhi tepi chart. Donut: ditambatkan di tepi kanan donut setinggi segmen, terbuka ke kanan (arah legenda). Tooltip yang tetap melewati tepi kartu digeser masuk (jarak 8px), jadi tidak pernah tumpah ke kartu tetangga. Nilai memakai nominal penuh (`formatIdr`, prop `valueFormat`), bukan format ringkas sumbu.
+  - Garis: hover/fokus memilih periode terdekat → garis kursor putus-putus + titik per seri + tooltip semua seri. Chart bisa difokus (Tab); ←/→, Home/End memindah, Escape menutup.
+  - Batang: hover/fokus kelompok → tooltip; kelompok lain opasitas 0.4.
+  - Donut: segmen aktif menonjol (jari-jari luar +4) dan lainnya opasitas 0.4; tooltip nama, nominal, persen hanya saat donut sendiri di-hover/difokus. Hover baris legenda cukup menyorot segmen yang sama (`v-model:active`, tanpa tooltip karena angkanya sudah di legenda) dan meredupkan baris legenda lain ke 50%. Fokus + panah memutar segmen.
 
 ### 8.9 Onboarding & Kunci
 
