@@ -322,12 +322,22 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
  └────────────────────────────────────────────────┘ ├ Budget perlu dilihat ──┤
                                                     │ Makan  ▓▓▓▓▓▓▓░ 86%    │
                                                     └────────────────────────┘
+
+ ┌ Top kategori pengeluaran ┐ ┌ Terjadwal jatuh tempo ┐ ┌ Ringkasan alokasi ──┐
+ │ 🍴 Makan    1.250.000    │ │ 15 Okt  PLN  −350.000 │ │ Aset  62% / target 70% │
+ │ ▓▓▓▓▓▓▓▓▓▓▓▓             │ │ …  (maks 5)           │ │ ▓▓▓▓▓▓▓▓░│░          │
+ │ …  (maks 5)              │ │ Lihat semua (7)       │ │ Belum dialokasikan 8% │
+ └──────────────────────────┘ └───────────────────────┘ └──────────────────────┘
 ```
 
 - Section cards (§7.11): **Sisa periode ini** (pemasukan − pengeluaran periode budget berjalan, dari laporan arus kas), **Pemasukan**, **Pengeluaran**, **Kekayaan bersih** (dari riwayat kekayaan bersih). Tren dibanding periode sebelumnya.
 - Chart card "Arus kas" (§7.12): pemasukan vs pengeluaran per periode, rentang 3/6/12 periode (default 6).
 - Grid bawah `@5xl/main:grid-cols-3`: Transaksi terakhir (`col-span-2`, tabel 8 baris, klik/Enter membuka sheet edit, "Lihat semua" → layar Transaksi), kolom kanan: kartu Akun (akun aktif per grup dengan subtotal, saldo `num`, warna mengikuti `balanceTone`) dan Budget perlu dilihat (maks 5, persen tertinggi, `BudgetBar`; kartu disembunyikan bila belum ada budget).
-- Belum ada transaksi: empty state §7.7 menggantikan chart & tabel; section cards tetap tampil.
+- Baris kartu ringkas `@3xl/main:grid-cols-2 @5xl/main:grid-cols-3` (urutan: Top kategori, Jatuh tempo, Alokasi); tiap kartu disembunyikan sendiri bila datanya kosong:
+  - **Top kategori pengeluaran**: 5 kategori root teratas periode berjalan (urutan backend), tile ikon/warna kategori, nominal `num`, batang `bg-chart-1` dengan lebar relatif ke baris pertama (presentasi saja). Judul → Laporan.
+  - **Terjadwal jatuh tempo**: kejadian jatuh tempo diurutkan tanggal lalu nama, maks 5; nominal bertanda dan berwarna sesuai jenis template (seperti layar Terjadwal). Footer "Lihat semua (n)" → Terjadwal bila lebih dari 5. Aksi catat/lewati tetap di layar Terjadwal.
+  - **Ringkasan alokasi**: bucket root dengan "aktual% / target%" dan `AllocationBar` (palet §8.8), lalu "Belum dialokasikan x%" dan satu baris `text-warning` bila ada peringatan target. Judul → Alokasi.
+- Belum ada transaksi: empty state §7.7 menggantikan chart & tabel; section cards dan baris kartu ringkas tetap tampil.
 - Data dimuat ulang setelah aksi tulis (`ledgerVersion` di store transaksi).
 
 ### 8.2 Transaksi

@@ -120,4 +120,51 @@ describe('DashboardView', () => {
     await settle()
     expect($$('[data-testid="recent-txn"]')[0]!.textContent).toContain('Warung')
   })
+
+  it('top kategori maksimal 5 sesuai urutan backend', async () => {
+    // Default hanya punya 4 root pengeluaran: tambah 2 agar ada 6 root.
+    await ipc.createCategory('expense', { name: 'Hiburan', parentId: null, icon: null, color: null })
+    await ipc.createCategory('expense', { name: 'Kesehatan', parentId: null, icon: null, color: null })
+    const roots = (await ipc.listCategories()).filter((c) => c.kind === 'expense' && !c.parentId && !c.archived)
+    const picked = roots.slice(0, 6)
+    for (const [i, c] of picked.entries()) {
+      const amount = (6 - i) * 100_000
+      await ipc.createTxn({
+        kind: 'expense', date: '2026-10-04', accountId: bca, toAccountId: null, amount,
+        splits: [{ categoryId: c.id, amount, memo: null }], fee: null, payee: null, note: null, tags: [],
+      })
+    }
+    await view()
+    const rows = $$('[data-testid="top-category-row"]')
+    expect(rows).toHaveLength(5)
+    expect(rows[0]!.textContent).toContain(picked[0]!.name)
+    expect(rows[0]!.textContent).toMatch(/6\d\d\.000/)
+  })
+
+  it('kartu jatuh tempo maksimal 5 baris dan menaut ke Terjadwal', async () => {
+    for (let i = 0; i < 6; i++) {
+      await ipc.createRule({
+        form: { kind: 'expense', date: '2026-10-10', accountId: bca, toAccountId: null, amount: 100_000 + i,
+          splits: [{ categoryId: kopi, amount: 100_000 + i, memo: null }], fee: null, payee: `Tagihan ${i}`, note: null, tags: [] },
+        recurrence: { freq: 'monthly', interval: 1, until: null }, autoPost: false,
+      })
+    }
+    await view()
+    expect($$('[data-testid="dashboard-due-row"]')).toHaveLength(5)
+    const more = $<HTMLAnchorElement>('[data-testid="dashboard-due-more"]')
+    expect(more.textContent).toContain('(6)')
+    expect(more.getAttribute('href')).toContain('/scheduled')
+  })
+
+  it('ringkasan alokasi hanya menampilkan bucket root', async () => {
+    const root = await ipc.createBucket({ name: 'Aset', parentId: null, targetBp: 10000, targetAmount: null, color: null })
+    await ipc.createBucket({ name: 'Saham', parentId: root, targetBp: 10000, targetAmount: null, color: null })
+    await view()
+    const rows = $$('[data-testid="allocation-summary-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.textContent).toContain('Aset')
+    expect(rows[0]!.textContent).toContain('0% / target 100%')
+    expect($('[data-testid="dashboard-allocation"]').textContent).toContain('Belum dialokasikan 100%')
+  })
 })
+

@@ -291,6 +291,13 @@ export default {
     recent: 'Transaksi terakhir',
     seeAll: 'Lihat semua',
     budgetWatch: 'Budget perlu dilihat',
+    topCategories: 'Top kategori pengeluaran',
+    due: 'Terjadwal jatuh tempo',
+    dueMore: 'Lihat semua ({n})',
+    allocation: 'Ringkasan alokasi',
+    allocationRow: '{actual} / target {target}',
+    allocationWarning: 'Target alokasi perlu dicek',
+    unallocated: 'Belum dialokasikan {percent}',
     columns: { date: 'Tanggal', description: 'Keterangan', account: 'Akun', amount: 'Nominal' },
   },
   onboarding: {

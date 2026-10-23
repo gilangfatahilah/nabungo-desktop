@@ -291,6 +291,13 @@ export default {
     recent: 'Recent transactions',
     seeAll: 'See all',
     budgetWatch: 'Budgets to watch',
+    topCategories: 'Top spending categories',
+    due: 'Scheduled and due',
+    dueMore: 'See all ({n})',
+    allocation: 'Allocation summary',
+    allocationRow: '{actual} / target {target}',
+    allocationWarning: 'Allocation targets need a look',
+    unallocated: 'Unallocated {percent}',
     columns: { date: 'Date', description: 'Description', account: 'Account', amount: 'Amount' },
   },
   onboarding: {

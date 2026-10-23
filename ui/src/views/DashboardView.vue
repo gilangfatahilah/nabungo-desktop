@@ -4,10 +4,13 @@ import { PlusIcon } from '@lucide/vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AccountsCard from '@/components/dashboard/AccountsCard.vue'
+import AllocationSummaryCard from '@/components/dashboard/AllocationSummaryCard.vue'
 import BudgetWatchCard from '@/components/dashboard/BudgetWatchCard.vue'
 import CashflowCard from '@/components/dashboard/CashflowCard.vue'
+import DueScheduledCard from '@/components/dashboard/DueScheduledCard.vue'
 import RecentTxnsCard from '@/components/dashboard/RecentTxnsCard.vue'
 import SectionCards from '@/components/dashboard/SectionCards.vue'
+import TopCategoriesCard from '@/components/dashboard/TopCategoriesCard.vue'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { formatRange } from '@/lib/date'
@@ -16,6 +19,7 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useReportsStore } from '@/stores/reports'
+import { useScheduledStore } from '@/stores/scheduled'
 import { useSettingsStore } from '@/stores/settings'
 import { useTransactionsStore } from '@/stores/transactions'
 import { useUiStore } from '@/stores/ui'
@@ -27,9 +31,10 @@ const accounts = useAccountsStore()
 const categories = useCategoriesStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
+const scheduled = useScheduledStore()
 
 const current = computed(() => reports.cashflow.at(-1))
-const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.load()]))
+const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.load(), scheduled.reload()]))
 
 onMounted(() => {
   void load()
@@ -62,5 +67,11 @@ watch(() => txns.ledgerVersion, () => void load())
         </div>
       </div>
     </template>
+    <!-- Tampil juga tanpa transaksi: tiap kartu menyembunyikan dirinya sendiri bila datanya kosong. -->
+    <div class="grid grid-cols-1 gap-4 md:gap-6 @3xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+      <TopCategoriesCard :rows="dashboard.topCategories" />
+      <DueScheduledCard />
+      <AllocationSummaryCard v-if="dashboard.allocation" :overview="dashboard.allocation" />
+    </div>
   </div>
 </template>
