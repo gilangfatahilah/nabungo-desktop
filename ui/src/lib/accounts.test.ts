@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountDto, AccountsOverviewDto } from '@/ipc'
-import { balanceTone, groupAccounts, moveAccount } from './accounts'
+import { assetsByKind, balanceTone, groupAccounts, moveAccount } from './accounts'
 
 function acc(id: string, groupId: string | null, balance: number, extra: Partial<AccountDto> = {}): AccountDto {
   return {
@@ -66,5 +66,31 @@ describe('moveAccount & balanceTone', () => {
   it('saldo negatif → expense, lainnya neutral', () => {
     expect(balanceTone(acc('x', null, -1, { kind: 'credit_card' }))).toBe('expense')
     expect(balanceTone(acc('x', null, 0))).toBe('neutral')
+  })
+})
+
+describe('assetsByKind', () => {
+  it('aturan aset sama dengan net_worth Rust: termasuk arsip, tanpa liabilitas & akun dikecualikan', () => {
+    const o: AccountsOverviewDto = {
+      groups: [],
+      accounts: [
+        acc('bca', null, 1_000_000),
+        acc('mandiri', null, 500_000),
+        acc('dompet', null, 20_000, { kind: 'cash' }),
+        acc('lama', null, 5_000, { kind: 'cash', archived: true }),
+        acc('cc', null, -250_000, { kind: 'credit_card' }),
+        acc('budi', null, 300_000, { kind: 'receivable' }),
+        acc('hutang', null, -100_000, { kind: 'receivable' }),
+        acc('reksa', null, 900_000, { kind: 'investment', includeInNetWorth: false }),
+      ],
+      netWorth: { assets: 1_825_000, liabilities: 350_000, net: 1_475_000 },
+    }
+    const rows = assetsByKind(o)
+    expect(rows).toEqual([
+      { kind: 'cash', amount: 25_000 },
+      { kind: 'bank', amount: 1_500_000 },
+      { kind: 'receivable', amount: 300_000 },
+    ])
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(o.netWorth.assets)
   })
 })

@@ -128,6 +128,15 @@ describe('TxnForm', () => {
     expect((await txns()).total).toBe(before)
   })
 
+  it('preset dari aksi cepat Dasbor: jenis dan akun terisi', async () => {
+    const dana = await ipc.createAccount('ewallet', { name: 'DANA', groupId: null, includeInNetWorth: true, creditLimit: null,
+      statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2026-10-01', contact: null })
+    await openSheet((u) => u.openNewTxn({ kind: 'income', accountId: dana }))
+    expect($<HTMLElement>('[data-testid="tab-income"]').getAttribute('data-state')).toBe('active')
+    expect($<HTMLElement>('[data-testid="txn-account"]').textContent).toContain('DANA')
+    await ipc.archiveAccount(dana)
+  })
+
   it('transfer: biaya admin memakai kategori default', async () => {
     await openSheet((u) => u.openNewTxn())
     $<HTMLElement>('[data-testid="tab-transfer"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))

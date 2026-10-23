@@ -47,4 +47,27 @@ describe('BarChart', () => {
     expect(document.activeElement).toBe(groups[1]!.element)
     w.unmount()
   })
+
+  it('tooltip: hover kelompok menampilkan label dan nilai; kelompok lain meredup', async () => {
+    const w = mount(BarChart, { props: { ...props, valueFormat: (v: number) => `Rp${v}` } })
+    const groups = w.findAll('[data-part="group"]')
+    await groups[1]!.trigger('mouseenter')
+    const tip = w.get('[data-part="tooltip"]')
+    expect(tip.text()).toContain('Sep')
+    expect(tip.text()).toContain('Masuk')
+    expect(tip.text()).toContain('Rp200')
+    expect(tip.text()).toContain('Rp100')
+    expect(w.get('rect[data-key="in"][data-index="0"]').attributes('opacity')).toBe('0.4')
+    expect(w.get('rect[data-key="in"][data-index="1"]').attributes('opacity')).toBeUndefined()
+    await w.trigger('mouseleave')
+    expect(w.find('[data-part="tooltip"]').exists()).toBe(false)
+  })
+
+  it('tooltip: fokus kelompok lewat keyboard ikut menampilkan tooltip', async () => {
+    const w = mount(BarChart, { props })
+    await w.findAll('[data-part="group"]')[0]!.trigger('focus')
+    expect(w.get('[data-part="tooltip"]').text()).toContain('Agu')
+    await w.findAll('[data-part="group"]')[0]!.trigger('blur')
+    expect(w.find('[data-part="tooltip"]').exists()).toBe(false)
+  })
 })

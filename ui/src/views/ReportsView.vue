@@ -10,7 +10,7 @@ import type { CategoryKindDto } from '@/ipc'
 import { colorClass } from '@/lib/colors'
 import { formatPeriod } from '@/lib/date'
 import { iconFor } from '@/lib/icons'
-import { formatCompact, moneyParts } from '@/lib/money'
+import { formatCompact, formatIdr, moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { formatBp } from '@/lib/percent'
 import { cn } from '@/lib/utils'
@@ -32,6 +32,7 @@ const num = (v: number) => {
 }
 // Label sumbu ringkas agar nominal jutaan tidak terpotong; nilai lengkap ada di tabel.
 const axis = (v: number) => formatCompact(Math.round(v), settings.locale)
+const money = (v: number) => formatIdr(v, settings.locale)
 const label = (period: string) => formatPeriod(period, settings.locale)
 
 const cashflowLabels = computed(() => store.cashflow.map((p) => label(p.period)))
@@ -80,7 +81,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
       </div>
       <div class="max-w-3xl" data-testid="cashflow-chart">
         <BarChart
-          :labels="cashflowLabels" :series="cashflowSeries" :label="t('reports.cashflowChart')" :format="axis"
+          :labels="cashflowLabels" :series="cashflowSeries" :label="t('reports.cashflowChart')" :format="axis" :value-format="money"
           :selected="selectedIndex" @select="(i) => store.cashflow[i] && select(store.cashflow[i]!.period)"
         />
       </div>
@@ -150,7 +151,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
         </ul>
       </div>
       <div class="max-w-3xl" data-testid="networth-chart">
-        <LineChart :labels="netWorthLabels" :series="netWorthSeries" :label="t('reports.netWorthChart')" :format="axis" />
+        <LineChart :labels="netWorthLabels" :series="netWorthSeries" :label="t('reports.netWorthChart')" :format="axis" :value-format="money" />
       </div>
       <div class="-mx-2 flex max-w-3xl flex-col" role="table">
         <div :class="cn(row, 'h-8 text-meta text-muted-foreground')" role="row">

@@ -343,7 +343,7 @@ describe('browser ledger alokasi (paritas Rust)', () => {
     for (const b of [...o.buckets].reverse()) await data(L.deleteBucket(b.id))
   }
   const bucket = (name: string, parentId: string | null, targetBp: number) =>
-    data(L.createBucket({ name, parentId, targetBp, color: null }))
+    data(L.createBucket({ name, parentId, targetBp, targetAmount: null, color: null }))
   const err = (code: string) => ({ status: 'error', error: { code } })
   const investment = (name: string, opening: number) => data(L.createAccount('investment', {
     name, groupId: null, includeInNetWorth: true, creditLimit: null, statementDay: null,
@@ -358,9 +358,9 @@ describe('browser ledger alokasi (paritas Rust)', () => {
     expect(o.buckets.map((b) => b.id)).toEqual([aset, saham])
     expect(o.actuals.find((a) => a.bucketId === saham)!.targetBp).toBe(4200)
     expect(o.actuals.find((a) => a.bucketId === aset)!.targetBp).toBe(7000)
-    expect(await L.createBucket({ name: 'Liquid', parentId: null, targetBp: 3001, color: null }))
+    expect(await L.createBucket({ name: 'Liquid', parentId: null, targetBp: 3001, targetAmount: null, color: null }))
       .toMatchObject(err('allocation_targets_exceed'))
-    expect(await L.createBucket({ name: ' aset ', parentId: null, targetBp: 0, color: null }))
+    expect(await L.createBucket({ name: ' aset ', parentId: null, targetBp: 0, targetAmount: null, color: null }))
       .toMatchObject({ status: 'error', error: { code: 'duplicate', entity: 'bucket' } })
     expect(await L.deleteBucket(aset)).toMatchObject({ status: 'error', error: { code: 'in_use', entity: 'bucket' } })
   })
@@ -408,9 +408,9 @@ describe('browser ledger alokasi (paritas Rust)', () => {
     const aset = await bucket('Aset', null, 7000)
     const liquid = await bucket('Liquid', null, 3000)
     const saham = await bucket('Saham', aset, 6000)
-    expect(await L.createBucket({ name: 'Bluechip', parentId: saham, targetBp: 100, color: null })).toMatchObject(err('allocation_depth'))
-    expect(await L.updateBucket(aset, { name: 'Aset', parentId: liquid, targetBp: 7000, color: null })).toMatchObject(err('allocation_depth'))
-    expect(await L.updateBucket(liquid, { name: 'Liquid', parentId: liquid, targetBp: 3000, color: null })).toMatchObject(err('allocation_depth'))
+    expect(await L.createBucket({ name: 'Bluechip', parentId: saham, targetBp: 100, targetAmount: null, color: null })).toMatchObject(err('allocation_depth'))
+    expect(await L.updateBucket(aset, { name: 'Aset', parentId: liquid, targetBp: 7000, targetAmount: null, color: null })).toMatchObject(err('allocation_depth'))
+    expect(await L.updateBucket(liquid, { name: 'Liquid', parentId: liquid, targetBp: 3000, targetAmount: null, color: null })).toMatchObject(err('allocation_depth'))
   })
 
   it('history uses balances at each period end', async () => {

@@ -77,10 +77,10 @@ describe('AllocationView', () => {
 
   it('peringatan muncul saat target root bukan 100%', async () => {
     const aset = await bucketId('Aset')
-    await ipc.updateBucket(aset, { name: 'Aset', parentId: null, targetBp: 6000, color: null })
-    await ipc.createBucket({ name: 'Liquid', parentId: null, targetBp: 3000, color: null })
+    await ipc.updateBucket(aset, { name: 'Aset', parentId: null, targetBp: 6000, targetAmount: null, color: null })
+    await ipc.createBucket({ name: 'Liquid', parentId: null, targetBp: 3000, targetAmount: null, color: null })
     await view()
-    expect($('[data-testid="allocation-warnings"]').textContent).toContain('Target tingkat utama berjumlah 90%, bukan 100%')
+    expect($('[data-testid="allocation-warnings"]').textContent).toContain('Target persen tingkat utama berjumlah 90%, bukan 100%')
   })
 
   it('memetakan akun memperbarui porsi aktual dan menghapus dari belum dialokasikan', async () => {
@@ -105,7 +105,7 @@ describe('AllocationView', () => {
 
   it('child menampilkan target relatif terhadap parent', async () => {
     const aset = await bucketId('Aset')
-    await ipc.createBucket({ name: 'Saham', parentId: aset, targetBp: 6000, color: null })
+    await ipc.createBucket({ name: 'Saham', parentId: aset, targetBp: 6000, targetAmount: null, color: null })
     await view()
     const row = $(`[data-testid="bucket-row-${await bucketId('Saham')}"]`)
     expect(row.textContent).toContain('60% dari Aset')
@@ -125,5 +125,28 @@ describe('AllocationView', () => {
     await settle()
     expect($(`[data-testid="mapping-${bca}"]`).textContent).toContain('1.500.000')
     expect(aset()).toContain('1.350.000')
+  })
+
+  it('membuat bucket nominal lewat dialog', async () => {
+    await view()
+    $('[data-testid="bucket-new"]').click()
+    await settle()
+    await type('#bucket-name', 'Darurat')
+    $('[data-testid="bucket-kind-amount"]').click()
+    await settle()
+    await type('#bucket-amount', '300000')
+    await submit('bucket-form')
+    const darurat = (await ipc.allocationOverview()).buckets.find((b) => b.name === 'Darurat')!
+    expect(darurat).toMatchObject({ targetBp: 0, targetAmount: 300_000 })
+    expect($(`[data-testid="bucket-target-amount-${darurat.id}"]`).textContent).toContain('300.000')
+    // Gross 1.500.000: nominal 300.000 = 20%.
+    expect($(`[data-testid="bucket-target-${darurat.id}"]`).textContent).toBe('20%')
+  })
+
+  it('peringatan saat target nominal melebihi total aset', async () => {
+    await ipc.createBucket({ name: 'Rumah', parentId: null, targetBp: 0, targetAmount: 2_000_000, color: null })
+    await view()
+    expect($('[data-testid="allocation-warnings"]').textContent)
+      .toContain('Target nominal tingkat utama 2.300.000 melebihi total aset 1.500.000')
   })
 })

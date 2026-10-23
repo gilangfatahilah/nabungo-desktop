@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 
 use nabungo_core::{
-    AccountBalance, AllocationError, AllocationReport, Bucket, BudgetPeriod, Mapping,
-    allocation_report, check_bp, check_shares, check_sibling_targets, normalize_name,
+    AccountBalance, AllocationError, AllocationReport, Bucket, BudgetPeriod, Mapping, Target,
+    allocation_report, check_shares, check_sibling_targets, check_target, normalize_name,
 };
 use nabungo_storage::allocation::{self, BucketRow, NewBucket};
 use nabungo_storage::rusqlite::Connection;
@@ -20,7 +20,7 @@ use crate::reports::periods_ending;
 pub struct BucketFields {
     pub name: String,
     pub parent_id: Option<Uuid>,
-    pub target_bp: i64,
+    pub target: Target,
     pub color: Option<String>,
 }
 
@@ -46,7 +46,7 @@ impl Ledger {
         let name = normalize_name(&f.name)?;
         let tx = self.conn.transaction()?;
         check_parent(&tx, None, f.parent_id)?;
-        check_siblings(&tx, None, f.parent_id, f.target_bp)?;
+        check_siblings(&tx, None, f.parent_id, f.target)?;
         let sort_order = allocation::next_bucket_sort_order(&tx, f.parent_id)?;
         let id = allocation::insert_bucket(&tx, &new_bucket(f, name, sort_order))
             .map_err(AppError::duplicate_as("bucket"))?;
@@ -60,7 +60,7 @@ impl Ledger {
         let tx = self.conn.transaction()?;
         let current = allocation::get_bucket(&tx, id)?.ok_or(AppError::NotFound("bucket"))?;
         check_parent(&tx, Some(id), f.parent_id)?;
-        check_siblings(&tx, Some(id), f.parent_id, f.target_bp)?;
+        check_siblings(&tx, Some(id), f.parent_id, f.target)?;
         let sort_order = if current.parent_id == f.parent_id {
             current.sort_order
         } else {
@@ -196,7 +196,7 @@ fn new_bucket(f: &BucketFields, name: String, sort_order: i64) -> NewBucket {
     NewBucket {
         parent_id: f.parent_id,
         name,
-        target_bp: f.target_bp,
+        target: f.target,
         color: f.color.clone(),
         sort_order,
     }
@@ -207,7 +207,7 @@ fn core_buckets(rows: &[BucketRow]) -> Vec<Bucket> {
         .map(|r| Bucket {
             id: r.id,
             parent_id: r.parent_id,
-            target_bp: r.target_bp,
+            target: r.target,
         })
         .collect()
 }
@@ -233,19 +233,24 @@ fn check_parent(conn: &Connection, id: Option<Uuid>, parent: Option<Uuid>) -> Re
     Ok(())
 }
 
-/// Σ target sibling (tanpa bucket itu sendiri) + target baru ≤ 100%.
+/// Σ target persen sibling (tanpa bucket itu sendiri) + target baru ≤ 100%; bucket nominal
+/// tidak ikut dijumlah.
 fn check_siblings(
     conn: &Connection,
     id: Option<Uuid>,
     parent: Option<Uuid>,
-    target_bp: i64,
+    target: Target,
 ) -> Result<(), AppError> {
-    check_bp(target_bp)?;
+    let percent = |t: Target| match t {
+        Target::Percent(bp) => Some(bp),
+        Target::Amount(_) => None,
+    };
+    let target = check_target(target)?;
     let others = allocation::list_buckets(conn)?
         .into_iter()
         .filter(|b| b.parent_id == parent && Some(b.id) != id)
-        .map(|b| b.target_bp);
-    check_sibling_targets(others.chain([target_bp]))?;
+        .filter_map(|b| percent(b.target));
+    check_sibling_targets(others.chain(percent(target)))?;
     Ok(())
 }
 
@@ -254,15 +259,22 @@ mod tests {
     use super::*;
     use crate::AccountFields;
     use crate::testkit::Kit;
-    use nabungo_core::AccountKind;
+    use nabungo_core::{AccountKind, Target};
     use time::macros::date;
 
     fn fields(name: &str, parent_id: Option<Uuid>, target_bp: i64) -> BucketFields {
         BucketFields {
             name: name.into(),
             parent_id,
-            target_bp,
+            target: Target::Percent(target_bp),
             color: None,
+        }
+    }
+
+    fn nominal(name: &str, parent_id: Option<Uuid>, amount: i64) -> BucketFields {
+        BucketFields {
+            target: Target::Amount(amount),
+            ..fields(name, parent_id, 0)
         }
     }
 
@@ -509,5 +521,52 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn create_nominal_bucket_and_overview() {
+        let mut k = kit();
+        let darurat = k
+            .ledger
+            .create_bucket(&nominal("Darurat", None, 500_000))
+            .unwrap();
+        let invest = k
+            .ledger
+            .create_bucket(&fields("Investasi", None, 10000))
+            .unwrap();
+        let o = k.ledger.allocation_overview().unwrap();
+        assert_eq!(o.buckets[0].target, Target::Amount(500_000));
+        let t = |id| {
+            let b = o.report.buckets.iter().find(|b| b.bucket_id == id).unwrap();
+            (b.target_amount, b.target_bp)
+        };
+        assert_eq!(t(darurat), (500_000, 5000));
+        assert_eq!(t(invest), (500_000, 5000));
+    }
+
+    #[test]
+    fn nominal_must_be_positive() {
+        let mut k = kit();
+        assert!(matches!(
+            k.ledger.create_bucket(&nominal("Darurat", None, 0)),
+            Err(AppError::Allocation(AllocationError::InvalidAmount))
+        ));
+    }
+
+    #[test]
+    fn switch_target_kind_roundtrip() {
+        let mut k = kit();
+        let a = k.ledger.create_bucket(&fields("A", None, 6000)).unwrap();
+        k.ledger.create_bucket(&fields("B", None, 4000)).unwrap();
+        k.ledger
+            .update_bucket(a, &nominal("A", None, 1_000))
+            .unwrap();
+        k.ledger.create_bucket(&fields("C", None, 6000)).unwrap();
+        assert!(matches!(
+            k.ledger.update_bucket(a, &fields("A", None, 1)),
+            Err(AppError::Allocation(AllocationError::TargetsExceed {
+                total: 10001
+            }))
+        ));
     }
 }

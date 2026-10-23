@@ -3,7 +3,7 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, BackupDto, BackupKindDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
@@ -663,14 +663,37 @@ function validateBucket(selfId: string | null, f: BucketFieldsDto): Result<strin
     if (parent.parentId !== null) return fail('allocation_depth')
     if (selfId && state.buckets.some((b) => b.parentId === selfId)) return fail('allocation_depth')
   }
-  if (!checkBp(f.targetBp)) return fail('allocation_invalid_bp')
+  if (f.targetAmount !== null) {
+    if (!Number.isInteger(f.targetAmount) || f.targetAmount <= 0) return fail('allocation_invalid_amount')
+  } else if (!checkBp(f.targetBp)) return fail('allocation_invalid_bp')
   const siblings = state.buckets.filter((b) => b.parentId === f.parentId && b.id !== selfId)
-  if (siblings.reduce((m, b) => m + b.targetBp, f.targetBp) > FULL_BP) return fail('allocation_targets_exceed')
+  // Σ target persen sibling ≤ 100%; bucket nominal tidak ikut dijumlah.
+  const percentOf = (b: { targetBp: number; targetAmount: number | null }) => (b.targetAmount === null ? b.targetBp : 0)
+  if (siblings.reduce((m, b) => m + percentOf(b), percentOf(f)) > FULL_BP) return fail('allocation_targets_exceed')
   if (siblings.some((b) => b.name.toLowerCase() === name.toLowerCase())) return fail('duplicate', 'bucket')
   return ok(name)
 }
 
+/** Kolom target seperti storage Rust: bucket nominal disimpan dengan `targetBp = 0`. */
+const bucketTarget = (f: BucketFieldsDto) =>
+  f.targetAmount !== null ? { targetBp: 0, targetAmount: f.targetAmount } : { targetBp: f.targetBp, targetAmount: null }
+
 type Balance = { id: string; kind: AccountKindDto; balance: number; includeInNetWorth: boolean }
+
+/** Cermin `level_targets` di core: per tingkat, nominal dipenuhi dulu, persen membagi sisanya;
+ *  basis child = target parent. `nominal` memetakan nominal ke ruang hitung (rupiah atau bp). */
+function levelTargets(buckets: BucketDto[], rootBase: number, nominal: (n: number) => number): Map<string, number> {
+  const out = new Map<string, number>()
+  const assign = (parentId: string | null, base: number) => {
+    const siblings = buckets.filter((b) => b.parentId === parentId)
+    const fixed = siblings.reduce((m, b) => m + (b.targetAmount !== null ? nominal(b.targetAmount) : 0), 0)
+    const rest = Math.max(base - fixed, 0)
+    for (const b of siblings) out.set(b.id, b.targetAmount !== null ? nominal(b.targetAmount) : mulDiv(rest, b.targetBp, FULL_BP))
+  }
+  assign(null, rootBase)
+  for (const root of buckets.filter((b) => !b.parentId)) assign(root.id, out.get(root.id)!)
+  return out
+}
 
 function allocationReport(accounts: Balance[]) {
   let gross = 0
@@ -693,15 +716,18 @@ function allocationReport(accounts: Balance[]) {
   }
   const buckets = bucketTree()
   const bpOf = (amount: number) => (gross > 0 ? mulDiv(amount, FULL_BP, gross) : 0)
+  // Dua ruang hitung dengan aturan yang sama: rupiah (basis gross) dan bp (basis 10000).
+  const amountTargets = levelTargets(buckets, gross, (n) => n)
+  const bpTargets = levelTargets(buckets, FULL_BP, bpOf)
   const actuals: BucketActualDto[] = buckets.map((b) => {
     const actual = (direct.get(b.id) ?? 0)
       + buckets.filter((c) => c.parentId === b.id).reduce((m, c) => m + (direct.get(c.id) ?? 0), 0)
-    const parent = buckets.find((p) => p.id === b.parentId)
-    const targetBp = parent ? mulDiv(parent.targetBp, b.targetBp, FULL_BP) : b.targetBp
+    const targetBp = bpTargets.get(b.id) ?? 0
+    const targetAmount = amountTargets.get(b.id) ?? 0
     const actualBp = bpOf(actual)
     return {
-      bucketId: b.id, targetBp, actual, actualBp, diffBp: actualBp - targetBp,
-      diffAmount: actual - mulDiv(gross, targetBp, FULL_BP),
+      bucketId: b.id, targetBp, targetAmount, actual, actualBp, diffBp: actualBp - targetBp,
+      diffAmount: actual - targetAmount,
     }
   })
   const unallocated: UnallocatedDto[] = []
@@ -713,12 +739,23 @@ function allocationReport(accounts: Balance[]) {
   }
   const unallocatedTotal = unallocated.reduce((m, u) => m + u.amount, 0)
   const warnings: WarningDto[] = []
+  const amountWarnings: AmountWarningDto[] = []
+  const seen = new Set<string | null>()
   for (const b of buckets) {
-    if (warnings.some((w) => w.parentId === b.parentId)) continue
-    const totalBp = buckets.filter((s) => s.parentId === b.parentId).reduce((m, s) => m + s.targetBp, 0)
-    if (totalBp !== FULL_BP) warnings.push({ parentId: b.parentId, totalBp })
+    if (seen.has(b.parentId)) continue
+    seen.add(b.parentId)
+    const siblings = buckets.filter((s) => s.parentId === b.parentId)
+    const percents = siblings.filter((s) => s.targetAmount === null)
+    const totalBp = percents.reduce((m, s) => m + s.targetBp, 0)
+    if (percents.length > 0 && totalBp !== FULL_BP) warnings.push({ parentId: b.parentId, totalBp })
+    const totalAmount = siblings.reduce((m, s) => m + (s.targetAmount ?? 0), 0)
+    const base = b.parentId ? (amountTargets.get(b.parentId) ?? 0) : gross
+    if (gross > 0 && totalAmount > base) amountWarnings.push({ parentId: b.parentId, totalAmount, base })
   }
-  return { buckets, gross, liabilities, actuals, unallocated, unallocatedTotal, unallocatedBp: bpOf(unallocatedTotal), warnings }
+  return {
+    buckets, gross, liabilities, actuals, unallocated, unallocatedTotal, unallocatedBp: bpOf(unallocatedTotal), warnings,
+    amountWarnings,
+  }
 }
 
 const balancesAsOf = (asOf: string | null): Balance[] =>
@@ -1230,7 +1267,7 @@ export const browserLedger = {
     const v = validateBucket(null, fields)
     if (v.status === 'error') return v
     const b: BucketDto = {
-      id: id(), parentId: fields.parentId, name: v.data, targetBp: fields.targetBp, color: fields.color,
+      id: id(), parentId: fields.parentId, name: v.data, ...bucketTarget(fields), color: fields.color,
       sortOrder: nextSort(state.buckets.filter((x) => x.parentId === fields.parentId)),
     }
     state.buckets.push(b)
@@ -1245,7 +1282,7 @@ export const browserLedger = {
     const sortOrder = b.parentId === fields.parentId
       ? b.sortOrder
       : nextSort(state.buckets.filter((x) => x.parentId === fields.parentId))
-    Object.assign(b, { name: v.data, parentId: fields.parentId, targetBp: fields.targetBp, color: fields.color, sortOrder })
+    Object.assign(b, { name: v.data, parentId: fields.parentId, ...bucketTarget(fields), color: fields.color, sortOrder })
     return ok(null)
   },
   deleteBucket: async (i: string): Promise<Result<null>> => {

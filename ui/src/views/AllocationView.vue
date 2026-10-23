@@ -55,13 +55,20 @@ const num = (v: number) => {
 const signed = (text: string, v: number) => (v > 0 ? `+${text}` : text)
 const points = (bp: number) => signed(pct(bp).replace('%', ''), bp)
 
-const warnings = computed(() =>
-  (o.value?.warnings ?? []).map((w) =>
+const warnings = computed(() => [
+  ...(o.value?.warnings ?? []).map((w) =>
     w.parentId
       ? t('allocation.warnChild', { name: byId.value.get(w.parentId)?.name ?? '', total: pct(w.totalBp) })
       : t('allocation.warnRoot', { total: pct(w.totalBp) }),
   ),
-)
+  ...(o.value?.amountWarnings ?? []).map((w) =>
+    w.parentId
+      ? t('allocation.warnAmountChild', { name: byId.value.get(w.parentId)?.name ?? '', total: num(w.totalAmount), base: num(w.base) })
+      : t('allocation.warnAmountRoot', { total: num(w.totalAmount), base: num(w.base) }),
+  ),
+])
+// Segmen donut yang disorot; hover legenda dan donut berbagi state ini.
+const hovered = ref<string | null>(null)
 const segments = computed(() => [
   ...roots.value.map((b) => ({ key: b.id, label: b.name, value: actuals.value.get(b.id)?.actualBp ?? 0, color: colorOf(b) })),
   { key: 'unallocated', label: t('allocation.unallocated'), value: o.value?.unallocatedBp ?? 0, color: UNALLOCATED },
@@ -84,7 +91,11 @@ const shareAt = (i: number, bucketId: string) =>
 const historySeries = computed(() =>
   roots.value.flatMap((b) => [
     { key: b.id, label: b.name, color: colorOf(b), values: history.value.map((_, i) => shareAt(i, b.id)) },
-    { key: `${b.id}-target`, label: t('allocation.targetOf', { name: b.name }), color: colorOf(b), values: history.value.map(() => b.targetBp), dashed: true },
+    // Garis target memakai target global saat ini (bucket nominal dikonversi ke bp dari total aset sekarang).
+    {
+      key: `${b.id}-target`, label: t('allocation.targetOf', { name: b.name }), color: colorOf(b),
+      values: history.value.map(() => actuals.value.get(b.id)?.targetBp ?? 0), dashed: true,
+    },
   ]),
 )
 
@@ -135,9 +146,12 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
     </div>
 
     <section class="flex items-center gap-8">
-      <div class="size-36 shrink-0"><DonutChart :segments="segments" :label="t('allocation.donut')" /></div>
+      <div class="size-36 shrink-0"><DonutChart v-model:active="hovered" :segments="segments" :label="t('allocation.donut')" :locale="settings.locale" /></div>
       <ul class="flex flex-col gap-1.5 text-meta">
-        <li v-for="s in segments.filter((x) => x.value > 0)" :key="s.key" class="flex items-center gap-2">
+        <li
+          v-for="s in segments.filter((x) => x.value > 0)" :key="s.key" class="flex items-center gap-2 transition-opacity"
+          :class="{ 'opacity-50': hovered !== null && hovered !== s.key }" @mouseenter="hovered = s.key" @mouseleave="hovered = null"
+        >
           <span class="size-2.5 rounded-full" :style="{ background: s.color }" />
           <span>{{ s.label }}</span>
           <span class="num text-muted-foreground">{{ pct(s.value) }}</span>
@@ -162,7 +176,13 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
       >
         <span :class="cn('min-w-0', b.parentId && 'pl-6')">
           <span :class="cn('block truncate', !b.parentId && 'font-medium')">{{ b.name }}</span>
-          <span v-if="b.parentId" class="block truncate text-meta text-muted-foreground">
+          <span
+            v-if="b.targetAmount !== null" :data-testid="`bucket-target-amount-${b.id}`"
+            class="block truncate text-meta text-muted-foreground"
+          >
+            {{ t('allocation.fixedAmount', { amount: num(b.targetAmount) }) }}
+          </span>
+          <span v-else-if="b.parentId" class="block truncate text-meta text-muted-foreground">
             {{ t('allocation.relative', { percent: pct(b.targetBp), name: byId.get(b.parentId)?.name ?? '' }) }}
           </span>
         </span>
