@@ -201,6 +201,7 @@ export type AllocationOverviewDto = {
 	unallocatedTotal: number,
 	unallocatedBp: number,
 	warnings: WarningDto[],
+	amountWarnings: AmountWarningDto[],
 };
 
 /**  Porsi bucket root per hari terakhir `period` (`date`). */
@@ -209,6 +210,13 @@ export type AllocationPointDto = {
 	date: string,
 	gross: number,
 	buckets: BucketBpDto[],
+};
+
+/**  Σ target nominal satu tingkat melebihi basisnya (total aset untuk root, target parent). */
+export type AmountWarningDto = {
+	parentId: string | null,
+	totalAmount: number,
+	base: number,
 };
 
 export type AppInfo = {
@@ -235,10 +243,14 @@ export type BackupDto = {
 
 export type BackupKindDto = "auto" | "pre_migration" | "pre_restore";
 
-/**  `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`. */
+/**
+ *  Target efektif: `target_bp` global (porsi dari gross) dan `target_amount` (satuan minor);
+ *  `diff_* = aktual − target`.
+ */
 export type BucketActualDto = {
 	bucketId: string,
 	targetBp: number,
+	targetAmount: number,
 	actual: number,
 	actualBp: number,
 	diffBp: number,
@@ -254,8 +266,10 @@ export type BucketDto = {
 	id: string,
 	parentId: string | null,
 	name: string,
-	/**  Relatif terhadap parent (child) atau total (root); 10000 = 100%. */
+	/**  Relatif terhadap parent (child) atau total (root); 10000 = 100%. 0 bila nominal. */
 	targetBp: number,
+	/**  Target nominal (satuan minor); `null` bila target persen. */
+	targetAmount: number | null,
 	color: string | null,
 	sortOrder: number,
 };
@@ -264,6 +278,8 @@ export type BucketFieldsDto = {
 	name: string,
 	parentId: string | null,
 	targetBp: number,
+	/**  Non-null → target nominal (`target_bp` diabaikan). */
+	targetAmount: number | null,
 	color: string | null,
 };
 
@@ -362,7 +378,7 @@ export type ContactDto = {
 	name: string,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
 
 export type FeeDto = {
 	amount: number,

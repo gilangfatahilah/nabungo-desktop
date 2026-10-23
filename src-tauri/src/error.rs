@@ -66,6 +66,7 @@ pub enum ErrorCode {
     AllocationDepth,
     AllocationLiability,
     AllocationDuplicateBucket,
+    AllocationInvalidAmount,
     BackupInvalid,
     BackupTooNew,
     BackupTargetInvalid,
@@ -181,6 +182,7 @@ impl From<AllocationError> for ErrorCode {
             AllocationError::Depth => ErrorCode::AllocationDepth,
             AllocationError::LiabilityAccount => ErrorCode::AllocationLiability,
             AllocationError::DuplicateBucket => ErrorCode::AllocationDuplicateBucket,
+            AllocationError::InvalidAmount => ErrorCode::AllocationInvalidAmount,
         }
     }
 }
@@ -408,6 +410,8 @@ mod tests {
         assert_eq!(e.code, ErrorCode::AllocationTargetsExceed);
         let e = IpcError::from(AppError::Allocation(AllocationError::LiabilityAccount));
         assert_eq!(e.code, ErrorCode::AllocationLiability);
+        let e = IpcError::from(AppError::Allocation(AllocationError::InvalidAmount));
+        assert_eq!(e.code, ErrorCode::AllocationInvalidAmount);
     }
 
     #[test]

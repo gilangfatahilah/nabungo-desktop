@@ -6,9 +6,9 @@ use nabungo_app::{
     BudgetLevel, BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount,
     CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Freq, Locale,
     NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay,
-    PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Theme, TxnDetail,
-    TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint, format_date,
-    parse_date,
+    PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme,
+    TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint,
+    format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1026,8 +1026,10 @@ pub struct BucketDto {
     pub id: String,
     pub parent_id: Option<String>,
     pub name: String,
-    /// Relatif terhadap parent (child) atau total (root); 10000 = 100%.
+    /// Relatif terhadap parent (child) atau total (root); 10000 = 100%. 0 bila nominal.
     pub target_bp: i64,
+    /// Target nominal (satuan minor); `null` bila target persen.
+    pub target_amount: Option<i64>,
     pub color: Option<String>,
     pub sort_order: i64,
 }
@@ -1038,7 +1040,14 @@ impl From<BucketRow> for BucketDto {
             id: b.id.to_string(),
             parent_id: b.parent_id.map(|p| p.to_string()),
             name: b.name,
-            target_bp: b.target_bp,
+            target_bp: match b.target {
+                Target::Percent(bp) => bp,
+                Target::Amount(_) => 0,
+            },
+            target_amount: match b.target {
+                Target::Amount(n) => Some(n),
+                Target::Percent(_) => None,
+            },
             color: b.color,
             sort_order: b.sort_order,
         }
@@ -1051,6 +1060,8 @@ pub struct BucketFieldsDto {
     pub name: String,
     pub parent_id: Option<String>,
     pub target_bp: i64,
+    /// Non-null → target nominal (`target_bp` diabaikan).
+    pub target_amount: Option<i64>,
     pub color: Option<String>,
 }
 
@@ -1061,7 +1072,9 @@ impl TryFrom<BucketFieldsDto> for BucketFields {
         Ok(Self {
             name: f.name,
             parent_id: parse_opt_id(f.parent_id.as_deref(), "bucket")?,
-            target_bp: f.target_bp,
+            target: f
+                .target_amount
+                .map_or(Target::Percent(f.target_bp), Target::Amount),
             color: f.color,
         })
     }
@@ -1088,12 +1101,14 @@ pub struct MappingDto {
     pub share_bp: i64,
 }
 
-/// `target_bp` global (target parent × target child, K7); `diff_* = aktual − target`.
+/// Target efektif: `target_bp` global (porsi dari gross) dan `target_amount` (satuan minor);
+/// `diff_* = aktual − target`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BucketActualDto {
     pub bucket_id: String,
     pub target_bp: i64,
+    pub target_amount: i64,
     pub actual: i64,
     pub actual_bp: i64,
     pub diff_bp: i64,
@@ -1116,6 +1131,15 @@ pub struct WarningDto {
     pub total_bp: i64,
 }
 
+/// Σ target nominal satu tingkat melebihi basisnya (total aset untuk root, target parent).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AmountWarningDto {
+    pub parent_id: Option<String>,
+    pub total_amount: i64,
+    pub base: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AllocationOverviewDto {
@@ -1129,6 +1153,7 @@ pub struct AllocationOverviewDto {
     pub unallocated_total: i64,
     pub unallocated_bp: i64,
     pub warnings: Vec<WarningDto>,
+    pub amount_warnings: Vec<AmountWarningDto>,
 }
 
 impl From<AllocationOverview> for AllocationOverviewDto {
@@ -1153,6 +1178,7 @@ impl From<AllocationOverview> for AllocationOverviewDto {
                 .map(|b| BucketActualDto {
                     bucket_id: b.bucket_id.to_string(),
                     target_bp: b.target_bp,
+                    target_amount: b.target_amount,
                     actual: b.actual,
                     actual_bp: b.actual_bp,
                     diff_bp: b.diff_bp,
@@ -1176,6 +1202,15 @@ impl From<AllocationOverview> for AllocationOverviewDto {
                 .map(|w| WarningDto {
                     parent_id: w.parent_id.map(|p| p.to_string()),
                     total_bp: w.total_bp,
+                })
+                .collect(),
+            amount_warnings: r
+                .amount_warnings
+                .into_iter()
+                .map(|w| AmountWarningDto {
+                    parent_id: w.parent_id.map(|p| p.to_string()),
+                    total_amount: w.total_amount,
+                    base: w.base,
                 })
                 .collect(),
         }
@@ -1389,6 +1424,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bucket_fields_amount_wins() {
+        let dto = |target_amount| BucketFieldsDto {
+            name: "Darurat".into(),
+            parent_id: None,
+            target_bp: 7000,
+            target_amount,
+            color: None,
+        };
+        let f = BucketFields::try_from(dto(Some(5))).unwrap();
+        assert_eq!(f.target, Target::Amount(5));
+        let f = BucketFields::try_from(dto(None)).unwrap();
+        assert_eq!(f.target, Target::Percent(7000));
+    }
+
+    #[test]
     fn txn_form_dto_round_trip() {
         let (a, b, c, d) = (
             Uuid::now_v7(),
@@ -1502,6 +1552,7 @@ mod tests {
             name: "Saham".into(),
             parent_id: Some("x".into()),
             target_bp: 6000,
+            target_amount: None,
             color: None,
         };
         let e = BucketFields::try_from(f).unwrap_err();

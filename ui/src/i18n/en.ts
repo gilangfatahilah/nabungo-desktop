@@ -515,6 +515,7 @@ export default {
     allocation_depth: 'Buckets can only be two levels deep',
     allocation_liability: 'Liability accounts are not allocated',
     allocation_duplicate_bucket: 'The same bucket is selected twice',
+    allocation_invalid_amount: 'Target amount must be greater than 0',
     backup_invalid: 'This file is not a valid Nabungo backup',
     backup_too_new: 'This backup was made by a newer version of Nabungo',
     backup_target_invalid: 'The active database file cannot be used here',
