@@ -381,6 +381,9 @@ Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Ter
 ### 8.8 Alokasi & Laporan
 
 - Alokasi: tabel target (`target_bp` sebagai persen) vs porsi aktual dengan batang ganda tipis (target = garis penanda, aktual = isi).
+- Target bucket bisa persen atau nominal (CAP-01). Dialog bucket memakai ToggleGroup outline kecil **Persen / Nominal**; mode Nominal memakai `AmountInput` (parse saat blur/submit) dan deskripsi dialog berganti ke penjelasan "nominal dipenuhi dulu, persen membagi sisanya".
+- Kolom Target di tabel selalu persen efektif terhadap total aset; bucket nominal menampilkan baris keterangan `text-meta` muted "Nominal tetap Rp…" di bawah nama (menggantikan keterangan "x% dari parent").
+- Peringatan di atas tabel (`text-warning`, `role="status"`): Σ target persen per tingkat ≠ 100% (hanya bila tingkat itu punya bucket persen) dan Σ target nominal melebihi basisnya (total aset atau target parent). Peringatan tidak memblokir penyimpanan.
 - Laporan: chart sesuai §7.12, setiap chart punya tabel angka di bawahnya.
 
 ### 8.9 Onboarding & Kunci
