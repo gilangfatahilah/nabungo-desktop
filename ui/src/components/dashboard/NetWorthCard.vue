@@ -6,13 +6,13 @@ import DonutChart from '@/components/charts/DonutChart.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AccountKindDto } from '@/ipc'
 import { assetsByKind } from '@/lib/accounts'
-import { formatIdr } from '@/lib/money'
+import { formatCompact, formatIdr } from '@/lib/money'
 import { formatBp } from '@/lib/percent'
 import { useAccountsStore } from '@/stores/accounts'
 import { useSettingsStore } from '@/stores/settings'
 
 // Komposisi kekayaan: porsi aset per jenis akun; total aset/liabilitas/bersih dari backend (docs/design/design.md §8.1).
-// Warna tetap per jenis agar tidak bergeser saat satu jenis kosong.
+// Warna tetap per jenis agar tidak bergeser saat satu jenis kosong. Tengah donut = total aset (jumlah segmen) ringkas.
 const KIND_COLORS: Partial<Record<AccountKindDto, string>> = {
   cash: 'var(--chart-4)',
   bank: 'var(--chart-1)',
@@ -50,7 +50,13 @@ const segments = computed(() => rows.value.map((r) => ({
     </CardHeader>
     <CardContent class="flex flex-col gap-4">
       <div class="flex flex-col items-center gap-4 @sm/card:flex-row @sm/card:gap-6">
-        <div class="size-28 shrink-0"><DonutChart v-model:active="hovered" :segments="segments" :label="$t('dashboard.compositionDonut')" :format="money" :locale="settings.locale" /></div>
+        <div class="relative size-44 shrink-0 @sm/card:size-28">
+          <DonutChart v-model:active="hovered" :segments="segments" :label="$t('dashboard.compositionDonut')" :format="money" :locale="settings.locale" />
+          <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-part="donut-total">
+            <span class="text-meta text-muted-foreground">IDR</span>
+            <span class="num text-heading font-semibold">{{ formatCompact(nw.assets, settings.locale) }}</span>
+          </div>
+        </div>
         <ul class="flex w-full min-w-0 flex-1 flex-col gap-1.5 text-sm">
           <li v-for="r in rows" :key="r.kind" class="flex items-center gap-2 transition-opacity" data-testid="networth-row"
             :class="{ 'opacity-50': hovered !== null && hovered !== r.kind }" @mouseenter="hovered = r.kind" @mouseleave="hovered = null"

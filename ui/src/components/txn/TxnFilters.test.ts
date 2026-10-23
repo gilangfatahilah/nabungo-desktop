@@ -96,7 +96,7 @@ describe('TxnFilters chip payee', () => {
     const w = mount(TxnFilters, { global: { plugins: [i18n] } })
     await flushPromises()
     const chip = w.find('[data-testid="chip-payee"]')
-    expect(chip.text()).toContain('Payee: Indomaret')
+    expect(chip.text()).toContain('Pihak: Indomaret')
     await chip.find('button').trigger('click')
     expect(spy).toHaveBeenCalledWith({ payeeId: null })
   })

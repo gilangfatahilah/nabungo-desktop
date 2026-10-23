@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Minus, TrendingDown, TrendingUp } from '@lucide/vue'
 import LineChart from '@/components/charts/LineChart.vue'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatPeriod } from '@/lib/date'
 import { formatCompact, formatIdr } from '@/lib/money'
+import { formatTrend, trendPercent } from '@/lib/trend'
 import { useReportsStore } from '@/stores/reports'
 import { useSettingsStore } from '@/stores/settings'
 
 // Chart card tren (docs/design/design.md §7.12, §8.1): tab Arus kas | Kekayaan bersih; dropdown rentang
-// memotong data 12 periode dari store reports (label "bulan" = periode budget).
+// memotong data 12 periode dari store reports (label "bulan" = periode budget). Badge arah per rentang:
+// kekayaan bersih = perubahan % titik pertama → terakhir; arus kas = total surplus/defisit (sum `net`).
 const RANGES = [3, 6, 12] as const
 const VIEWS = ['cashflow', 'netWorth'] as const
 type View = (typeof VIEWS)[number]
@@ -35,6 +39,29 @@ const series = computed(() => view.value === 'cashflow'
 const axis = (v: number) => formatCompact(Math.round(v), settings.locale)
 const money = (v: number) => formatIdr(v, settings.locale)
 
+const direction = computed(() => {
+  const span = t(`dashboard.rangeSpan.${range.value}`)
+  if (view.value === 'netWorth') {
+    const percent = trendPercent(netWorth.value.at(-1)?.net ?? 0, netWorth.value.length > 1 ? netWorth.value[0]!.net : undefined)
+    if (percent === null) return null
+    const dir = percent === 0 ? 'flat' : percent > 0 ? 'up' : 'down'
+    return {
+      text: formatTrend(percent),
+      icon: { flat: Minus, up: TrendingUp, down: TrendingDown }[dir],
+      tone: { flat: 'text-muted-foreground', up: 'text-income', down: 'text-expense' }[dir],
+      label: t(`dashboard.trendRange.${dir}`, { range: span }),
+    }
+  }
+  if (!cashflow.value.length) return null
+  const net = cashflow.value.reduce((s, p) => s + p.net, 0)
+  return {
+    text: (net > 0 ? '+' : '') + formatCompact(net, settings.locale),
+    icon: net === 0 ? Minus : net > 0 ? TrendingUp : TrendingDown,
+    tone: net === 0 ? 'text-muted-foreground' : net > 0 ? 'text-income' : 'text-expense',
+    label: t(`dashboard.trendRange.${net < 0 ? 'deficit' : 'surplus'}`, { range: span }),
+  }
+})
+
 function setRange(v: unknown) {
   if (typeof v === 'string' && v) range.value = Number(v)
 }
@@ -55,14 +82,23 @@ function setRange(v: unknown) {
       </CardAction>
     </CardHeader>
     <CardContent class="flex flex-col gap-3">
-      <Tabs v-model="view">
-        <TabsList variant="line">
-          <TabsTrigger v-for="v in VIEWS" :key="v" :value="v" :data-testid="`trend-tab-${v}`">
-            {{ t(v === 'cashflow' ? 'dashboard.cashflow' : 'dashboard.netWorth') }}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <LineChart :labels="labels" :series="series" :label="t(view === 'cashflow' ? 'dashboard.cashflow' : 'dashboard.netWorth')" :format="axis" :value-format="money" area />
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <Tabs v-model="view">
+          <TabsList variant="line">
+            <TabsTrigger v-for="v in VIEWS" :key="v" :value="v" :data-testid="`trend-tab-${v}`">
+              {{ t(v === 'cashflow' ? 'dashboard.cashflow' : 'dashboard.netWorth') }}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div v-if="direction" class="flex items-center gap-2" data-testid="trend-direction">
+          <span class="text-meta text-muted-foreground">{{ direction.label }}</span>
+          <Badge variant="outline">
+            <component :is="direction.icon" :class="direction.tone" aria-hidden="true" />
+            <span class="num">{{ direction.text }}</span>
+          </Badge>
+        </div>
+      </div>
+      <LineChart :labels="labels" :series="series" :label="t(view === 'cashflow' ? 'dashboard.cashflow' : 'dashboard.netWorth')" :format="axis" :value-format="money" area smooth />
       <ul class="flex gap-4 text-meta text-muted-foreground">
         <li v-for="s in series" :key="s.key" class="flex items-center gap-1.5">
           <span class="size-2 rounded-full" :style="{ background: s.color }" aria-hidden="true" />{{ s.label }}

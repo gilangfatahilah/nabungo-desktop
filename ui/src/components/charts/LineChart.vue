@@ -3,9 +3,11 @@ import { useElementSize } from '@vueuse/core'
 import { computed, ref, useTemplateRef } from 'vue'
 import ChartTooltip from './ChartTooltip.vue'
 import { yTicks } from './axis'
+import { monotonePath } from './curve'
 
 // Grafik garis sederhana (docs/design/design.md §8.8); seri `dashed` untuk garis target.
-// `area` mengisi 15% alfa warna seri di bawah garis (chart card Dasbor, §7.12).
+// `area` mengisi 15% alfa warna seri di bawah garis (chart card Dasbor, §7.12); `smooth` melengkungkan
+// garis (kubik monoton, tidak melampaui nilai data) dan dirender sebagai <path>, bukan <polyline>.
 // Hover/fokus menampilkan garis kursor + tooltip periode terdekat; panah/Home/End memindah, Escape menutup.
 const props = defineProps<{
   labels: string[]
@@ -13,6 +15,7 @@ const props = defineProps<{
   label: string
   format: (v: number) => string
   area?: boolean
+  smooth?: boolean
   /** Format nilai di tooltip (default: `format`, mis. nominal penuh vs label sumbu ringkas). */
   valueFormat?: (v: number) => string
 }>()
@@ -40,11 +43,21 @@ const ticks = computed(() =>
   yTicks(range.value.min, range.value.max, TICKS, props.series.every((s) => s.values.every((v) => v === 0))))
 // Label di ujung sumbu ditambatkan ke dalam agar tidak terpotong viewBox.
 const anchor = (i: number) => (i === props.labels.length - 1 && i > 0 ? 'end' : 'middle')
-const lines = computed(() => props.series.map((s) => ({ ...s, points: s.values.map((v, i) => `${x(i)},${y(v)}`).join(' ') })))
-// Poligon area: garis seri lalu kembali sepanjang sumbu nol.
+const lines = computed(() => props.series.map((s) => ({
+  ...s,
+  points: s.values.map((v, i) => `${x(i)},${y(v)}`).join(' '),
+  path: props.smooth ? monotonePath(s.values.map((v, i) => ({ x: x(i), y: y(v) }))) : '',
+})))
+// Area: garis seri lalu kembali sepanjang sumbu nol.
 const areas = computed(() => props.area
-  ? lines.value.filter((s) => !s.dashed && s.values.length > 1)
-    .map((s) => ({ key: s.key, color: s.color, points: `${x(0)},${y(0)} ${s.points} ${x(s.values.length - 1)},${y(0)}` }))
+  ? lines.value.filter((s) => !s.dashed && s.values.length > 1).map((s) => {
+    const end = x(s.values.length - 1)
+    return {
+      key: s.key,
+      color: s.color,
+      d: props.smooth ? `${s.path} L${end},${y(0)} L${x(0)},${y(0)} Z` : `M${x(0)},${y(0)} L${s.points.replaceAll(' ', ' L')} L${end},${y(0)} Z`,
+    }
+  })
   : [])
 // Label terakhir selalu tampil; sisanya per `step` dihitung mundur darinya.
 const xLabels = computed(() => {
@@ -96,11 +109,17 @@ const tooltip = computed(() => {
         v-for="l in xLabels" :key="l.i" data-part="x-label" :x="x(l.i)" :y="H - 6"
         :text-anchor="anchor(l.i)" font-size="11" fill="currentColor"
       >{{ l.text }}</text>
-      <polygon v-for="a in areas" :key="a.key" data-part="area" :points="a.points" :fill="a.color" fill-opacity="0.15" stroke="none" />
-      <polyline
-        v-for="s in lines" :key="s.key" :data-key="s.key" :points="s.points" fill="none" :stroke="s.color"
-        :stroke-width="s.dashed ? 1.5 : 2" :stroke-dasharray="s.dashed ? '4 4' : undefined" stroke-linejoin="round"
-      />
+      <path v-for="a in areas" :key="a.key" data-part="area" :d="a.d" :fill="a.color" fill-opacity="0.15" stroke="none" />
+      <template v-for="s in lines" :key="s.key">
+        <path
+          v-if="smooth" :data-key="s.key" :d="s.path" fill="none" :stroke="s.color"
+          :stroke-width="s.dashed ? 1.5 : 2" :stroke-dasharray="s.dashed ? '4 4' : undefined" stroke-linecap="round"
+        />
+        <polyline
+          v-else :data-key="s.key" :points="s.points" fill="none" :stroke="s.color"
+          :stroke-width="s.dashed ? 1.5 : 2" :stroke-dasharray="s.dashed ? '4 4' : undefined" stroke-linejoin="round"
+        />
+      </template>
       <template v-if="active !== null && tooltip">
         <line data-part="cursor" :x1="x(active)" :x2="x(active)" :y1="PAD.top" :y2="H - PAD.bottom" stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="3 3" />
         <circle

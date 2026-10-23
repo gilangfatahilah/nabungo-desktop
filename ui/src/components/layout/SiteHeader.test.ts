@@ -23,7 +23,7 @@ async function mountHeader(path: string) {
 describe('SiteHeader', () => {
   it('judul halaman (h1) diambil dari route', async () => {
     expect((await mountHeader('/budget')).find('h1').text()).toBe('Budget')
-    expect((await mountHeader('/labels')).find('h1').text()).toBe('Tag & Payee')
+    expect((await mountHeader('/labels')).find('h1').text()).toBe('Tag & Pihak')
   })
 
   it('tombol Cari membuka command palette', async () => {

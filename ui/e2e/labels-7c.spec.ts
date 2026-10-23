@@ -56,8 +56,8 @@ test('kelola tag dan payee', async ({ page }) => {
   await expect(dialog).toBeHidden()
   await expect(labelRow(page, '#Kantor')).toContainText('1 transaksi')
 
-  await page.getByRole('tab', { name: 'Payee' }).click()
-  await page.getByRole('button', { name: 'Payee baru' }).click()
+  await page.getByRole('tab', { name: 'Pihak' }).click()
+  await page.getByRole('button', { name: 'Pihak baru' }).click()
   dialog = page.getByRole('dialog')
   await dialog.locator('#label-name').fill('Indomaret')
   await dialog.getByRole('button', { name: /Simpan/ }).click()
@@ -73,7 +73,7 @@ test('kelola tag dan payee', async ({ page }) => {
   await expect(labelRow(page, 'Indomaret')).toContainText('1 transaksi')
 
   await rowAction(page, 'Indomaret', 'Lihat transaksi')
-  await expect(page.locator('[data-testid="chip-payee"]')).toContainText('Payee: Indomaret')
+  await expect(page.locator('[data-testid="chip-payee"]')).toContainText('Pihak: Indomaret')
   const rows = page.locator('[data-txn-id]')
   await expect(rows).toHaveCount(1)
   await expect(rows.first()).toContainText('Indomaret')

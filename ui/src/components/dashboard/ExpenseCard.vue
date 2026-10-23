@@ -5,15 +5,14 @@ import MoneyText from '@/components/MoneyText.vue'
 import DonutChart from '@/components/charts/DonutChart.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { BudgetTotalDto, CategoryAmountDto } from '@/ipc'
-import { formatIdr } from '@/lib/money'
-import { formatBp } from '@/lib/percent'
+import { formatCompact, formatIdr } from '@/lib/money'
 import { TOP_LIMIT } from '@/stores/dashboard'
 import { useCategoriesStore } from '@/stores/categories'
 import { useReportsStore } from '@/stores/reports'
 import { useSettingsStore } from '@/stores/settings'
 
 // Pengeluaran periode berjalan: periode ini vs lalu (laporan arus kas), sisa budget, donut 5 kategori root
-// teratas + "Lainnya" (docs/design/design.md §8.1). Urutan & nominal dari backend; persen hanya presentasi.
+// teratas + "Lainnya" (docs/design/design.md §8.1); tengah donut = total pengeluaran ringkas. Urutan & nominal dari backend.
 const props = defineProps<{ rows: CategoryAmountDto[]; budget: BudgetTotalDto | null }>()
 const PALETTE = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
 const OTHER_COLOR = 'var(--muted-foreground)'
@@ -37,7 +36,6 @@ const segments = computed(() => other.value > 0
 // Segmen yang disorot; hover legenda dan donut berbagi state ini.
 const hovered = ref<string | null>(null)
 const money = (v: number) => formatIdr(v, settings.locale)
-const share = (amount: number) => (total.value > 0 ? Math.round((amount * 10000) / total.value) : 0)
 </script>
 
 <template>
@@ -71,9 +69,9 @@ const share = (amount: number) => (total.value > 0 ? Math.round((amount * 10000)
       <div class="flex flex-col items-center gap-4 @sm/card:flex-row">
         <div class="relative size-32 shrink-0">
           <DonutChart v-model:active="hovered" :segments="segments" :label="$t('dashboard.expenseDonut')" :format="money" :locale="settings.locale" />
-          <div v-if="top[0]" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span class="num text-heading font-semibold">{{ formatBp(share(top[0].value), settings.locale) }}</span>
-            <span class="max-w-16 truncate text-meta text-muted-foreground">{{ top[0].label }}</span>
+          <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-part="donut-total">
+            <span class="text-meta text-muted-foreground">IDR</span>
+            <span class="num text-heading font-semibold">{{ formatCompact(total, settings.locale) }}</span>
           </div>
         </div>
         <ul class="flex w-full min-w-0 flex-col gap-1.5 text-sm">
