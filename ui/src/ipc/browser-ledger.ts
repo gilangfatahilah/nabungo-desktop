@@ -722,8 +722,8 @@ function allocationReport(accounts: Balance[]) {
   const actuals: BucketActualDto[] = buckets.map((b) => {
     const actual = (direct.get(b.id) ?? 0)
       + buckets.filter((c) => c.parentId === b.id).reduce((m, c) => m + (direct.get(c.id) ?? 0), 0)
-    const targetBp = bpTargets.get(b.id)!
-    const targetAmount = amountTargets.get(b.id)!
+    const targetBp = bpTargets.get(b.id) ?? 0
+    const targetAmount = amountTargets.get(b.id) ?? 0
     const actualBp = bpOf(actual)
     return {
       bucketId: b.id, targetBp, targetAmount, actual, actualBp, diffBp: actualBp - targetBp,
@@ -749,7 +749,7 @@ function allocationReport(accounts: Balance[]) {
     const totalBp = percents.reduce((m, s) => m + s.targetBp, 0)
     if (percents.length > 0 && totalBp !== FULL_BP) warnings.push({ parentId: b.parentId, totalBp })
     const totalAmount = siblings.reduce((m, s) => m + (s.targetAmount ?? 0), 0)
-    const base = b.parentId ? amountTargets.get(b.parentId)! : gross
+    const base = b.parentId ? (amountTargets.get(b.parentId) ?? 0) : gross
     if (gross > 0 && totalAmount > base) amountWarnings.push({ parentId: b.parentId, totalAmount, base })
   }
   return {

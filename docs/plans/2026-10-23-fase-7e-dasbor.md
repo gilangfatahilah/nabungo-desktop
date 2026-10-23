@@ -57,7 +57,7 @@
 
 ## Review Focus
 
-1. **Data lama tanpa nominal.** Hasil laporan alokasi tidak boleh berubah sedikit pun. Test: semua test `allocation.rs` lama lolos tanpa diubah (Task 1), ditambah `percent_only_matches_fase5_rule` di Task 5 (browser).
+1. **Data lama tanpa nominal.** Semua `target_bp`/`diff_bp` dan baris root tidak berubah. Pengecualian yang disengaja (temuan review akhir): `diff_amount` child kini dihitung dari target rupiah parent, `floor(floor(gross × p) × c)`, bukan `gross × floor(p × c)`, sehingga bisa bergeser beberapa rupiah dan konsisten dengan `target_amount`; dipatok oleh `child_diff_amount_uses_parent_amount` (core + browser). Test: semua test `allocation.rs` lama lolos tanpa diubah (Task 1), ditambah `percent_only_matches_fase5_rule` di Task 5 (browser).
 2. **Σ nominal melebihi total aset** (saldo turun setelah target dibuat). Bucket persen sibling bertarget 0, ada `AmountWarning`, tidak ada error. Test: Task 1 `nominal_exceeding_base_warns`.
 3. **Gross 0** (akun baru, semua saldo 0). Tidak ada panik/pembagian nol; nominal `target_bp = 0`, tanpa `AmountWarning`. Test: Task 1 `zero_gross_with_nominal`.
 4. **Ubah bucket dari persen ke nominal dan sebaliknya.** Kolom lama dibersihkan (`target_amount = NULL` / `target_bp = 0`), dan batas Σ persen menghitung ulang tanpa bucket yang kini nominal. Test: Task 3 `switch_target_kind_roundtrip`.

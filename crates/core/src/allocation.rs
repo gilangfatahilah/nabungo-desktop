@@ -233,7 +233,9 @@ pub fn allocation_report(
         .iter()
         .map(|b| {
             let actual = actual_of(b.id);
-            let (target_bp, target_amount) = (bp_targets[&b.id], amount_targets[&b.id]);
+            // Bucket di luar 2 tingkat (DB diedit manual) tidak punya target: 0, bukan panik.
+            let target_of = |m: &HashMap<Uuid, i128>| m.get(&b.id).copied().unwrap_or(0);
+            let (target_bp, target_amount) = (target_of(&bp_targets), target_of(&amount_targets));
             let actual_bp = bp_of(actual);
             Ok(BucketActual {
                 bucket_id: b.id,
@@ -292,7 +294,9 @@ pub fn allocation_report(
                 Target::Percent(_) => None,
             })
             .sum();
-        let base = b.parent_id.map_or(gross, |p| amount_targets[&p]);
+        let base = b
+            .parent_id
+            .map_or(gross, |p| amount_targets.get(&p).copied().unwrap_or(0));
         if gross > 0 && total_amount > base {
             amount_warnings.push(AmountWarning {
                 parent_id: b.parent_id,
@@ -601,5 +605,34 @@ mod tests {
             Err(AllocationError::InvalidBasisPoints)
         );
         assert_eq!(check_shares(&[(a, 6000), (b, 4000)]), Ok(()));
+    }
+
+    #[test]
+    fn child_diff_amount_uses_parent_amount() {
+        // Target rupiah child = floor(floor(gross × p) × c), bukan gross × floor(p × c) (rumus Fase 5).
+        let (root, child, bca) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        let b = [bucket(root, None, 3333), bucket(child, Some(root), 3333)];
+        let r = allocation_report(&b, &[], &[acct(bca, AccountKind::Bank, 1_000_000)]).unwrap();
+        assert_eq!(row(&r, child).target_bp, 1110);
+        assert_eq!(row(&r, child).target_amount, 111_088);
+        assert_eq!(row(&r, child).diff_amount, -111_088);
+    }
+
+    #[test]
+    fn deep_tree_does_not_panic() {
+        // Tingkat ke-3 hanya mungkin lewat DB yang diedit manual; laporan tidak boleh panik.
+        let (a, b1, c, bca) = (
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+            Uuid::now_v7(),
+        );
+        let b = [
+            bucket(a, None, 10000),
+            bucket(b1, Some(a), 10000),
+            bucket(c, Some(b1), 10000),
+        ];
+        let r = allocation_report(&b, &[], &[acct(bca, AccountKind::Bank, 1_000)]).unwrap();
+        assert_eq!((row(&r, c).target_bp, row(&r, c).target_amount), (0, 0));
     }
 }

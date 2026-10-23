@@ -107,4 +107,14 @@ describe('browser ledger target nominal (paritas Rust)', () => {
     expect(await L.updateBucket(a, { name: 'A', parentId: null, targetBp: 1, targetAmount: null, color: null }))
       .toMatchObject({ status: 'error', error: { code: 'allocation_targets_exceed' } })
   })
+
+  it('child diff amount uses parent amount', async () => {
+    // Paritas `child_diff_amount_uses_parent_amount`: floor(floor(gross × p) × c), bukan gross × floor(p × c).
+    await bank(1_000_000)
+    const root = await percent('Root', null, 3333)
+    const child = await percent('Child', root, 3333)
+    const { o, t } = await targets()
+    expect(t(child)).toEqual([111_088, 1110])
+    expect(o.actuals.find((x) => x.bucketId === child)!.diffAmount).toBe(-111_088)
+  })
 })
