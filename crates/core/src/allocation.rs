@@ -21,6 +21,8 @@ pub enum AllocationError {
     LiabilityAccount,
     #[error("an account can map to a bucket only once")]
     DuplicateBucket,
+    #[error("target amount must be greater than 0")]
+    InvalidAmount,
 }
 
 /// 10000 bp = 100%.
@@ -34,7 +36,23 @@ pub fn check_bp(bp: i64) -> Result<i64, AllocationError> {
     }
 }
 
-/// Target bucket satu tingkat (sibling) tidak boleh lebih dari 100%; kurang dari 100% hanya warning.
+/// Target bucket: persen (bp) dari basis tingkatnya, atau nominal tetap (satuan minor).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Percent(i64),
+    Amount(i64),
+}
+
+pub fn check_target(target: Target) -> Result<Target, AllocationError> {
+    match target {
+        Target::Percent(bp) => check_bp(bp).map(Target::Percent),
+        Target::Amount(n) if n > 0 => Ok(target),
+        Target::Amount(_) => Err(AllocationError::InvalidAmount),
+    }
+}
+
+/// Target persen satu tingkat (sibling) tidak boleh lebih dari 100%; kurang dari 100% hanya warning.
+/// Bucket nominal tidak ikut dijumlah.
 pub fn check_sibling_targets(
     targets: impl IntoIterator<Item = i64>,
 ) -> Result<(), AllocationError> {
@@ -65,7 +83,7 @@ pub fn check_shares(shares: &[(Uuid, i64)]) -> Result<(), AllocationError> {
 pub struct Bucket {
     pub id: Uuid,
     pub parent_id: Option<Uuid>,
-    pub target_bp: i64,
+    pub target: Target,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,11 +101,12 @@ pub struct AccountBalance {
     pub include_in_net_worth: bool,
 }
 
-/// `target_bp` di sini target global (child sudah dikalikan target parent).
+/// Target efektif: `target_bp` global (porsi dari gross) dan `target_amount` dalam satuan minor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BucketActual {
     pub bucket_id: Uuid,
     pub target_bp: i64,
+    pub target_amount: i64,
     pub actual: i64,
     pub actual_bp: i64,
     pub diff_bp: i64,
@@ -107,6 +126,14 @@ pub struct SiblingWarning {
     pub total_bp: i64,
 }
 
+/// Σ target nominal satu tingkat melebihi basisnya (gross untuk root, target parent untuk child).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AmountWarning {
+    pub parent_id: Option<Uuid>,
+    pub total_amount: i64,
+    pub base: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocationReport {
     pub gross: i64,
@@ -116,10 +143,47 @@ pub struct AllocationReport {
     pub unallocated_total: i64,
     pub unallocated_bp: i64,
     pub warnings: Vec<SiblingWarning>,
+    pub amount_warnings: Vec<AmountWarning>,
 }
 
 fn fit(v: i128) -> Result<i64, MoneyError> {
     i64::try_from(v).map_err(|_| MoneyError::Overflow)
+}
+
+/// Target efektif seluruh bucket dari basis root `root_base`: per tingkat, bucket nominal
+/// dipenuhi lebih dulu dan bucket persen membagi sisanya; basis child = target parent.
+/// `nominal` memetakan nominal ke ruang hitung yang dipakai (rupiah atau bp).
+fn level_targets(
+    buckets: &[Bucket],
+    root_base: i128,
+    nominal: impl Fn(i64) -> i128,
+) -> HashMap<Uuid, i128> {
+    let full = i128::from(FULL);
+    let mut out = HashMap::new();
+    let assign = |parent: Option<Uuid>, base: i128, out: &mut HashMap<Uuid, i128>| {
+        let siblings = buckets.iter().filter(|b| b.parent_id == parent);
+        let fixed: i128 = siblings
+            .clone()
+            .filter_map(|b| match b.target {
+                Target::Amount(n) => Some(nominal(n)),
+                Target::Percent(_) => None,
+            })
+            .sum();
+        let rest = (base - fixed).max(0);
+        for b in siblings {
+            let t = match b.target {
+                Target::Amount(n) => nominal(n),
+                Target::Percent(bp) => rest * i128::from(bp) / full,
+            };
+            out.insert(b.id, t);
+        }
+    };
+    assign(None, root_base, &mut out);
+    for root in buckets.iter().filter(|b| b.parent_id.is_none()) {
+        let base = out[&root.id];
+        assign(Some(root.id), base, &mut out);
+    }
+    out
 }
 
 /// Porsi aktual tiap bucket vs target. Hanya akun aset (lihat
@@ -152,7 +216,6 @@ pub fn allocation_report(
         *mapped_bp.entry(m.account_id).or_default() += m.share_bp;
     }
 
-    let by_id: HashMap<Uuid, &Bucket> = buckets.iter().map(|b| (b.id, b)).collect();
     let actual_of = |id: Uuid| -> i128 {
         direct.get(&id).copied().unwrap_or(0)
             + buckets
@@ -161,27 +224,25 @@ pub fn allocation_report(
                 .map(|c| direct.get(&c.id).copied().unwrap_or(0))
                 .sum::<i128>()
     };
-    let global_target = |b: &Bucket| -> i128 {
-        match b.parent_id.and_then(|p| by_id.get(&p)) {
-            Some(parent) => i128::from(parent.target_bp) * i128::from(b.target_bp) / full,
-            None => i128::from(b.target_bp),
-        }
-    };
     let bp_of = |amount: i128| if gross > 0 { amount * full / gross } else { 0 };
+    // Dua ruang hitung dengan aturan yang sama: rupiah (basis gross) dan bp (basis 10000).
+    let amount_targets = level_targets(buckets, gross, i128::from);
+    let bp_targets = level_targets(buckets, full, |n| bp_of(i128::from(n)));
 
     let rows = buckets
         .iter()
         .map(|b| {
             let actual = actual_of(b.id);
-            let target = global_target(b);
+            let (target_bp, target_amount) = (bp_targets[&b.id], amount_targets[&b.id]);
             let actual_bp = bp_of(actual);
             Ok(BucketActual {
                 bucket_id: b.id,
-                target_bp: fit(target)?,
+                target_bp: fit(target_bp)?,
+                target_amount: fit(target_amount)?,
                 actual: fit(actual)?,
                 actual_bp: fit(actual_bp)?,
-                diff_bp: fit(actual_bp - target)?,
-                diff_amount: fit(actual - gross * target / full)?,
+                diff_bp: fit(actual_bp - target_bp)?,
+                diff_amount: fit(actual - target_amount)?,
             })
         })
         .collect::<Result<Vec<_>, MoneyError>>()?;
@@ -202,21 +263,41 @@ pub fn allocation_report(
         });
     }
 
-    // Satu warning per kelompok sibling yang Σ target ≠ 100%, urut kemunculan parent.
+    // Per kelompok sibling, urut kemunculan parent: warning bila Σ target persen ≠ 100%
+    // (hanya bila ada bucket persen) dan bila Σ nominal melebihi basis tingkatnya.
     let mut warnings: Vec<SiblingWarning> = Vec::new();
+    let mut amount_warnings: Vec<AmountWarning> = Vec::new();
+    let mut seen: HashSet<Option<Uuid>> = HashSet::new();
     for b in buckets {
-        if warnings.iter().any(|w| w.parent_id == b.parent_id) {
+        if !seen.insert(b.parent_id) {
             continue;
         }
-        let total_bp = buckets
-            .iter()
-            .filter(|s| s.parent_id == b.parent_id)
-            .map(|s| s.target_bp)
-            .sum();
-        if total_bp != FULL {
+        let siblings = || buckets.iter().filter(|s| s.parent_id == b.parent_id);
+        let percents: Vec<i64> = siblings()
+            .filter_map(|s| match s.target {
+                Target::Percent(bp) => Some(bp),
+                Target::Amount(_) => None,
+            })
+            .collect();
+        let total_bp: i64 = percents.iter().sum();
+        if !percents.is_empty() && total_bp != FULL {
             warnings.push(SiblingWarning {
                 parent_id: b.parent_id,
                 total_bp,
+            });
+        }
+        let total_amount: i128 = siblings()
+            .filter_map(|s| match s.target {
+                Target::Amount(n) => Some(i128::from(n)),
+                Target::Percent(_) => None,
+            })
+            .sum();
+        let base = b.parent_id.map_or(gross, |p| amount_targets[&p]);
+        if gross > 0 && total_amount > base {
+            amount_warnings.push(AmountWarning {
+                parent_id: b.parent_id,
+                total_amount: fit(total_amount)?,
+                base: fit(base)?,
             });
         }
     }
@@ -229,6 +310,7 @@ pub fn allocation_report(
         unallocated_total: fit(unallocated_total)?,
         unallocated_bp: fit(bp_of(unallocated_total))?,
         warnings,
+        amount_warnings,
     })
 }
 
@@ -241,10 +323,14 @@ mod tests {
     }
 
     fn bucket(id: Uuid, parent_id: Option<Uuid>, target_bp: i64) -> Bucket {
+        nominal(id, parent_id, Target::Percent(target_bp))
+    }
+
+    fn nominal(id: Uuid, parent_id: Option<Uuid>, target: Target) -> Bucket {
         Bucket {
             id,
             parent_id,
-            target_bp,
+            target,
         }
     }
 
@@ -391,6 +477,104 @@ mod tests {
         assert_eq!(r.gross, 0);
         assert!(r.buckets.iter().all(|x| x.actual_bp == 0 && x.actual == 0));
         assert_eq!(r.unallocated_bp, 0);
+    }
+
+    #[test]
+    fn nominal_bucket_takes_amount_first() {
+        let (darurat, invest, liquid, bca) = (id(), id(), id(), id());
+        let b = [
+            nominal(darurat, None, Target::Amount(30_000_000)),
+            bucket(invest, None, 6000),
+            bucket(liquid, None, 4000),
+        ];
+        let r = allocation_report(&b, &[], &[acct(bca, AccountKind::Bank, 50_000_000)]).unwrap();
+        let t = |b| (row(&r, b).target_amount, row(&r, b).target_bp);
+        assert_eq!(t(darurat), (30_000_000, 6000));
+        assert_eq!(t(invest), (12_000_000, 2400));
+        assert_eq!(t(liquid), (8_000_000, 1600));
+        assert_eq!(row(&r, invest).diff_amount, -12_000_000);
+        assert!(r.warnings.is_empty() && r.amount_warnings.is_empty());
+    }
+
+    #[test]
+    fn child_percent_of_nominal_parent() {
+        let (darurat, a, bca) = (id(), id(), id());
+        let b = [
+            nominal(darurat, None, Target::Amount(30_000_000)),
+            bucket(a, Some(darurat), 5000),
+        ];
+        let r = allocation_report(&b, &[], &[acct(bca, AccountKind::Bank, 60_000_000)]).unwrap();
+        assert_eq!(
+            (row(&r, a).target_amount, row(&r, a).target_bp),
+            (15_000_000, 2500)
+        );
+    }
+
+    #[test]
+    fn nominal_exceeding_base_warns() {
+        let (x, y, z, bca) = (id(), id(), id(), id());
+        let b = [
+            nominal(x, None, Target::Amount(30_000_000)),
+            nominal(y, None, Target::Amount(30_000_000)),
+            bucket(z, None, 10000),
+        ];
+        let maps = [map(bca, x, 10000)];
+        let r = allocation_report(&b, &maps, &[acct(bca, AccountKind::Bank, 50_000_000)]).unwrap();
+        assert_eq!(
+            r.amount_warnings,
+            vec![AmountWarning {
+                parent_id: None,
+                total_amount: 60_000_000,
+                base: 50_000_000
+            }]
+        );
+        assert_eq!((row(&r, z).target_amount, row(&r, z).target_bp), (0, 0));
+        assert_eq!(row(&r, x).diff_amount, 50_000_000 - 30_000_000);
+        assert!(r.warnings.is_empty());
+    }
+
+    #[test]
+    fn zero_gross_with_nominal() {
+        let (x, z) = (id(), id());
+        let b = [
+            nominal(x, None, Target::Amount(1_000_000)),
+            bucket(z, None, 10000),
+        ];
+        let r = allocation_report(&b, &[], &[]).unwrap();
+        assert_eq!(row(&r, x).target_bp, 0);
+        assert_eq!(row(&r, x).target_amount, 1_000_000);
+        assert_eq!(row(&r, z).target_bp, 10000);
+        assert!(r.amount_warnings.is_empty());
+    }
+
+    #[test]
+    fn percent_warning_ignores_nominal() {
+        let (x, p, c) = (id(), id(), id());
+        let b = [
+            nominal(x, None, Target::Amount(1_000)),
+            bucket(p, None, 10000),
+            nominal(c, Some(p), Target::Amount(500)),
+        ];
+        let r = allocation_report(&b, &[], &[]).unwrap();
+        assert!(r.warnings.is_empty());
+    }
+
+    #[test]
+    fn target_checks() {
+        assert_eq!(
+            check_target(Target::Amount(0)),
+            Err(AllocationError::InvalidAmount)
+        );
+        assert_eq!(
+            check_target(Target::Amount(-5)),
+            Err(AllocationError::InvalidAmount)
+        );
+        assert_eq!(
+            check_target(Target::Percent(10001)),
+            Err(AllocationError::InvalidBasisPoints)
+        );
+        assert_eq!(check_target(Target::Amount(1)), Ok(Target::Amount(1)));
+        assert_eq!(check_target(Target::Percent(0)), Ok(Target::Percent(0)));
     }
 
     #[test]

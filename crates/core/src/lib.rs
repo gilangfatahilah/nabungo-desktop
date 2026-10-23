@@ -19,8 +19,9 @@ pub mod recurrence;
 pub mod txn;
 
 pub use allocation::{
-    AccountBalance, AllocationError, AllocationReport, Bucket, BucketActual, Mapping,
-    SiblingWarning, Unallocated, allocation_report, check_bp, check_shares, check_sibling_targets,
+    AccountBalance, AllocationError, AllocationReport, AmountWarning, Bucket, BucketActual,
+    Mapping, SiblingWarning, Target, Unallocated, allocation_report, check_bp, check_shares,
+    check_sibling_targets, check_target,
 };
 pub use amount::{AmountParseError, parse_amount};
 pub use budget::{
