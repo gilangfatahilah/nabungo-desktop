@@ -194,25 +194,25 @@ Kandidat (pakai hanya yang terbukti menurunkan angka harness; satu baris komenta
 
 ## Hasil
 
-_Diisi di Task 3 dan Task 8._ Fixture standar: 50.000 transaksi (988 terhapus), 10 akun, file DB ±45 MB. Baseline = run kedua `perf_50k` (median 7 run), Fedora, mesin dev.
+_Diisi di Task 3 dan Task 8._ Kolom "Akhir" = setelah O1–O3 (commit `56e464a`, `perf-after-o3`). Fixture standar: 50.000 transaksi (988 terhapus), 10 akun, file DB ±45 MB. Baseline = run kedua `perf_50k` (median 7 run), Fedora, mesin dev.
 
 | Skenario | Budget (ms) | Baseline plain | Baseline sqlcipher | Akhir plain | Akhir sqlcipher |
 |---|---|---|---|---|---|
-| `open` | 150 | 0.6 | 0.8 | | |
-| `startup_backend` | 700 | 3242.2 | 15847.0 | | |
-| `auto_backup` | — | 267.5 | 887.0 | | |
-| `save` | 100 | 186.6 | 370.1 | | |
-| `list_default` | 200 | 101.1 | 703.6 | | |
-| `list_account` | 200 | 390.0 | 2143.9 | | |
-| `list_search` | 200 | 298.0 | 1833.6 | | |
-| `list_sort_amount` | 200 | 416.4 | 2655.0 | | |
-| `list_sort_payee_deep` | 200 | 316.7 | 1528.0 | | |
-| `cashflow_12` | 500 | 29.2 | 60.4 | | |
-| `net_worth_12` | 500 | 2320.3 | 11498.4 | | |
-| `breakdown` | 500 | 2.2 | 2.5 | | |
-| `budget_overview` | 500 | 92.1 | 190.4 | | |
-| `allocation_overview` | 500 | 314.6 | 1915.9 | | |
-| `allocation_history_12` | 500 | 2361.9 | 11442.4 | | |
+| `open` | 150 | 0.6 | 0.8 | 1.7 | 2.9 |
+| `startup_backend` | 700 | 3242.2 | 15847.0 | 873.3 | 3243.8 |
+| `auto_backup` | — | 267.5 | 887.0 | 305.4 | 1097.5 |
+| `save` | 100 | 186.6 | 370.1 | 194.4 | 490.4 |
+| `list_default` | 200 | 101.1 | 703.6 | 21.4 | 63.1 |
+| `list_account` | 200 | 390.0 | 2143.9 | 140.6 | 234.0 |
+| `list_search` | 200 | 298.0 | 1833.6 | 106.4 | 254.7 |
+| `list_sort_amount` | 200 | 416.4 | 2655.0 | 95.7 | 228.2 |
+| `list_sort_payee_deep` | 200 | 316.7 | 1528.0 | 148.4 | 250.4 |
+| `cashflow_12` | 500 | 29.2 | 60.4 | 30.0 | 53.3 |
+| `net_worth_12` | 500 | 2320.3 | 11498.4 | 326.1 | 1167.6 |
+| `breakdown` | 500 | 2.2 | 2.5 | 2.1 | 2.5 |
+| `budget_overview` | 500 | 92.1 | 190.4 | 91.3 | 216.3 |
+| `allocation_overview` | 500 | 314.6 | 1915.9 | 194.9 | 1224.1 |
+| `allocation_history_12` | 500 | 2361.9 | 11442.4 | 328.3 | 1260.4 |
 
 ### Analisis baseline (Task 3)
 
@@ -226,4 +226,12 @@ _Diisi di Task 3 dan Task 8._ Fixture standar: 50.000 transaksi (988 terhapus), 
   - Sort pihak: `SCAN t USING INDEX idx_txn_payee`, `SEARCH py`, `USE TEMP B-TREE FOR ORDER BY`.
 - **Temuan di luar O1–O3**: SQLCipher 5–7× lebih lambat di skenario yang banyak membaca. Penyebabnya `cache_size` default (±2 MB) jauh di bawah ukuran DB, sehingga setiap scan mendekripsi ulang halaman. Kalau setelah O1–O3 masih di atas budget, K7 berlaku dan perlu plan tambahan (kandidat: `PRAGMA cache_size` lebih besar).
 
-Startup end-to-end (`startup_ms`, 3 run): —
+Startup end-to-end (`startup_ms`, 3 run): — (belum diukur; butuh release build + GUI, lihat Task 7 Step 5).
+
+### Setelah O1–O3 (Task 4–6)
+
+- **O1** (`balances_at_dates`): `net_worth_12` 2320 → 326 ms plain. **O2**: backup otomatis tidak lagi di jalur startup (`auto_backup` tetap 305/1098 ms, kini di thread latar). **O3**: migrasi `0009` (`idx_posting_account_txn`, `idx_posting_txn_cat`) + `PRAGMA optimize` setelah migrasi; `idx_txn_posted_date` dibuang (tidak berpengaruh di ablation).
+- **Masih di atas budget**: S2 `startup_backend` (873 / 3244 ms), S4 `save` (194 / 490 ms), S5 `list_*` sqlcipher (228–255 ms), S6 `net_worth_12`/`allocation_overview`/`allocation_history_12` sqlcipher (1168–1260 ms).
+- **K7 terpicu** → berhenti; lanjutan di `docs/plans/2026-10-24-fase-8a2-performa-lanjutan.md`.
+- Eksperimen (tidak di-commit) `PRAGMA cache_size = -65536`: sqlcipher menjadi setara plaintext di semua skenario (`list_*` 20–148 ms, `net_worth_12` 278 ms, `allocation_overview` 147 ms); sisa pelanggaran hanya `startup_backend` 813 / 885 ms dan `save` 188 / 183 ms.
+
