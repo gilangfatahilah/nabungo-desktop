@@ -61,7 +61,7 @@ function cancel() {
   />
   <button
     v-else type="button" :data-testid="`budget-cell-${categoryId}`" :aria-label="t('budget.edit', { name })"
-    class="num -mx-2 h-8 w-[calc(100%+1rem)] rounded-md px-2 text-right hover:bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    class="num -mx-2 h-8 w-[calc(100%+1rem)] rounded-md px-2 text-right hover:bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring"
     @click="open"
   >
     <span v-if="amount === null" class="text-muted-foreground">—</span>

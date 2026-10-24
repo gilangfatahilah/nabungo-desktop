@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest'
 import type { BudgetLevelDto } from '@/ipc'
 import BudgetBar from './BudgetBar.vue'
 
-const mountBar = (spent: number, budget: number, level: BudgetLevelDto) => mount(BudgetBar, { props: { spent, budget, level } })
+const mountBar = (spent: number, budget: number, level: BudgetLevelDto) => mount(BudgetBar, { props: { spent, budget, level, label: 'Makan' } })
 const bar = (spent: number, budget: number, level: BudgetLevelDto) => mountBar(spent, budget, level).get('[role="progressbar"]')
 
 describe('BudgetBar', () => {
+  it('punya nama aksesibel dari label kategori', () => {
+    expect(bar(10, 100, 'ok').attributes('aria-label')).toBe('Makan')
+  })
+
   it('warna mengikuti level dari backend, bukan persen', () => {
     expect(bar(79, 100, 'ok').attributes('data-state')).toBe('ok')
     expect(bar(80, 100, 'warning').attributes('data-state')).toBe('warn')

@@ -36,7 +36,7 @@ const safe = computed(() => rows.value[0]?.level === 'ok')
           <span class="truncate">{{ byId.get(r.categoryId)?.name }}</span>
           <span class="num text-meta text-muted-foreground">{{ r.percent ?? 0 }}%</span>
         </div>
-        <BudgetBar :spent="r.spent" :budget="r.available!" :level="r.level!" />
+        <BudgetBar :spent="r.spent" :budget="r.available!" :level="r.level!" :label="byId.get(r.categoryId)?.name ?? ''" />
       </div>
     </CardContent>
   </Card>

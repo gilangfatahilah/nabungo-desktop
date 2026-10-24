@@ -38,8 +38,12 @@ Zamrud (emerald) adalah warna logo Nabungo (`docs/design/brand/`), diambil dari 
 | **Kanvas** | sidebar & latar di luar inset, hover, latar muted | `#F4F6F8` | `#12161C` | `--sidebar`, `--muted`, `--secondary`, `--accent` (light) |
 | **Kanvas aktif** | item sidebar aktif/hover | `#E6EAEE` | `#232A34` | `--sidebar-accent` |
 | **Lembar** | inset konten, kartu, sheet, dialog | `#FFFFFF` | `#1A1F27` | `--background`, `--card`, `--popover` |
-| **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border` (border input: `--input` `#CFD5DC` / `#3A434F`) |
+| **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border` (pemisah dekoratif) |
+| **Batas kontrol** | border input, select, checkbox, track switch | `#7C8692` | `#6B7583` | `--input` |
+| **Isi kontrol** | latar input/select/tombol outline (dark), input nonaktif | `#CFD5DC` | `#3A434F` | `--input-fill` (`bg-input-fill/*`) |
 | **Zamrud** | aksi utama, fokus, seleksi | `#047857` (emerald-700) | `#34D399` (emerald-400) | `--primary`, `--ring` |
+
+Batas kontrol ≥ 3:1 terhadap Lembar, Kanvas, Kanvas aktif, dan popover (light 3.7/3.4/3.1, dark 3.5/3.9/3.1/3.3; WCAG 1.4.11). Garis (`--border`) hanya untuk pemisah dekoratif, tidak untuk batas kontrol. Isi kontrol tetap memakai nilai lama agar latar input tidak menggelap; jangan pakai `bg-input` untuk isi selain track switch.
 
 Teks di atas Zamrud memakai `#FFFFFF` (light) / `#022C22` (dark). Light memakai emerald-700, bukan emerald-600: emerald-600 dengan teks putih hanya 3.8:1.
 
@@ -81,7 +85,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 **Aturan**
 
 - **Angka uang selalu `tabular-nums`** (utilitas `.num`) dan rata kanan di kolom. Komponen: `MoneyText`.
-- Prefiks `Rp` berat 400 dengan opasitas 65% dari warna angka; angka berat 500/600. Ini satu-satunya "gaya" angka.
+- Prefiks `Rp` berat 400 dengan warna yang sama dengan angka (tanpa opasitas: `Rp` 65% hanya ~3:1, gagal kontras teks); angka berat 500/600. Ini satu-satunya "gaya" angka.
 - Tidak ada huruf kapital semua, tidak ada eyebrow di atas judul, tidak ada letter-spacing lebar.
 - Tebal maksimal 600. Paragraf maksimal ~65 karakter per baris.
 
@@ -463,8 +467,11 @@ Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. La
 
 ## 12. Aksesibilitas (lantai minimum)
 
-- Kontras teks ≥ 4.5:1, elemen UI ≥ 3:1, di light dan dark.
-- Semua aksi bisa dilakukan dengan keyboard; fokus selalu terlihat (ring Zamrud). Setelah hapus baris, fokus pindah ke baris berikutnya.
+- Kontras teks ≥ 4.5:1, elemen UI ≥ 3:1, di light dan dark. Jangan pudarkan teks dengan opacity (`text-current/75`, `opacity-65`); pakai `text-muted-foreground`.
+- Semua aksi bisa dilakukan dengan keyboard; fokus selalu terlihat (ring Zamrud **penuh**: `ring-ring`, bukan `ring-ring/50` yang hanya ~2.3:1). Setelah hapus baris, fokus pindah ke baris berikutnya.
+- Ukuran teks bisa diubah (Pengaturan → Ukuran teks, atau Ctrl/⌘ `+` / `-` / `0`): 90, 100, 110, 125, 150%, lewat `font-size` persen di `<html>`. Karena itu ukuran pakai rem, bukan px (`max-w-[27.5rem]`, bukan `max-w-[440px]`); nilai yang dihitung di JS (tinggi baris virtual, teks sumbu chart) dikalikan `useRootFontScale()`. Pada 150% dan jendela 960px tidak boleh ada scroll horizontal.
+- ARIA: `role="row"` hanya berisi `cell`/`columnheader`; `svg role="img"` tidak boleh berisi elemen yang bisa difokus (pakai `role="group"`); progressbar wajib punya `aria-label`.
+- Audit otomatis: `ui/e2e/a11y.spec.ts` menjalankan axe (`wcag2a`, `wcag2aa`, `wcag21aa`) di semua layar, light dan dark, termasuk sheet, dialog konfirmasi, toast, dan tooltip chart; harus 0 pelanggaran. Pengecualian hanya lewat `.exclude()` per selektor dengan alasan, tanpa `disableRules`.
 - Hanya satu `h1` per layar (di SiteHeader).
 - Target klik minimal 28×28px.
 - Warna tidak pernah jadi satu-satunya pembawa informasi (§3.2).

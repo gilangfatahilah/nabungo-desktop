@@ -11,6 +11,12 @@ const format = (v: number) => String(v)
 const props = { labels, series, label: 'Cashflow', format }
 
 describe('BarChart', () => {
+  it('svg berperan group (bukan img) karena berisi batang yang bisa difokus', () => {
+    const svg = mount(BarChart, { props }).get('svg')
+    expect(svg.attributes('role')).toBe('group')
+    expect(svg.attributes('aria-label')).toBeTruthy()
+  })
+
   it('satu rect per seri per label', () => {
     const w = mount(BarChart, { props })
     expect(w.get('svg').attributes('aria-label')).toBe('Cashflow')

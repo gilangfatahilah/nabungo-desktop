@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 
 // Bar realisasi budget (docs/design/design.md §7.10): warna dari `level` backend
 // (pudar < 80%, waspada ≥ 80%, bahaya ≥ 100%); `budget` = tersedia (budget + bawaan).
-const props = defineProps<{ spent: number; budget: number; level: BudgetLevelDto }>()
+// `label` = nama kategori, menjadi nama aksesibel progressbar.
+const props = defineProps<{ spent: number; budget: number; level: BudgetLevelDto; label: string }>()
 
 const percent = computed(() => {
   const spent = Math.max(props.spent, 0)
@@ -23,7 +24,7 @@ const color = computed(() => ({ ok: 'bg-muted-foreground/60', warn: 'bg-warning'
 
 <template>
   <div
-    role="progressbar" :aria-valuenow="now" aria-valuemin="0" aria-valuemax="100" :data-state="state"
+    role="progressbar" :aria-label="label" :aria-valuenow="now" aria-valuemin="0" aria-valuemax="100" :data-state="state"
     class="relative h-1.5 w-full rounded-full bg-muted"
   >
     <div :class="cn('h-full rounded-full', color)" :style="{ width: `${fill}%` }" />

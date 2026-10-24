@@ -100,7 +100,7 @@ const tooltip = computed(() => {
 
 <template>
   <div
-    class="relative rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50" tabindex="0" role="group" :aria-label="label"
+    class="relative rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" tabindex="0" role="group" :aria-label="label"
     @mousemove="onMove" @mouseleave="active = null" @focus="active ??= last" @blur="active = null" @keydown="onKey"
   >
     <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="label" class="h-auto w-full text-muted-foreground">

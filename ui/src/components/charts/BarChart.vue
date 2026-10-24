@@ -87,7 +87,8 @@ function onKey(e: KeyboardEvent, i: number) {
 
 <template>
   <div class="relative" @mouseleave="active = null">
-    <svg :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="label" class="h-auto w-full text-muted-foreground">
+    <!-- `group`, bukan `img`: berisi batang yang bisa difokus (img tidak boleh punya anak interaktif). -->
+    <svg :viewBox="`0 0 ${W} ${H}`" role="group" :aria-label="label" class="h-auto w-full text-muted-foreground">
       <rect
         v-if="selected !== undefined && selected >= 0 && selected < labels.length" data-part="selected" :data-index="selected"
         :x="groupX(selected)" :y="PAD.top" :width="groupW" :height="H - PAD.top - PAD.bottom" rx="4" fill="var(--muted)"
