@@ -52,7 +52,7 @@ pub struct BackupInfo {
     pub size_bytes: u64,
 }
 
-const STAMP: &[FormatItem<'static>] =
+pub(crate) const STAMP: &[FormatItem<'static>] =
     format_description!("[year][month][day]T[hour][minute][second]Z");
 
 /// Backup otomatis jatuh tempo setelah jeda ini.
@@ -246,7 +246,7 @@ pub fn backup_needs_key(src: &Path, live_key: Option<&DbKey>) -> Result<bool, Ap
     }
 }
 
-fn restore_sidecar(src: &Path, attachments_dir: &Path) {
+pub(crate) fn restore_sidecar(src: &Path, attachments_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(attachments_sidecar(src)) else {
         return;
     };
@@ -298,6 +298,23 @@ fn resolve(path: &Path) -> Result<PathBuf, AppError> {
     Ok(std::fs::canonicalize(parent)?.join(name))
 }
 
+/// `target` bukan DB `live`, sibling `-wal`/`-shm`/`-journal`-nya, maupun key file-nya.
+pub(crate) fn ensure_not_live_path(live: &Path, target: &Path) -> Result<(), AppError> {
+    let live = resolve(live)?;
+    let target = resolve(target)?;
+    if target == live || target == keyfile_path(&live) {
+        return Err(AppError::BackupTargetInvalid);
+    }
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut forbidden = live.clone().into_os_string();
+        forbidden.push(suffix);
+        if target.as_os_str() == forbidden {
+            return Err(AppError::BackupTargetInvalid);
+        }
+    }
+    Ok(())
+}
+
 impl Ledger {
     /// Buka DB (dengan `key` bila terenkripsi); bila skemanya lama (bukan DB baru), simpan
     /// backup pra-migrasi dulu (K6).
@@ -334,27 +351,10 @@ impl Ledger {
 
     /// Tolak `target` bila menunjuk DB utama atau file pendampingnya (K10).
     pub(crate) fn ensure_not_live(&self, target: &Path) -> Result<(), AppError> {
-        let Some(live) = &self.path else {
-            return Ok(());
-        };
-        let live = resolve(live)?;
-        let target = resolve(target)?;
-        let mut forbidden = live.clone().into_os_string();
-        let base = forbidden.clone();
-        if target == live {
-            return Err(AppError::BackupTargetInvalid);
+        match &self.path {
+            Some(live) => ensure_not_live_path(live, target),
+            None => Ok(()),
         }
-        for suffix in ["-wal", "-shm", "-journal"] {
-            forbidden.clone_from(&base);
-            forbidden.push(suffix);
-            if target.as_os_str() == forbidden {
-                return Err(AppError::BackupTargetInvalid);
-            }
-        }
-        if target == keyfile_path(&live) {
-            return Err(AppError::BackupTargetInvalid);
-        }
-        Ok(())
     }
 
     /// Backup manual ke path pilihan user (K3), tanpa retensi. Lampiran ikut disalin ke

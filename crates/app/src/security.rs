@@ -50,9 +50,19 @@ fn convert_path(db: &Path) -> PathBuf {
     sibling(db, ".convert")
 }
 
-/// Status enkripsi `db` sekaligus membersihkan sisa enable/disable yang terputus: file
-/// konversi sementara, dan key file di samping DB plaintext. DB yang belum ada = `Plain`.
+/// Status enkripsi `db` sekaligus membersihkan sisa enable/disable/pemulihan yang terputus:
+/// file konversi sementara, `.recover`, dan key file di samping DB plaintext. DB yang belum
+/// ada = `Plain`.
 pub fn db_state(db: &Path) -> Result<DbState, AppError> {
+    // Pemulihan (P4): `.recover` tanpa DB = rename final terputus; selain itu belum selesai.
+    let recover = sibling(db, ".recover");
+    if recover.is_file() && !db.exists() {
+        tracing::warn!("menuntaskan pemulihan yang terputus");
+        std::fs::rename(&recover, db)?;
+    }
+    for suffix in ["", "-journal", "-wal", "-shm"] {
+        remove_if_exists(&sibling(&recover, suffix))?;
+    }
     let convert = convert_path(db);
     for path in [
         convert.clone(),
@@ -301,6 +311,34 @@ mod tests {
 
     fn reopen(e: &Env, key: &DbKey) -> Ledger {
         Ledger::open_with_backups(&e.db, &e.backups, Some(key), NOW).unwrap()
+    }
+
+    #[test]
+    fn db_state_finishes_interrupted_recovery() {
+        let e = env();
+        let recover = sibling(&e.db, ".recover");
+        {
+            let mut l = Ledger::open(&recover).unwrap();
+            add_account(&mut l, "Dompet", 50_000);
+        }
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(!recover.exists());
+        assert_eq!(
+            names(&Ledger::open(&e.db).unwrap()),
+            vec![("Dompet".into(), 50_000)]
+        );
+    }
+
+    #[test]
+    fn db_state_discards_incomplete_recover() {
+        let e = env();
+        drop(Ledger::open(&e.db).unwrap());
+        let before = std::fs::read(&e.db).unwrap();
+        let recover = sibling(&e.db, ".recover");
+        std::fs::write(&recover, b"setengah jadi").unwrap();
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(!recover.exists());
+        assert_eq!(std::fs::read(&e.db).unwrap(), before);
     }
 
     #[test]

@@ -27,6 +27,7 @@ mod ledger;
 mod onboarding;
 mod payee;
 mod reconcile;
+pub mod recovery;
 mod recurring;
 mod reports;
 pub mod security;
