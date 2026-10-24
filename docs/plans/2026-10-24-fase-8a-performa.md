@@ -194,10 +194,36 @@ Kandidat (pakai hanya yang terbukti menurunkan angka harness; satu baris komenta
 
 ## Hasil
 
-_Diisi di Task 3 dan Task 8._
+_Diisi di Task 3 dan Task 8._ Fixture standar: 50.000 transaksi (988 terhapus), 10 akun, file DB ±45 MB. Baseline = run kedua `perf_50k` (median 7 run), Fedora, mesin dev.
 
 | Skenario | Budget (ms) | Baseline plain | Baseline sqlcipher | Akhir plain | Akhir sqlcipher |
 |---|---|---|---|---|---|
-| … | | | | | |
+| `open` | 150 | 0.6 | 0.8 | | |
+| `startup_backend` | 700 | 3242.2 | 15847.0 | | |
+| `auto_backup` | — | 267.5 | 887.0 | | |
+| `save` | 100 | 186.6 | 370.1 | | |
+| `list_default` | 200 | 101.1 | 703.6 | | |
+| `list_account` | 200 | 390.0 | 2143.9 | | |
+| `list_search` | 200 | 298.0 | 1833.6 | | |
+| `list_sort_amount` | 200 | 416.4 | 2655.0 | | |
+| `list_sort_payee_deep` | 200 | 316.7 | 1528.0 | | |
+| `cashflow_12` | 500 | 29.2 | 60.4 | | |
+| `net_worth_12` | 500 | 2320.3 | 11498.4 | | |
+| `breakdown` | 500 | 2.2 | 2.5 | | |
+| `budget_overview` | 500 | 92.1 | 190.4 | | |
+| `allocation_overview` | 500 | 314.6 | 1915.9 | | |
+| `allocation_history_12` | 500 | 2361.9 | 11442.4 | | |
+
+### Analisis baseline (Task 3)
+
+18 pelanggaran budget. Pemicu K6:
+
+- **O1 terpicu**: `net_worth_12` 2320 ms dan `allocation_history_12` 2362 ms (> 250 ms). Masing-masing 12× `balances_as_of` (±190 ms per panggilan).
+- **O2 terpicu**: `auto_backup` 267,5 ms plain / 887 ms sqlcipher (> 200 ms).
+- **O3 terpicu**: EXPLAIN menunjukkan scan penuh plus lookup baris `txn` per posting:
+  - `balances_as_of`: `SCAN p USING INDEX idx_posting_account` lalu `SEARCH t USING INDEX sqlite_autoindex_txn_1 (id=?)`, yaitu 64.463 lookup acak per panggilan. Pola yang sama dipakai saldo di `list_accounts` (`accounts_overview`, `allocation_overview` 315 ms).
+  - `COUNT(*)` di `list_txns`: `SCAN t USING INDEX idx_txn_payee` lalu membaca baris untuk `status`. Biaya tetap ±100 ms di setiap daftar (`list_default` hampir seluruhnya biaya ini).
+  - Sort pihak: `SCAN t USING INDEX idx_txn_payee`, `SEARCH py`, `USE TEMP B-TREE FOR ORDER BY`.
+- **Temuan di luar O1–O3**: SQLCipher 5–7× lebih lambat di skenario yang banyak membaca. Penyebabnya `cache_size` default (±2 MB) jauh di bawah ukuran DB, sehingga setiap scan mendekripsi ulang halaman. Kalau setelah O1–O3 masih di atas budget, K7 berlaku dan perlu plan tambahan (kandidat: `PRAGMA cache_size` lebih besar).
 
 Startup end-to-end (`startup_ms`, 3 run): —
