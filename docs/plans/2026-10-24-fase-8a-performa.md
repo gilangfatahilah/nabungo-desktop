@@ -235,3 +235,7 @@ Startup end-to-end (`startup_ms`, 3 run): — (belum diukur; butuh release build
 - **K7 terpicu** → berhenti; lanjutan di `docs/plans/2026-10-24-fase-8a2-performa-lanjutan.md`.
 - Eksperimen (tidak di-commit) `PRAGMA cache_size = -65536`: sqlcipher menjadi setara plaintext di semua skenario (`list_*` 20–148 ms, `net_worth_12` 278 ms, `allocation_overview` 147 ms); sisa pelanggaran hanya `startup_backend` 813 / 885 ms dan `save` 188 / 183 ms.
 
+### Akhir Fase 8a (setelah 8a2)
+
+Lanjutan 8a2 (`cache_size` 64 MiB, alert budget per kategori yang disentuh, migrasi `0010` + `list_account_meta`) menutup semua pelanggaran. Akhir plain / sqlcipher: `startup_backend` 516 / 657, `save` 90 / 90, `list_*` maks 149 / 150, S6 maks 132 / 146 ms. Tabel lengkap ada di Hasil plan 8a2. Keputusan K7: pool koneksi baca dan `account_balance_daily` tidak diperlukan (K11 Fase 5 ditutup). `startup_ms` end-to-end belum diukur.
+

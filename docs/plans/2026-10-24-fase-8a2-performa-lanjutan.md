@@ -78,4 +78,25 @@
 
 ## Hasil
 
-_Diisi saat eksekusi._
+Harness `perf_50k` (fixture standar 50.000 transaksi, median 7 run, mesin dev Fedora), plaintext / sqlcipher ms.
+
+| Skenario | Budget | Sebelum 8a2 | T1 cache | T2 alert | T3 startup (akhir) |
+|---|---|---|---|---|---|
+| `open` | 150 | 1.7 / 2.9 | 1.7 / 2.6 | 1.7 / 2.6 | 1.8 / 2.6 |
+| `startup_backend` | 700 | 873 / 3244 | 728 / 889 | 734 / 896 | **516 / 657** |
+| `auto_backup` (latar) | — | 305 / 1098 | 319 / 1034 | 309 / 1024 | 310 / 1035 |
+| `save` | 100 | 194 / 490 | 216 / 188 | **93 / 95** | 90 / 90 |
+| `list_*` maks | 200 | 148 / 255 | **151 / 151** | 148 / 149 | 149 / 150 |
+| `net_worth_12` | 500 | 326 / 1168 | 283 / 281 | 275 / 278 | 132 / 132 |
+| `allocation_overview` | 500 | 195 / 1224 | 147 / 147 | 150 / 148 | 109 / 118 |
+| `allocation_history_12` | 500 | 328 / 1260 | 279 / 283 | 298 / 283 | 126 / 146 |
+| `budget_overview` | 500 | 91 / 216 | 91 / 90 | 87 / 93 | 88 / 93 |
+
+Semua skenario dalam budget di kedua varian; L4 tidak diperlukan.
+
+Rincian S2 per panggilan (Task 3 Step 1), sebelum → sesudah T3: `accounts_overview` 145 → 112, `allocation_overview` 146 → 114, `net_worth_history` 273 → 144, `budget_overview` 88, `cashflow_report` 29, `list_txns_8` 18, sisanya < 3 ms.
+
+- **L3**: tidak memakai (a) memo maupun (b) `account_balance_daily`. Profil menunjukkan `list_accounts` (±140 ms) dipanggil tiga kali, dan dua bagiannya bisa dibuang tanpa state turunan:
+  - subquery `reconciled_through` membaca setiap posting akun (55 ms). Migrasi `0010` menambah indeks parsial `idx_posting_reconciled`, sehingga turun ke ~0 ms.
+  - `period_points` hanya butuh jenis akun dan flag net worth. Kini memakai `list_account_meta` tanpa menghitung saldo.
+- **Belum diukur**: `startup_ms` end-to-end (release build + GUI) oleh user. Diukur ulang di 8d (Windows).
