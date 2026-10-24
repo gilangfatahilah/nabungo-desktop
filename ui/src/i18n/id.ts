@@ -14,6 +14,7 @@ export default {
     scheduled: 'Terjadwal',
     settings: 'Pengaturan',
     unlock: 'Buka kunci',
+    recovery: 'Pemulihan',
     onboarding: 'Mulai',
   },
   dateInput: { openCalendar: 'Buka kalender' },
@@ -42,6 +43,8 @@ export default {
       restoreBody: 'Data saat ini akan diganti dengan isi backup. Salinan data saat ini disimpan dulu sebagai backup sebelum pemulihan.',
       restoreConfirm: 'Pulihkan',
       restored: 'Data dipulihkan',
+      recoveryKey: 'Recovery key backup',
+      recoveryKeyHelp: 'Backup ini terenkripsi dengan key lain (mis. dari instalasi lain). Masukkan recovery key-nya.',
     },
     export: {
       intro: 'Salin semua data ke file yang bisa dibuka aplikasi lain. Ekspor tidak mengubah data.',

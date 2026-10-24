@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BudgetOverviewDto, TxnFormDto } from './bindings'
-import { browserLedger as L } from './browser-ledger'
+import { __enterRecovery, __leaveRecovery, browserLedger as L } from './browser-ledger'
+import { browserCommands } from './browser'
 
 async function data<T>(p: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: unknown }>): Promise<T> {
   const r = await p
@@ -844,5 +845,51 @@ describe('browser ledger transaksi terjadwal (TRX-06, paritas Rust)', () => {
     expect(await count()).toBe(2)
     expect((await data(L.listRules())).some((r) => r.id === id)).toBe(false)
     expect(await L.deleteRule(id)).toEqual({ status: 'error', error: { code: 'not_found', entity: 'recurring_rule' } })
+  })
+})
+
+describe('browser ledger mode pemulihan (P11)', () => {
+  const C = browserCommands
+  afterEach(() => __leaveRecovery())
+
+  it('normal: tidak aktif dan command pemulihan ditolak', async () => {
+    expect((await C.recoveryStatus()).active).toBe(false)
+    expect(await C.recoverFromBackup({ kind: 'named', fileName: 'x.db' }, { kind: 'none' })).toEqual({
+      status: 'error', error: { code: 'recovery_unavailable', entity: null },
+    })
+    expect(await C.recoveryStartFresh()).toEqual({ status: 'error', error: { code: 'recovery_unavailable', entity: null } })
+  })
+
+  it('aktif: command ledger → recovery_required, command pemulihan tetap jalan', async () => {
+    __enterRecovery('unreadable')
+    expect(await C.recoveryStatus()).toMatchObject({ active: true, reason: 'unreadable' })
+    expect(await C.getOnboardingStatus()).toEqual({ status: 'error', error: { code: 'recovery_required', entity: null } })
+    expect(await C.securityStatus()).toEqual({ status: 'error', error: { code: 'recovery_required', entity: null } })
+    expect((await C.listBackups()).status).toBe('ok')
+  })
+
+  it('recoverFromBackup mengembalikan snapshot dan keluar dari pemulihan', async () => {
+    const a = await account('Pulih A', 300_000)
+    const c = await category('expense', 'Belanja pulih')
+    await data(L.backupNow())
+    const [auto] = await data(L.listBackups())
+    await data(L.createTxn(form({ accountId: a, amount: 50_000, splits: [{ categoryId: c, amount: 50_000, memo: null }] })))
+    expect(await balance(a)).toBe(250_000)
+    __enterRecovery('tooNew')
+    expect(await C.recoverFromBackup({ kind: 'named', fileName: 'tidak-ada.db' }, { kind: 'none' })).toEqual({
+      status: 'error', error: { code: 'backup_invalid', entity: null },
+    })
+    expect(await data(C.inspectBackupSource({ kind: 'named', fileName: auto!.fileName }))).toEqual({ needsKey: false })
+    await data(C.recoverFromBackup({ kind: 'named', fileName: auto!.fileName }, { kind: 'none' }))
+    expect((await C.recoveryStatus()).active).toBe(false)
+    expect(await balance(a)).toBe(300_000)
+  })
+
+  // Terakhir di file: state browser dikosongkan.
+  it('recoveryStartFresh → onboarding belum selesai', async () => {
+    __enterRecovery('unreadable')
+    await data(C.recoveryStartFresh())
+    expect((await C.recoveryStatus()).active).toBe(false)
+    expect(await data(C.getOnboardingStatus())).toBe(false)
   })
 })

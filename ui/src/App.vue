@@ -11,6 +11,7 @@ import NewTxnSheet from '@/components/NewTxnSheet.vue'
 import RuleSheet from '@/components/scheduled/RuleSheet.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useIdleLock } from '@/composables/useIdleLock'
+import { setRecoveryHandler } from '@/ipc'
 import { withErrorToast } from '@/lib/notify'
 import { shouldIgnoreAction } from '@/lib/overlay'
 import { createShortcutHandler, type ShortcutAction } from '@/lib/shortcuts'
@@ -29,6 +30,8 @@ const categories = useCategoriesStore()
 const security = useSecurityStore()
 
 security.installLockHandler(router)
+// DB gagal dibuka: cukup pindah layar; tidak ada data store yang perlu dibuang (beda dengan lock).
+setRecoveryHandler(() => void router.replace({ name: 'recovery' }))
 
 // Kunci otomatis hanya untuk DB terenkripsi yang sedang terbuka, dan tidak selama recovery key
 // yang baru dibuat masih ditampilkan.

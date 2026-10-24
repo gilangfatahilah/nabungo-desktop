@@ -14,6 +14,7 @@ export default {
     scheduled: 'Scheduled',
     settings: 'Settings',
     unlock: 'Unlock',
+    recovery: 'Recovery',
     onboarding: 'Get started',
   },
   dateInput: { openCalendar: 'Open calendar' },
@@ -42,6 +43,8 @@ export default {
       restoreBody: 'Your current data will be replaced by the backup. A copy of the current data is saved first as a pre-restore backup.',
       restoreConfirm: 'Restore',
       restored: 'Data restored',
+      recoveryKey: 'Backup recovery key',
+      recoveryKeyHelp: 'This backup is encrypted with a different key (e.g. from another installation). Enter its recovery key.',
     },
     export: {
       intro: 'Copy all data to files other apps can open. Exporting does not change your data.',

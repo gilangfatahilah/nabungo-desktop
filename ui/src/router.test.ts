@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RouteLocationNormalized } from 'vue-router'
-import { onboardingGuard, routes, securityGuard, type RouteName } from '@/router'
+import { onboardingGuard, recoveryGuard, routes, securityGuard, type RouteName } from '@/router'
 import id from '@/i18n/id'
 import en from '@/i18n/en'
 
 const NAMES: RouteName[] = [
   'dashboard', 'transactions', 'budget', 'allocation', 'reports',
-  'accounts', 'categories', 'labels', 'scheduled', 'settings', 'onboarding', 'unlock',
+  'accounts', 'categories', 'labels', 'scheduled', 'settings', 'onboarding', 'unlock', 'recovery',
 ]
 
 describe('router', () => {
-  it('punya dua belas route bernama', () => {
+  it('punya tiga belas route bernama', () => {
     expect(routes.map((r) => r.name)).toEqual(NAMES)
   })
 
@@ -45,7 +45,7 @@ describe('router', () => {
 
   it('terkunci → semua route ke unlock', async () => {
     const g = securityGuard(async () => true)
-    for (const name of NAMES.filter((n) => n !== 'unlock')) {
+    for (const name of NAMES.filter((n) => n !== 'unlock' && n !== 'recovery')) {
       expect(await run(g, name)).toEqual({ name: 'unlock' })
     }
     expect(await run(g, 'unlock')).toBe(true)
@@ -55,6 +55,36 @@ describe('router', () => {
     const g = securityGuard(async () => false)
     expect(await run(g, 'unlock')).toEqual({ name: 'dashboard' })
     expect(await run(g, 'accounts')).toBe(true)
+  })
+
+  it('recovery_redirects_all_routes', async () => {
+    const g = recoveryGuard(async () => true, async () => false)
+    for (const name of NAMES.filter((n) => n !== 'recovery')) {
+      expect(await run(g, name)).toEqual({ name: 'recovery' })
+    }
+    expect(await run(g, 'recovery')).toBe(true)
+  })
+
+  it('recovery_route_leaves_when_inactive', async () => {
+    const g = recoveryGuard(async () => false, async () => false)
+    expect(await run(g, 'recovery')).toEqual({ name: 'dashboard' })
+    expect(await run(g, 'accounts')).toBe(true)
+  })
+
+  it('recovery_allowed_while_locked', async () => {
+    expect(await run(recoveryGuard(async () => false, async () => true), 'recovery')).toBe(true)
+    const isOnboarded = vi.fn(async () => false)
+    expect(await run(securityGuard(async () => true), 'recovery')).toBe(true)
+    expect(await run(onboardingGuard(isOnboarded), 'recovery')).toBe(true)
+    expect(isOnboarded).not.toHaveBeenCalled()
+  })
+
+  it('recovery_wins_over_locked', async () => {
+    // Saat pemulihan `securityStatus` gagal (`recovery_required`): guard keamanan tidak boleh dipanggil.
+    const isLocked = vi.fn(async () => true)
+    expect(await run(recoveryGuard(async () => true, isLocked), 'unlock')).toEqual({ name: 'recovery' })
+    expect(await run(securityGuard(isLocked), 'recovery')).toBe(true)
+    expect(isLocked).not.toHaveBeenCalled()
   })
 
   it('terkunci mendahului onboarding', async () => {
@@ -67,7 +97,7 @@ describe('router', () => {
 })
 
 describe('route meta', () => {
-  it('hanya onboarding & kunci yang tampil tanpa kerangka aplikasi', () => {
-    expect(routes.filter((r) => r.meta?.bare).map((r) => r.name)).toEqual(['onboarding', 'unlock'])
+  it('hanya onboarding, kunci & pemulihan yang tampil tanpa kerangka aplikasi', () => {
+    expect(routes.filter((r) => r.meta?.bare).map((r) => r.name)).toEqual(['onboarding', 'unlock', 'recovery'])
   })
 })

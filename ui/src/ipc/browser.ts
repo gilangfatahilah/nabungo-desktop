@@ -1,7 +1,7 @@
 // Implementasi pengganti saat UI dijalankan di browser biasa (tanpa backend Tauri).
 import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
-import { browserLedger, browserSecurity, isBrowserLocked } from './browser-ledger'
+import { __enterRecovery, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -13,18 +13,26 @@ const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })
 
 type Command = (...args: never[]) => Promise<unknown>
 
-// Seperti Rust: command yang tidak butuh ledger tetap jalan saat terkunci.
+// Seperti Rust: command yang tidak butuh ledger tetap jalan saat pemulihan / terkunci.
+const RECOVERY_COMMANDS = ['recoveryStatus', 'pickBackupFile', 'inspectBackupSource', 'recoverFromBackup', 'recoveryStartFresh']
+const OPEN_IN_RECOVERY = new Set(['appInfo', 'startupReport', 'parseAmount', 'listBackups', ...RECOVERY_COMMANDS])
 const OPEN_WHEN_LOCKED = new Set([
   'appInfo', 'startupReport', 'parseAmount', 'listBackups',
-  'securityStatus', 'unlock', 'unlockWithRecovery', 'lock',
+  'securityStatus', 'unlock', 'unlockWithRecovery', 'lock', ...RECOVERY_COMMANDS,
 ])
 
+const failWith = (code: IpcError['code']): Promise<Result<never>> => Promise.resolve({ status: 'error', error: { code, entity: null } })
+
 function lockGuard<T extends Record<string, Command>>(cmds: T): T {
-  const locked: Result<never> = { status: 'error', error: { code: 'locked', entity: null } }
   return Object.fromEntries(
     Object.entries(cmds).map(([name, fn]) => [
       name,
-      OPEN_WHEN_LOCKED.has(name) ? fn : (...args: never[]) => (isBrowserLocked() ? Promise.resolve(locked) : fn(...args)),
+      (...args: never[]) => {
+        // Urutan sama dengan `ledger()` di Rust: pemulihan diperiksa sebelum kunci.
+        if (isBrowserRecovering() && !OPEN_IN_RECOVERY.has(name)) return failWith('recovery_required')
+        if (isBrowserLocked() && !OPEN_WHEN_LOCKED.has(name)) return failWith('locked')
+        return fn(...args)
+      },
     ]),
   ) as T
 }
@@ -32,6 +40,7 @@ function lockGuard<T extends Record<string, Command>>(cmds: T): T {
 export const browserCommands = lockGuard({
   ...browserLedger,
   ...browserSecurity,
+  ...browserRecovery,
   appInfo: async (): Promise<AppInfo> => ({ version: 'browser-dev', dataDir: '', portable: false }),
   getUiSettings: async () => ok({ ...settings }),
   setTheme: async (theme: UiSettingsDto['theme']) => {
@@ -53,3 +62,8 @@ export const browserCommands = lockGuard({
     return ok(null)
   },
 })
+
+// Hook e2e (Playwright): masuk mode pemulihan tanpa backend Tauri.
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __enterRecovery: typeof __enterRecovery }).__enterRecovery = __enterRecovery
+}

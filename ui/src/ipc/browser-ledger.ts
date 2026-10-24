@@ -3,13 +3,13 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BackupSourceDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BackupSecretDto, BackupSourceDto, BackupSourceInfoDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ContactDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
   TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto, TxnSortDto,
-  ReconciliationDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
+  ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
   AttachmentDto, PayeeUsageDto, TagUsageDto,
   RecurrenceDto, RuleDto, RuleInputDto,
 } from './bindings'
@@ -42,6 +42,9 @@ const state = {
   mappings: [] as MappingDto[],
   rules: [] as Rule[],
 }
+
+/** Isi DB baru (sebelum onboarding), untuk `recoveryStartFresh`. */
+const FRESH_STATE = structuredClone(state)
 
 /** Seperti `recurring_rule`: `anchor` = tanggal mulai (sumber BYMONTHDAY/BYDAY di rrule Rust). */
 type Rule = {
@@ -1447,6 +1450,63 @@ export const browserSecurity = {
     if (!passwordOk(newPassword)) return fail('password_too_short')
     if (oldPassword !== security.password) return fail('wrong_password')
     security.password = newPassword
+    return ok(null)
+  },
+}
+
+// --- Pemulihan (P11): aktif hanya lewat hook test; tidak ada file sungguhan di browser. ---
+
+const recovery = { reason: null as RecoveryReasonDto | null }
+
+/** Seperti `AppState.recovery`: command ledger menolak dengan `recovery_required`. */
+export const isBrowserRecovering = () => recovery.reason !== null
+
+/** Hook test/e2e: simulasikan DB yang gagal dibuka saat startup. */
+export function __enterRecovery(reason: RecoveryReasonDto): void {
+  recovery.reason = reason
+}
+
+export function __leaveRecovery(): void {
+  recovery.reason = null
+}
+
+/** Seperti `recovery_slot`: hanya saat DB tidak terbuka (pemulihan atau terkunci). */
+const recoveryAllowed = () => recovery.reason !== null || security.locked
+
+function findBackup(source: BackupSourceDto): Snapshot | undefined {
+  return source.kind === 'named' ? backups.find((b) => b.info.fileName === source.fileName) : undefined
+}
+
+/** DB pengganti plaintext: key file lama dipindah ke samping, seperti `restore_into_fresh`. */
+function leaveRecoveryPlain() {
+  security.password = null
+  security.recovery = null
+  security.locked = false
+  recovery.reason = null
+}
+
+export const browserRecovery = {
+  recoveryStatus: async (): Promise<RecoveryStatusDto> => ({
+    active: recovery.reason !== null,
+    reason: recovery.reason,
+    dataDir: '',
+    hasKeyfile: security.password !== null,
+  }),
+  // Snapshot browser tidak terenkripsi.
+  inspectBackupSource: async (source: BackupSourceDto): Promise<Result<BackupSourceInfoDto>> =>
+    findBackup(source) ? ok({ needsKey: false }) : fail('backup_invalid'),
+  recoverFromBackup: async (source: BackupSourceDto, _secret: BackupSecretDto): Promise<Result<null>> => {
+    if (!recoveryAllowed()) return fail('recovery_unavailable')
+    const src = findBackup(source)
+    if (!src) return fail('backup_invalid')
+    Object.assign(state, structuredClone(src.state))
+    leaveRecoveryPlain()
+    return ok(null)
+  },
+  recoveryStartFresh: async (): Promise<Result<null>> => {
+    if (!recoveryAllowed()) return fail('recovery_unavailable')
+    Object.assign(state, structuredClone(FRESH_STATE))
+    leaveRecoveryPlain()
     return ok(null)
   },
 }
