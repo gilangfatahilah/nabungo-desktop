@@ -24,6 +24,8 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const error = ref<string | null>(null)
 const busy = ref(false)
+/** Password benar tapi DB tidak terbuka: tautan pemulihan ditonjolkan (P10). */
+const suggestRecovery = ref(false)
 
 // Error menempel di field yang salah (docs/design/design.md §7.3).
 const errorField = ref<'password' | 'recovery' | 'new' | 'confirm' | null>(null)
@@ -82,6 +84,7 @@ async function submit() {
   } catch (e) {
     busy.value = false
     const code = (e as { error?: { code?: string } }).error?.code
+    if (code === 'database_unreadable' || code === 'key_file_invalid') suggestRecovery.value = true
     return fail(fieldFor(code), errorMessage(e, t as unknown as Translate))
   }
   password.value = ''
@@ -167,6 +170,12 @@ const invalid = (field: NonNullable<typeof errorField.value>) => (errorField.val
           @click="switchMode('password')"
         >
           {{ t('security.usePassword') }}
+        </Button>
+        <Button
+          type="button" :variant="suggestRecovery ? 'outline' : 'link'" data-testid="unlock-recovery-link"
+          :data-emphasis="suggestRecovery ? 'true' : undefined" @click="router.push({ name: 'recovery' })"
+        >
+          {{ t('security.restoreFromBackup') }}
         </Button>
       </div>
     </form>
