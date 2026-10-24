@@ -581,6 +581,10 @@ export default {
     encryption_state: 'Status enkripsi sudah berubah; muat ulang halaman',
     invalid_auto_lock: 'Durasi kunci otomatis tidak valid',
     database_unreadable: 'Password benar, tapi file database tidak bisa dibaca (rusak atau bukan pasangannya). Pulihkan dari backup',
+    recovery_required: 'Database tidak bisa dibuka. Pulihkan dari backup terlebih dahulu.',
+    recovery_unavailable: 'Pemulihan hanya tersedia saat database tidak terbuka.',
+    backup_key_required: 'File ini terenkripsi (mis. dari instalasi lain) atau bukan backup Nabungo. Masukkan recovery key file tersebut.',
+    database_too_new: 'Database dibuat oleh versi Nabungo yang lebih baru. Perbarui aplikasi.',
     internal: 'Terjadi kesalahan. Detail ada di log aplikasi.',
   } satisfies Record<ErrorCode, string>,
 }

@@ -517,7 +517,7 @@ describe('browser ledger backup', () => {
     await data(L.createTxn(form({ accountId: a, amount: 100_000, splits: [{ categoryId: c, amount: 100_000, memo: null }] })))
     expect(await balance(a)).toBe(400_000)
 
-    await data(L.restoreBackup(auto!.fileName))
+    await data(L.restoreBackup({ kind: 'named', fileName: auto!.fileName }, null))
     expect(await balance(a)).toBe(500_000)
     const list = await data(L.listBackups())
     expect(list.filter((b) => b.kind === 'pre_restore')).toHaveLength(1)
@@ -526,13 +526,13 @@ describe('browser ledger backup', () => {
   })
 
   it('restore nama tak dikenal ditolak', async () => {
-    expect(await L.restoreBackup('auto-20260101T000000Z.db')).toEqual({
+    expect(await L.restoreBackup({ kind: 'named', fileName: 'auto-20260101T000000Z.db' }, null)).toEqual({
       status: 'error', error: { code: 'backup_invalid', entity: null },
     })
   })
 
   it('tanpa file di browser: restore dari file batal, laporan startup bersih', async () => {
-    expect(await data(L.restoreBackupFromFile())).toBe(false)
+    expect(await data(L.pickBackupFile())).toBeNull()
     expect(await L.startupReport()).toEqual({ uncleanShutdown: false, integrity: 'skipped' })
   })
 })

@@ -15,6 +15,7 @@ import {
   type PayeeUsageDto,
   type TagUsageDto,
   type BackupDto,
+  type BackupSourceDto,
   type BucketFieldsDto,
   type BudgetAlertDto,
   type BudgetOverviewDto,
@@ -57,6 +58,11 @@ export type {
   AttachmentDto,
   BackupDto,
   BackupKindDto,
+  BackupSecretDto,
+  BackupSourceDto,
+  BackupSourceInfoDto,
+  RecoveryReasonDto,
+  RecoveryStatusDto,
   BucketActualDto,
   BucketBpDto,
   BucketDto,
@@ -516,14 +522,15 @@ export function backupNow(): Promise<string | null> {
   return unwrap(api().backupNow())
 }
 
-/** Setelah sukses, UI wajib memuat ulang semua data. */
-export async function restoreBackup(fileName: string): Promise<void> {
-  await unwrap(api().restoreBackup(fileName))
+/** Setelah sukses, UI wajib memuat ulang semua data. `srcRecoveryKey`: recovery key milik
+ *  backup terenkripsi dari instalasi lain. */
+export async function restoreBackup(source: BackupSourceDto, srcRecoveryKey: string | null = null): Promise<void> {
+  await unwrap(api().restoreBackup(source, srcRecoveryKey))
 }
 
-/** Dialog buka file; `false` bila dibatalkan. */
-export function restoreBackupFromFile(): Promise<boolean> {
-  return unwrap(api().restoreBackupFromFile())
+/** Dialog buka file backup; `null` bila dibatalkan. */
+export function pickBackupFile(): Promise<string | null> {
+  return unwrap(api().pickBackupFile())
 }
 
 export function exportJson(): Promise<string | null> {

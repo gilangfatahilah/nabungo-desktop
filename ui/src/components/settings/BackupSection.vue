@@ -6,7 +6,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { backupNow, listBackups, restoreBackup, restoreBackupFromFile, type BackupDto } from '@/ipc'
+import { backupNow, listBackups, pickBackupFile, restoreBackup, type BackupDto } from '@/ipc'
 import { formatBytes } from '@/lib/bytes'
 import { formatTimestamp } from '@/lib/date'
 import { withErrorToast } from '@/lib/notify'
@@ -60,8 +60,13 @@ function onConfirm() {
   const target = pending.value
   confirmOpen.value = false
   void run(async () => {
-    const restored = target ? (await restoreBackup(target.fileName), true) : await restoreBackupFromFile()
-    if (!restored) return
+    if (target) {
+      await restoreBackup({ kind: 'named', fileName: target.fileName })
+    } else {
+      const path = await pickBackupFile()
+      if (!path) return
+      await restoreBackup({ kind: 'path', path })
+    }
     toast.success(t('settings.backup.restored'))
     reloadApp()
   })

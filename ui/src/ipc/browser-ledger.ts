@@ -3,7 +3,7 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BackupSourceDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
@@ -865,14 +865,15 @@ export const browserLedger = {
     snapshot('auto')
     return ok('browser://backup')
   },
-  restoreBackup: async (fileName: string): Promise<Result<null>> => {
-    const src = backups.find((b) => b.info.fileName === fileName)
+  restoreBackup: async (source: BackupSourceDto, _srcRecoveryKey: string | null): Promise<Result<null>> => {
+    const src = source.kind === 'named' ? backups.find((b) => b.info.fileName === source.fileName) : undefined
     if (!src) return fail('backup_invalid')
     snapshot('pre_restore')
     Object.assign(state, structuredClone(src.state))
     return ok(null)
   },
-  restoreBackupFromFile: async (): Promise<Result<boolean>> => ok(false),
+  // Mode browser tidak punya dialog file.
+  pickBackupFile: async (): Promise<Result<string | null>> => ok(null),
   exportJson: async (): Promise<Result<string | null>> => ok('browser://export.json'),
   exportCsv: async (): Promise<Result<string | null>> => ok('browser://nabungo-export'),
   getOnboardingStatus: async () => ok(state.onboarded),

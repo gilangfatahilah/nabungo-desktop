@@ -70,6 +70,7 @@ pub enum ErrorCode {
     BackupInvalid,
     BackupTooNew,
     BackupTargetInvalid,
+    BackupKeyRequired,
     AttachmentType,
     AttachmentTooLarge,
     AttachmentMissing,
@@ -85,6 +86,11 @@ pub enum ErrorCode {
     EncryptionState,
     InvalidAutoLock,
     DatabaseUnreadable,
+    DatabaseTooNew,
+    /// DB gagal dibuka saat startup; pulihkan dari backup dulu (P1).
+    RecoveryRequired,
+    /// Command pemulihan dipanggil saat DB sedang terbuka.
+    RecoveryUnavailable,
     Internal,
 }
 
@@ -216,9 +222,8 @@ impl From<AppError> for IpcError {
             AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
             AppError::Allocation(err) => Self::code(err.into()),
             AppError::InvalidBackup => Self::code(ErrorCode::BackupInvalid),
-            // Code khusus menyusul di Task 4 Fase 8b.
-            AppError::BackupKeyRequired => Self::code(ErrorCode::BackupInvalid),
-            AppError::DatabaseTooNew => Self::code(ErrorCode::DatabaseUnreadable),
+            AppError::BackupKeyRequired => Self::code(ErrorCode::BackupKeyRequired),
+            AppError::DatabaseTooNew => Self::code(ErrorCode::DatabaseTooNew),
             AppError::BackupTooNew => Self::code(ErrorCode::BackupTooNew),
             AppError::BackupTargetInvalid => Self::code(ErrorCode::BackupTargetInvalid),
             AppError::AttachmentType => Self::code(ErrorCode::AttachmentType),
@@ -429,6 +434,22 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&e).unwrap(),
             serde_json::json!({ "code": "txn_zero_amount", "entity": null })
+        );
+        for (code, name) in [
+            (ErrorCode::RecoveryRequired, "recovery_required"),
+            (ErrorCode::RecoveryUnavailable, "recovery_unavailable"),
+            (ErrorCode::BackupKeyRequired, "backup_key_required"),
+            (ErrorCode::DatabaseTooNew, "database_too_new"),
+        ] {
+            assert_eq!(serde_json::to_value(code).unwrap(), serde_json::json!(name));
+        }
+        assert_eq!(
+            IpcError::from(AppError::BackupKeyRequired).code,
+            ErrorCode::BackupKeyRequired
+        );
+        assert_eq!(
+            IpcError::from(AppError::DatabaseTooNew).code,
+            ErrorCode::DatabaseTooNew
         );
     }
 }

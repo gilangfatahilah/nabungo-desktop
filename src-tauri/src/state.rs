@@ -8,12 +8,14 @@ use std::time::Instant;
 use nabungo_app::Ledger;
 
 use crate::error::{ErrorCode, IpcError};
-use crate::lifecycle::StartupReport;
+use crate::lifecycle::{RecoveryState, StartupReport};
 use crate::paths::DataDir;
 
 pub struct AppState {
     /// `None` selama DB terenkripsi belum dibuka (terkunci).
     pub ledger: Mutex<Option<Ledger>>,
+    /// `Some` bila DB gagal dibuka saat startup (P1); ledger `None` selama itu.
+    pub recovery: Mutex<Option<RecoveryState>>,
     pub data_dir: DataDir,
     /// Laporan startup; diperbarui setelah unlock dan restore sukses.
     pub startup: Mutex<StartupReport>,

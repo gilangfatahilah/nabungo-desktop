@@ -581,6 +581,10 @@ export default {
     encryption_state: 'Encryption state already changed; reload the page',
     invalid_auto_lock: 'Invalid auto-lock duration',
     database_unreadable: 'The password is correct, but the database file cannot be read (damaged or mismatched). Restore it from a backup',
+    recovery_required: 'The database cannot be opened. Restore it from a backup first.',
+    recovery_unavailable: 'Recovery is only available while the database is not open.',
+    backup_key_required: 'This file is encrypted (e.g. from another installation) or is not a Nabungo backup. Enter that file’s recovery key.',
+    database_too_new: 'The database was made by a newer version of Nabungo. Update the app.',
     internal: 'Something went wrong. See the app log for details.',
   },
 } satisfies MessageSchema
