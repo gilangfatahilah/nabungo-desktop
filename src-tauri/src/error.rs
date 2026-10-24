@@ -216,6 +216,9 @@ impl From<AppError> for IpcError {
             AppError::NotEditable => Self::code(ErrorCode::TxnNotEditable),
             AppError::Allocation(err) => Self::code(err.into()),
             AppError::InvalidBackup => Self::code(ErrorCode::BackupInvalid),
+            // Code khusus menyusul di Task 4 Fase 8b.
+            AppError::BackupKeyRequired => Self::code(ErrorCode::BackupInvalid),
+            AppError::DatabaseTooNew => Self::code(ErrorCode::DatabaseUnreadable),
             AppError::BackupTooNew => Self::code(ErrorCode::BackupTooNew),
             AppError::BackupTargetInvalid => Self::code(ErrorCode::BackupTargetInvalid),
             AppError::AttachmentType => Self::code(ErrorCode::AttachmentType),

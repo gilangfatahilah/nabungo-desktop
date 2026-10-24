@@ -873,7 +873,7 @@ pub fn restore_backup(
     file_name: String,
 ) -> Result<(), IpcError> {
     let dir = state.data_dir.backups_path();
-    ledger(&state)?.restore_named(&dir, &file_name, OffsetDateTime::now_utc())?;
+    ledger(&state)?.restore_named(&dir, &file_name, None, OffsetDateTime::now_utc())?;
     crate::lifecycle::on_restored(&app);
     Ok(())
 }
@@ -889,7 +889,7 @@ pub async fn restore_backup_from_file(
     };
     let dir = state.data_dir.backups_path();
     let att = state.data_dir.attachments_path();
-    ledger(&state)?.restore_file(&src, &dir, &att, OffsetDateTime::now_utc())?;
+    ledger(&state)?.restore_file(&src, None, &dir, &att, OffsetDateTime::now_utc())?;
     crate::lifecycle::on_restored(&app);
     Ok(true)
 }

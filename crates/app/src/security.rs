@@ -135,6 +135,11 @@ pub(crate) fn convert_backups(dir: &Path, from: Option<&DbKey>, to: Option<&DbKe
 }
 
 impl Ledger {
+    /// Key DB aktif; `None` untuk DB plaintext.
+    pub fn key(&self) -> Option<&DbKey> {
+        self.key.as_ref()
+    }
+
     pub fn is_encrypted(&self) -> bool {
         self.key.is_some()
     }
@@ -495,7 +500,7 @@ mod tests {
         std::fs::create_dir_all(&e.backups).unwrap();
         let name = "auto-20261020T031500Z.db";
         std::fs::copy(&plain, e.backups.join(name)).unwrap();
-        l.restore_named(&e.backups, name, NOW).unwrap();
+        l.restore_named(&e.backups, name, None, NOW).unwrap();
         assert_eq!(names(&l), vec![("Lama".into(), 10)]);
         drop(l);
         assert!(is_encrypted_file(&e.db).unwrap());
