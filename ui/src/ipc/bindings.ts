@@ -569,6 +569,8 @@ export type TxnQueryDto = {
 	amountMin: number | null,
 	amountMax: number | null,
 	search: string | null,
+	/**  `null` = tanggal terbaru dulu. */
+	sort: TxnSortDto | null,
 	limit: number,
 	offset: number,
 };
@@ -592,6 +594,13 @@ export type TxnRowDto = {
 	reconciled: boolean | null,
 	attachmentCount: number,
 };
+
+export type TxnSortDto = {
+	field: TxnSortFieldDto,
+	desc: boolean,
+};
+
+export type TxnSortFieldDto = "date" | "amount" | "payee";
 
 export type UiSettingsDto = {
 	theme: ThemeDto,

@@ -29,8 +29,49 @@ pub struct TxnQuery {
     pub amount_max: Option<i64>,
     /// Substring literal (tanpa membedakan huruf) pada payee, catatan, memo posting.
     pub search: Option<String>,
+    pub sort: TxnSort,
     pub limit: u32,
     pub offset: u32,
+}
+
+/// Kolom urutan daftar. Tie-break selalu tanggal & id terbaru agar paginasi stabil.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TxnSortField {
+    #[default]
+    Date,
+    /// Nominal baris bertanda (lihat [`TxnListRow::amount`]).
+    Amount,
+    /// Payee, atau catatan bila payee kosong (NOCASE); baris tanpa keduanya selalu di akhir.
+    Payee,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TxnSort {
+    pub field: TxnSortField,
+    pub desc: bool,
+}
+
+impl Default for TxnSort {
+    fn default() -> Self {
+        Self {
+            field: TxnSortField::Date,
+            desc: true,
+        }
+    }
+}
+
+impl TxnSort {
+    fn order_by(self) -> String {
+        let dir = if self.desc { "DESC" } else { "ASC" };
+        match self.field {
+            TxnSortField::Date => format!("t.date {dir}, t.id {dir}"),
+            TxnSortField::Amount => format!("{ROW_AMOUNT} {dir}, t.date DESC, t.id DESC"),
+            TxnSortField::Payee => format!(
+                "COALESCE(py.name, t.note) IS NULL, COALESCE(py.name, t.note) COLLATE NOCASE {dir}, \
+                 t.date DESC, t.id DESC"
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +127,8 @@ pub fn list_txns(conn: &Connection, q: &TxnQuery) -> Result<TxnPage> {
         "SELECT t.id, t.kind, t.date, py.name, t.note,
                 (SELECT COUNT(*) FROM attachment a WHERE a.txn_id = t.id)
          FROM txn t LEFT JOIN payee py ON py.id = t.payee_id {filter}
-         ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?"
+         ORDER BY {order} LIMIT ? OFFSET ?",
+        order = q.sort.order_by()
     ))?;
     let headers = stmt
         .query_map(params_from_iter(&page_args), |r| {
@@ -576,6 +618,85 @@ mod tests {
         assert_eq!(kopi.account_delta, None);
         assert_eq!(kopi.running_balance, None);
         assert_eq!(row(&page, f.opening_txn).kind, TxnKind::Opening);
+    }
+
+    fn sorted(f: &Fx, field: TxnSortField, desc: bool) -> Vec<Uuid> {
+        let page = list_txns(
+            &f.conn,
+            &TxnQuery {
+                sort: TxnSort { field, desc },
+                ..q()
+            },
+        )
+        .unwrap();
+        ids(&page)
+    }
+
+    #[test]
+    fn sort_by_date_ascending() {
+        let f = fixture();
+        assert_eq!(
+            sorted(&f, TxnSortField::Date, false),
+            vec![
+                f.opening_txn,
+                f.kopi_txn,
+                f.income_txn,
+                f.transfer_txn,
+                f.split_txn
+            ]
+        );
+    }
+
+    #[test]
+    fn sort_by_signed_amount() {
+        let f = fixture();
+        // split −50.000, kopi −25.000, transfer 200.000, opening 1.000.000, gaji 5.000.000
+        let asc = vec![
+            f.split_txn,
+            f.kopi_txn,
+            f.transfer_txn,
+            f.opening_txn,
+            f.income_txn,
+        ];
+        assert_eq!(sorted(&f, TxnSortField::Amount, false), asc);
+        let mut desc = asc;
+        desc.reverse();
+        assert_eq!(sorted(&f, TxnSortField::Amount, true), desc);
+    }
+
+    #[test]
+    fn sort_by_payee_nocase_with_blanks_last() {
+        let f = fixture();
+        // "Kopi Kenangan" < "makan 50% diskon" (NOCASE); sisanya tanpa payee/catatan, urut terbaru.
+        let blanks = [f.transfer_txn, f.income_txn, f.opening_txn];
+        let mut asc = vec![f.kopi_txn, f.split_txn];
+        asc.extend(blanks);
+        assert_eq!(sorted(&f, TxnSortField::Payee, false), asc);
+        let mut desc = vec![f.split_txn, f.kopi_txn];
+        desc.extend(blanks);
+        assert_eq!(sorted(&f, TxnSortField::Payee, true), desc);
+    }
+
+    #[test]
+    fn sorted_pages_are_stable() {
+        let f = fixture();
+        let all = sorted(&f, TxnSortField::Amount, true);
+        let page = |offset| {
+            ids(&list_txns(
+                &f.conn,
+                &TxnQuery {
+                    sort: TxnSort {
+                        field: TxnSortField::Amount,
+                        desc: true,
+                    },
+                    limit: 2,
+                    offset,
+                    ..q()
+                },
+            )
+            .unwrap())
+        };
+        assert_eq!([page(0), page(2), page(4)].concat(), all);
     }
 
     #[test]

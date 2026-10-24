@@ -104,6 +104,13 @@ export default {
     emptyHint: 'Record your first expense and account balances update right away.',
     emptyAction: 'Record a transaction',
     balance: 'Balance',
+    view: { label: 'View', history: 'History', table: 'Table' },
+    columns: {
+      menu: 'Columns', date: 'Date', description: 'Description', category: 'Category', account: 'Account',
+      tags: 'Tags', amount: 'Amount', balance: 'Balance',
+    },
+    sortBy: 'Sort by {column}',
+    filterBy: 'Filter by {name}',
     filters: {
       period: 'Period',
       periods: { all: 'All time', thisMonth: 'This month', last30: 'Last 30 days', custom: 'Custom' },

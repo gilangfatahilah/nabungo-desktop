@@ -70,6 +70,17 @@ describe('TxnFilters', () => {
     expect(w.find('[data-testid="filter-reset"]').exists()).toBe(false)
   })
 
+  it('toggle tampilan memanggil setView; tombol Kolom hanya di Tabel', async () => {
+    const store = useTransactionsStore()
+    const spy = vi.spyOn(store, 'setView').mockImplementation(async (v) => { store.view = v })
+    const w = mount(TxnFilters, { global: { plugins: [i18n] } })
+    expect(w.find('[data-testid="table-columns"]').exists()).toBe(false)
+    await w.find('[data-testid="txn-view-table"]').trigger('click')
+    await flushPromises()
+    expect(spy).toHaveBeenCalledWith('table')
+    expect(w.find('[data-testid="table-columns"]').exists()).toBe(true)
+  })
+
   it('reset mengosongkan semua filter', async () => {
     const store = useTransactionsStore()
     store.query.search = 'x'

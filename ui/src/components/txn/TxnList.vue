@@ -1,24 +1,19 @@
 <script setup lang="ts">
-import { ArrowRightIcon, CircleCheckIcon, EllipsisIcon, PaperclipIcon, PlusIcon } from '@lucide/vue'
+import { ArrowRightIcon, CircleCheckIcon, PaperclipIcon } from '@lucide/vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import EmptyState from '@/components/EmptyState.vue'
 import MoneyText from '@/components/MoneyText.vue'
-import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Kbd } from '@/components/ui/kbd'
-import type { TxnRowDto } from '@/ipc'
+import { useTxnRowActions } from '@/composables/useTxnRowActions'
 import { useTxnRowDisplay } from '@/composables/useTxnRowDisplay'
-import { activeFilterCount } from '@/lib/txnFilter'
 import { formatDateHeader, groupByDate } from '@/lib/txnList'
-import { isEditable } from '@/lib/txnForm'
 import { withErrorToast } from '@/lib/notify'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useSettingsStore } from '@/stores/settings'
 import { useTransactionsStore } from '@/stores/transactions'
-import { useUiStore } from '@/stores/ui'
+import TxnEmpty from './TxnEmpty.vue'
+import TxnRowMenu from './TxnRowMenu.vue'
 
 // `virtual=false` merender semua item tanpa virtualisasi. Hanya untuk test: jsdom tidak
 // mengukur layout sehingga virtualizer tidak merender apa pun.
@@ -26,7 +21,6 @@ const props = withDefaults(defineProps<{ virtual?: boolean }>(), { virtual: true
 
 const { t } = useI18n()
 const store = useTransactionsStore()
-const ui = useUiStore()
 const accounts = useAccountsStore()
 const categories = useCategoriesStore()
 const settings = useSettingsStore()
@@ -39,7 +33,7 @@ const items = computed(() => groupByDate(store.rows))
 const showRunning = computed(() => store.query.accountId !== null)
 
 const { accountName, categoryPath, categoryLabel, tile, title, showCategory, tone } = useTxnRowDisplay()
-const hasFilter = computed(() => activeFilterCount(store.query) > 0)
+const { edit, onKey } = useTxnRowActions()
 
 // --- Virtualisasi ---
 const scroller = useTemplateRef<HTMLElement>('scroller')
@@ -59,6 +53,18 @@ watch(() => virtualizer.value.getVirtualItems().at(-1)?.index, (last) => {
   if (props.virtual && last !== undefined && last >= items.value.length - 20) void withErrorToast(() => store.loadMore())
 })
 
+/** Header tanggal yang menempel (design.md §8.2): tanggal milik item teratas yang terlihat setelah di-scroll. */
+const stickyDate = computed(() => {
+  const offset = virtualizer.value.scrollOffset ?? 0
+  if (!props.virtual || offset <= 0) return null
+  const top = virtualizer.value.getVirtualItems().find((v) => v.end > offset)
+  for (let i = top?.index ?? -1; i >= 0; i--) {
+    const item = items.value[i]!
+    if (item.type === 'date') return item.date
+  }
+  return null
+})
+
 // --- Keyboard ---
 function rowEls(): HTMLElement[] {
   return [...(scroller.value?.querySelectorAll<HTMLElement>('[data-txn-id]') ?? [])]
@@ -76,45 +82,17 @@ async function moveFocus(from: HTMLElement, delta: number) {
     return
   }
 }
-
-function edit(r: TxnRowDto) {
-  if (isEditable(r.kind)) ui.openEditTxn(r.id)
-}
-
-function duplicate(r: TxnRowDto) {
-  if (isEditable(r.kind)) ui.openDuplicateTxn(r.id)
-}
-
-function makeRecurring(r: TxnRowDto) {
-  if (isEditable(r.kind)) ui.openRuleEditor({ mode: 'fromTxn', txnId: r.id })
-}
-
-function remove(r: TxnRowDto) {
-  void withErrorToast(() => store.remove(r.id))
-}
-
-function onKey(e: KeyboardEvent, r: TxnRowDto) {
-  if (e.target !== e.currentTarget) return
-  if (e.key === 'Enter') edit(r)
-  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') duplicate(r)
-  else if (e.key === 'Delete') remove(r)
-  else if (e.key === 'ArrowDown') void moveFocus(e.currentTarget as HTMLElement, 1)
-  else if (e.key === 'ArrowUp') void moveFocus(e.currentTarget as HTMLElement, -1)
-  else return
-  e.preventDefault()
-}
 </script>
 
 <template>
-  <template v-if="store.rows.length === 0 && !store.loading">
-    <EmptyState v-if="hasFilter" :title="t('txn.emptyFiltered')" class="py-4">
-      <Button variant="outline" data-testid="txn-empty-clear" @click="withErrorToast(() => store.clear())">{{ t('txn.filters.clearAll') }}</Button>
-    </EmptyState>
-    <EmptyState v-else :title="t('txn.empty')" :description="t('txn.emptyHint')" class="py-4">
-      <Button data-testid="txn-empty-new" @click="ui.openNewTxn()"><PlusIcon /> {{ t('txn.emptyAction') }} <Kbd class="ml-1">N</Kbd></Button>
-    </EmptyState>
-  </template>
+  <TxnEmpty v-if="store.rows.length === 0 && !store.loading" />
   <div v-else ref="scroller" class="-mx-2 min-h-0 flex-1 overflow-y-auto px-2" role="list" :aria-label="t('nav.transactions')">
+    <!-- Tinggi 0 agar tidak menggeser daftar; isinya menutupi header tanggal yang sudah lewat. -->
+    <div v-if="stickyDate" class="sticky top-0 z-10 h-0" aria-hidden="true" data-testid="txn-sticky-date">
+      <div class="flex h-10 items-end bg-background px-2 pb-1.5 text-meta font-medium text-muted-foreground">
+        {{ formatDateHeader(stickyDate, settings.locale) }}
+      </div>
+    </div>
     <div :style="virtual ? { height: `${virtualizer.getTotalSize()}px`, position: 'relative' } : undefined">
       <div
         v-for="v in visible"
@@ -131,7 +109,7 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
           tabindex="0"
           :data-txn-id="v.item.row.id"
           class="group/row flex h-14 items-center gap-3 rounded-lg px-2 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          @keydown="onKey($event, v.item.row)"
+          @keydown="onKey($event, v.item.row, moveFocus)"
           @dblclick="edit(v.item.row)"
         >
           <span data-testid="txn-icon" class="flex size-7 shrink-0 items-center justify-center rounded-md" :class="tile(v.item.row).class">
@@ -172,30 +150,7 @@ function onKey(e: KeyboardEvent, r: TxnRowDto) {
               :amount="v.item.row.runningBalance"
             />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <Button
-                variant="ghost" size="icon" class="size-8 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-[state=open]:opacity-100"
-                data-testid="txn-menu" :aria-label="t('actions.more')" tabindex="-1"
-              >
-                <EllipsisIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem data-testid="txn-menu-edit" :disabled="!isEditable(v.item.row.kind)" @select="edit(v.item.row)">
-                {{ t('actions.edit') }}<DropdownMenuShortcut>Enter</DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem data-testid="txn-menu-duplicate" :disabled="!isEditable(v.item.row.kind)" @select="duplicate(v.item.row)">
-                {{ t('actions.duplicate') }}<DropdownMenuShortcut>Ctrl+D</DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem data-testid="txn-menu-recurring" :disabled="!isEditable(v.item.row.kind)" @select="makeRecurring(v.item.row)">
-                {{ t('scheduled.makeRecurring') }}
-              </DropdownMenuItem>
-              <DropdownMenuItem data-testid="txn-menu-delete" variant="destructive" @select="remove(v.item.row)">
-                {{ t('actions.delete') }}<DropdownMenuShortcut>Del</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TxnRowMenu :row="v.item.row" />
         </div>
       </div>
     </div>

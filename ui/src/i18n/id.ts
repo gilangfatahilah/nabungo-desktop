@@ -104,6 +104,13 @@ export default {
     emptyHint: 'Catat pengeluaran pertama dan saldo akun langsung ikut berubah.',
     emptyAction: 'Catat transaksi',
     balance: 'Saldo',
+    view: { label: 'Tampilan', history: 'Riwayat', table: 'Tabel' },
+    columns: {
+      menu: 'Kolom', date: 'Tanggal', description: 'Deskripsi', category: 'Kategori', account: 'Akun',
+      tags: 'Tag', amount: 'Nominal', balance: 'Saldo',
+    },
+    sortBy: 'Urutkan menurut {column}',
+    filterBy: 'Saring menurut {name}',
     filters: {
       period: 'Periode',
       periods: { all: 'Semua waktu', thisMonth: 'Bulan ini', last30: '30 hari terakhir', custom: 'Kustom' },

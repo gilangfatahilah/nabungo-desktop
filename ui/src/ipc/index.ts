@@ -107,6 +107,8 @@ export type {
   TxnPageDto,
   TxnQueryDto,
   TxnRowDto,
+  TxnSortDto,
+  TxnSortFieldDto,
   UiSettingsDto,
 } from './bindings'
 

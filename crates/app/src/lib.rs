@@ -64,7 +64,7 @@ pub use nabungo_storage::format_utc as format_timestamp;
 pub use nabungo_storage::payee::PayeeUsage;
 pub use nabungo_storage::tag::TagUsage;
 pub use nabungo_storage::txn::PostingRecord;
-pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery};
+pub use nabungo_storage::txn_list::{TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField};
 pub use onboarding::OnboardingInput;
 pub use payee::PayeeSuggestion;
 pub use reconcile::Reconciliation;

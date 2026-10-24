@@ -62,6 +62,35 @@ describe('transactions store', () => {
     expect(s.total).toBe(130)
   })
 
+  it('setSort membalik arah kolom yang sama; kolom baru mulai dari arah alaminya', async () => {
+    const acc = await seed(3)
+    const s = useTransactionsStore()
+    await s.setQuery({ accountId: acc })
+    await s.setSort('amount')
+    expect(s.sort).toEqual({ field: 'amount', desc: true })
+    // Pengeluaran bertanda negatif: "terbesar" = −1.
+    expect(s.rows.map((r) => r.amount)).toEqual([-1, -2, -3])
+    await s.setSort('amount')
+    expect(s.sort).toEqual({ field: 'amount', desc: false })
+    expect(s.rows.map((r) => r.amount)).toEqual([-3, -2, -1])
+    await s.setSort('payee')
+    expect(s.sort).toEqual({ field: 'payee', desc: false })
+  })
+
+  it('setView ke riwayat mengembalikan urutan tanggal dan diingat', async () => {
+    const s = useTransactionsStore()
+    await s.setView('table')
+    await s.setSort('amount')
+    await s.setView('history')
+    expect(s.sort).toEqual({ field: 'date', desc: true })
+    expect(localStorage.getItem('nabungo.txn.view')).toBe('history')
+    // Urutan bukan filter: "Hapus semua" tidak menyentuhnya.
+    await s.setView('table')
+    await s.setSort('payee')
+    await s.clear()
+    expect(s.sort.field).toBe('payee')
+  })
+
   it('setQuery mereset ke halaman pertama', async () => {
     const acc = await seed(130)
     const s = useTransactionsStore()

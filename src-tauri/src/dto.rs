@@ -7,8 +7,8 @@ use nabungo_app::{
     CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Freq, Locale,
     NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay,
     PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme,
-    TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, UiSettings, Uuid, ValuationPoint,
-    format_date, parse_date,
+    TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings,
+    Uuid, ValuationPoint, format_date, parse_date,
 };
 use serde::{Deserialize, Serialize};
 
@@ -642,8 +642,39 @@ pub struct TxnQueryDto {
     pub amount_min: Option<i64>,
     pub amount_max: Option<i64>,
     pub search: Option<String>,
+    /// `null` = tanggal terbaru dulu.
+    pub sort: Option<TxnSortDto>,
     pub limit: u32,
     pub offset: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TxnSortFieldDto {
+    Date,
+    Amount,
+    Payee,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TxnSortDto {
+    pub field: TxnSortFieldDto,
+    pub desc: bool,
+}
+
+impl From<TxnSortDto> for TxnSort {
+    fn from(d: TxnSortDto) -> Self {
+        let field = match d.field {
+            TxnSortFieldDto::Date => TxnSortField::Date,
+            TxnSortFieldDto::Amount => TxnSortField::Amount,
+            TxnSortFieldDto::Payee => TxnSortField::Payee,
+        };
+        Self {
+            field,
+            desc: d.desc,
+        }
+    }
 }
 
 impl TryFrom<TxnQueryDto> for TxnQuery {
@@ -661,6 +692,7 @@ impl TryFrom<TxnQueryDto> for TxnQuery {
             amount_min: d.amount_min,
             amount_max: d.amount_max,
             search: d.search,
+            sort: d.sort.map(Into::into).unwrap_or_default(),
             limit: d.limit,
             offset: d.offset,
         })
@@ -1818,6 +1850,22 @@ mod tests {
         .unwrap();
         assert_eq!(q.date_from.map(format_date).as_deref(), Some("2026-10-01"));
         assert_eq!(q.limit, 100);
+        assert_eq!(q.sort, TxnSort::default());
+        let sorted = TxnQuery::try_from(TxnQueryDto {
+            sort: Some(TxnSortDto {
+                field: TxnSortFieldDto::Amount,
+                desc: false,
+            }),
+            ..TxnQueryDto::default()
+        })
+        .unwrap();
+        assert_eq!(
+            sorted.sort,
+            TxnSort {
+                field: TxnSortField::Amount,
+                desc: false
+            }
+        );
         let e = TxnQuery::try_from(TxnQueryDto {
             payee_id: Some("x".into()),
             ..TxnQueryDto::default()
