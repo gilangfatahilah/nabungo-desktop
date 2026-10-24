@@ -400,7 +400,7 @@ impl Ledger {
             BackupKind::PreRestore,
             now,
         )?;
-        nabungo_storage::restore_from(&mut self.conn, src, self.key.as_ref())
+        nabungo_storage::restore_from(&mut self.conn, src, self.key.as_ref(), self.key.as_ref())
             .map_err(AppError::from_backup)?;
         nabungo_storage::migrate(&mut self.conn)?;
         // Retensi setelah restore: sumbernya bisa saja pre-restore tertua.

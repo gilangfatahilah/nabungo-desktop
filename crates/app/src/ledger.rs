@@ -120,7 +120,9 @@ impl AppError {
     /// Kesalahan isi file backup → varian khusus; selain itu apa adanya.
     pub(crate) fn from_backup(e: StorageError) -> AppError {
         match e {
-            StorageError::InvalidBackup => AppError::InvalidBackup,
+            StorageError::InvalidBackup | StorageError::BackupKeyRequired => {
+                AppError::InvalidBackup
+            }
             StorageError::BackupTooNew(_) => AppError::BackupTooNew,
             e => e.into(),
         }

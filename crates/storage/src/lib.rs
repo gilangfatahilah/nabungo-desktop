@@ -43,6 +43,10 @@ pub enum StorageError {
     Duplicate,
     #[error("not a valid backup")]
     InvalidBackup,
+    /// Backup ber-header non-SQLite yang tidak bisa dibuka dengan key yang diberikan: terenkripsi
+    /// dengan key lain (instalasi lain), atau bukan file SQLite sama sekali.
+    #[error("backup is encrypted with another key")]
+    BackupKeyRequired,
     #[error("backup schema version {0} is newer than this app")]
     BackupTooNew(usize),
     /// File terenkripsi dibuka tanpa key.
