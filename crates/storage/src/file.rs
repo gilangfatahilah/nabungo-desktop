@@ -84,6 +84,11 @@ pub fn open_file_read_only(path: &Path, key: Option<&DbKey>) -> Result<Connectio
 
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     migrations().to_latest(conn)?;
+    // Statistik planner: tanpa `sqlite_stat1`, SQLite memilih indeks parsial yang memaksa
+    // lookup baris per transaksi (daftar & laporan 2–5× lebih lambat di 50.000 transaksi).
+    // ANALYZE penuh hanya saat statistik belum ada/basi; selain itu ±1 ms. Best-effort: DB
+    // yang rusak tetap harus bisa dibuka agar integrity check dan restore berjalan.
+    let _ = conn.execute_batch("PRAGMA optimize = 0x10002;");
     Ok(())
 }
 
@@ -442,7 +447,26 @@ mod tests {
         assert_eq!(schema_version(&conn).unwrap(), 3);
         migrate(&mut conn).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), latest_version());
-        assert_eq!(latest_version(), 8);
+        assert_eq!(latest_version(), 9);
+    }
+
+    #[test]
+    fn migrate_refreshes_planner_stats() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.db");
+        open(&path, None)
+            .unwrap()
+            .execute_batch("INSERT INTO payee (id, name) VALUES ('p1', 'Kopi'), ('p2', 'Teh')")
+            .unwrap();
+        let conn = open(&path, None).unwrap();
+        let analyzed: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_stat1 WHERE tbl = 'payee'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(analyzed > 0);
     }
 
     fn key(b: u8) -> DbKey {
