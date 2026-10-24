@@ -65,6 +65,22 @@ pub fn auto_backup_allowed(r: &StartupReport) -> bool {
     r.integrity != IntegrityStatus::Failed
 }
 
+/// Backup otomatis untuk sesi ini: `Immediate` = scheduler latar langsung menjalankan
+/// putaran pertama, sehingga backup jatuh tempo tidak menahan startup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackupPlan {
+    Disabled,
+    Immediate,
+}
+
+pub fn startup_backup_plan(r: &StartupReport) -> BackupPlan {
+    if auto_backup_allowed(r) {
+        BackupPlan::Immediate
+    } else {
+        BackupPlan::Disabled
+    }
+}
+
 /// `integrity_check` penuh; pesan masalah dicatat ke log.
 pub fn check_integrity(ledger: &nabungo_app::Ledger) -> IntegrityStatus {
     match ledger.integrity_check() {
@@ -116,15 +132,14 @@ pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError
         }
         *startup
     };
-    let auto_backup = auto_backup_allowed(&startup);
-    if auto_backup {
-        run_auto_backup(&ledger, &backups);
-        run_auto_post(&mut ledger);
-    } else {
-        tracing::warn!("backup otomatis dimatikan untuk sesi ini");
+    let plan = startup_backup_plan(&startup);
+    match plan {
+        // Auto-post tetap sinkron: hasilnya harus sudah tampil di dasbor pertama.
+        BackupPlan::Immediate => run_auto_post(&mut ledger),
+        BackupPlan::Disabled => tracing::warn!("backup otomatis dimatikan untuk sesi ini"),
     }
     *state.ledger.lock().unwrap_or_else(|e| e.into_inner()) = Some(ledger);
-    if auto_backup {
+    if plan == BackupPlan::Immediate {
         spawn_backup_scheduler(app.clone());
     }
     Ok(())
@@ -141,7 +156,8 @@ pub fn on_restored(app: &AppHandle) {
     }
 }
 
-/// Thread latar: tiap jam cek apakah backup otomatis jatuh tempo. Hanya satu per proses.
+/// Thread latar: cek backup otomatis jatuh tempo segera saat mulai, lalu tiap jam. Hanya
+/// satu per proses.
 pub fn spawn_backup_scheduler(app: AppHandle) {
     if app
         .state::<AppState>()
@@ -154,7 +170,6 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
         .name("backup-scheduler".into())
         .spawn(move || {
             loop {
-                std::thread::sleep(SCHEDULER_TICK);
                 let state = app.state::<AppState>();
                 let dir = state.data_dir.backups_path();
                 match state.ledger.lock() {
@@ -167,6 +182,7 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
                     }
                     Err(_) => tracing::warn!("mutex ledger poisoned; backup otomatis dilewati"),
                 };
+                std::thread::sleep(SCHEDULER_TICK);
             }
         });
     if let Err(e) = spawned {
@@ -215,5 +231,25 @@ mod tests {
         assert!(!auto_backup_allowed(&r(IntegrityStatus::Failed)));
         assert!(auto_backup_allowed(&r(IntegrityStatus::Ok)));
         assert!(auto_backup_allowed(&r(IntegrityStatus::Skipped)));
+    }
+
+    #[test]
+    fn first_tick_respects_integrity() {
+        let r = |integrity| StartupReport {
+            unclean_shutdown: true,
+            integrity,
+        };
+        assert_eq!(
+            startup_backup_plan(&r(IntegrityStatus::Failed)),
+            BackupPlan::Disabled
+        );
+        assert_eq!(
+            startup_backup_plan(&r(IntegrityStatus::Ok)),
+            BackupPlan::Immediate
+        );
+        assert_eq!(
+            startup_backup_plan(&r(IntegrityStatus::Skipped)),
+            BackupPlan::Immediate
+        );
     }
 }
