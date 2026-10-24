@@ -1,6 +1,7 @@
 //! Siklus hidup sesi: penanda shutdown tidak normal, laporan startup, backup terjadwal.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use nabungo_app::{AppError, DbKey, Ledger, OffsetDateTime};
@@ -10,6 +11,9 @@ use crate::state::AppState;
 
 /// Jeda antar-pemeriksaan backup otomatis selama app berjalan.
 const SCHEDULER_TICK: Duration = Duration::from_secs(60 * 60);
+/// Batas tunggu putaran pertama bila dasbor tidak pernah melapor siap (mis. onboarding).
+const FIRST_TICK_MAX_WAIT: Duration = Duration::from_secs(30);
+const READY_POLL: Duration = Duration::from_millis(200);
 
 /// File penanda sesi: ada saat startup = sesi sebelumnya tidak berakhir normal.
 pub struct SessionMarker;
@@ -65,8 +69,8 @@ pub fn auto_backup_allowed(r: &StartupReport) -> bool {
     r.integrity != IntegrityStatus::Failed
 }
 
-/// Backup otomatis untuk sesi ini: `Immediate` = scheduler latar langsung menjalankan
-/// putaran pertama, sehingga backup jatuh tempo tidak menahan startup.
+/// Backup otomatis untuk sesi ini: `Immediate` = scheduler latar menjalankan putaran
+/// pertama setelah dasbor tampil, sehingga backup jatuh tempo tidak menahan startup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackupPlan {
     Disabled,
@@ -156,19 +160,33 @@ pub fn on_restored(app: &AppHandle) {
     }
 }
 
-/// Thread latar: cek backup otomatis jatuh tempo segera saat mulai, lalu tiap jam. Hanya
-/// satu per proses.
+/// Tunggu sampai `ready` (dasbor pertama tampil) atau paling lama `max`.
+fn wait_until_ready(ready: &AtomicBool, max: Duration, poll: Duration) {
+    let start = std::time::Instant::now();
+    while !ready.load(Ordering::SeqCst) && start.elapsed() < max {
+        std::thread::sleep(poll);
+    }
+}
+
+/// Thread latar: cek backup otomatis jatuh tempo setelah dasbor pertama tampil (backup
+/// memegang mutex ledger, ±1 s untuk DB terenkripsi 50.000 transaksi), lalu tiap jam.
+/// Hanya satu per proses.
 pub fn spawn_backup_scheduler(app: AppHandle) {
     if app
         .state::<AppState>()
         .scheduler_started
-        .swap(true, std::sync::atomic::Ordering::SeqCst)
+        .swap(true, Ordering::SeqCst)
     {
         return;
     }
     let spawned = std::thread::Builder::new()
         .name("backup-scheduler".into())
         .spawn(move || {
+            wait_until_ready(
+                &app.state::<AppState>().ready_logged,
+                FIRST_TICK_MAX_WAIT,
+                READY_POLL,
+            );
             loop {
                 let state = app.state::<AppState>();
                 let dir = state.data_dir.backups_path();
@@ -193,6 +211,30 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_tick_waits_until_ready() {
+        let ready = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = ready.clone();
+        let setter = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            flag.store(true, Ordering::SeqCst);
+        });
+        let t = std::time::Instant::now();
+        wait_until_ready(&ready, Duration::from_secs(5), Duration::from_millis(5));
+        let waited = t.elapsed();
+        setter.join().unwrap();
+        assert!(waited >= Duration::from_millis(50), "{waited:?}");
+        assert!(waited < Duration::from_secs(1), "{waited:?}");
+    }
+
+    #[test]
+    fn first_tick_gives_up_after_max() {
+        let ready = AtomicBool::new(false);
+        let t = std::time::Instant::now();
+        wait_until_ready(&ready, Duration::from_millis(60), Duration::from_millis(5));
+        assert!(t.elapsed() >= Duration::from_millis(60));
+    }
 
     #[test]
     fn restore_clears_failed_integrity() {
