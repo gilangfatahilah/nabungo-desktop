@@ -93,6 +93,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::category_breakdown,
             commands::net_worth_history,
             commands::startup_report,
+            commands::app_ready,
             commands::list_backups,
             commands::backup_now,
             commands::restore_backup,
@@ -118,7 +119,7 @@ fn bindings_exporter() -> specta_typescript::Typescript {
 
 const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/ipc/bindings.ts");
 
-fn init(app: &tauri::App) -> anyhow::Result<()> {
+fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
     use tauri::Manager;
 
     let exe = std::env::current_exe()?;
@@ -150,6 +151,8 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
         }),
         scheduler_started: std::sync::atomic::AtomicBool::new(false),
         unclean_shutdown,
+        started,
+        ready_logged: std::sync::atomic::AtomicBool::new(false),
     });
     match db_state {
         nabungo_app::security::DbState::Plain => {
@@ -168,6 +171,7 @@ fn init(app: &tauri::App) -> anyhow::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let started = std::time::Instant::now();
     let builder = specta_builder();
 
     #[cfg(debug_assertions)]
@@ -179,7 +183,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| init(app).map_err(Into::into))
+        .setup(move |app| init(app, started).map_err(Into::into))
         .invoke_handler(builder.invoke_handler())
         .build(tauri::generate_context!())
         .expect("error while building Nabungo")

@@ -181,6 +181,16 @@ describe('DashboardView', () => {
     await ipc.setBudget(kopi, '2026-10', 20_000)
   })
 
+  it('calls appReady once after first load', async () => {
+    const spy = vi.spyOn(ipc, 'appReady')
+    await view()
+    expect(spy).toHaveBeenCalledTimes(1)
+    useTransactionsStore().ledgerVersion++
+    await settle()
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
+  })
+
   it('memuat ulang setelah aksi tulis', async () => {
     await view()
     await ipc.createTxn({

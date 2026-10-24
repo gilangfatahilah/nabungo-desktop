@@ -615,6 +615,19 @@ pub fn startup_report(state: State<'_, AppState>) -> StartupReportDto {
     (*state.startup.lock().unwrap_or_else(|e| e.into_inner())).into()
 }
 
+/// Dasbor pertama selesai dimuat: catat waktu sejak proses mulai, sekali per proses (log lokal).
+#[tauri::command]
+#[specta::specta]
+pub fn app_ready(state: State<'_, AppState>) {
+    if !state
+        .ready_logged
+        .swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        let startup_ms = state.started.elapsed().as_millis() as u64;
+        tracing::info!(startup_ms, "dasbor pertama tampil");
+    }
+}
+
 // --- Tag & payee (CAT-04) ---
 
 fn parse_opt_id(id: Option<String>, entity: &str) -> Result<Option<Uuid>, IpcError> {

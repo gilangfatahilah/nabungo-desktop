@@ -859,6 +859,7 @@ function snapshot(kind: BackupKindDto): BackupDto {
 
 export const browserLedger = {
   startupReport: async (): Promise<StartupReportDto> => ({ uncleanShutdown: false, integrity: 'skipped' }),
+  appReady: async (): Promise<void> => {},
   listBackups: async (): Promise<Result<BackupDto[]>> => ok(backups.map((b) => ({ ...b.info }))),
   backupNow: async (): Promise<Result<string | null>> => {
     snapshot('auto')
