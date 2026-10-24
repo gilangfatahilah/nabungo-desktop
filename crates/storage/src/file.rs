@@ -447,7 +447,7 @@ mod tests {
         assert_eq!(schema_version(&conn).unwrap(), 3);
         migrate(&mut conn).unwrap();
         assert_eq!(schema_version(&conn).unwrap(), latest_version());
-        assert_eq!(latest_version(), 9);
+        assert_eq!(latest_version(), 10);
     }
 
     #[test]

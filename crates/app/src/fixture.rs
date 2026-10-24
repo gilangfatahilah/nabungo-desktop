@@ -499,6 +499,38 @@ mod tests {
         (balances, flow)
     }
 
+    /// Titik terakhir riwayat (akhir periode berjalan, tidak ada transaksi sesudah `END`)
+    /// sama dengan overview saat ini, yang menghitung saldo lewat jalur lain.
+    #[test]
+    fn history_end_matches_current_overview() {
+        let (l, _) = seeded(2_000);
+        let period = l.period_of(END).unwrap();
+        let nw = l.net_worth_history(period, 12).unwrap();
+        let overview = l.accounts_overview().unwrap();
+        assert_eq!(nw.len(), 12);
+        let last = nw.last().unwrap();
+        assert_eq!(
+            (last.assets, last.liabilities, last.net),
+            (
+                overview.net_worth.assets,
+                overview.net_worth.liabilities,
+                overview.net_worth.net
+            )
+        );
+        let alloc = l.allocation_overview().unwrap();
+        let hist = l.allocation_history(period, 12).unwrap();
+        let point = hist.last().unwrap();
+        assert_eq!(point.gross, alloc.report.gross);
+        let roots: Vec<_> = alloc
+            .buckets
+            .iter()
+            .zip(&alloc.report.buckets)
+            .filter(|(b, _)| b.parent_id.is_none())
+            .map(|(b, r)| (b.id, r.actual_bp))
+            .collect();
+        assert_eq!(point.buckets, roots);
+    }
+
     #[test]
     fn fixture_is_deterministic() {
         let (a, _) = seeded(2_000);

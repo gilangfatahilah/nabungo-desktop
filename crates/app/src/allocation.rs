@@ -169,7 +169,7 @@ impl Ledger {
         count: u8,
     ) -> Result<Vec<(BudgetPeriod, Date, Vec<AccountBalance>)>, AppError> {
         let start = self.period_start_day()?;
-        let accounts = account::list_accounts(&self.conn)?;
+        let accounts = account::list_account_meta(&self.conn)?;
         let periods = periods_ending(end, count);
         let dates: Vec<Date> = periods.iter().map(|p| p.last_day(start)).collect();
         let per_date = report::balances_at_dates(&self.conn, &dates)?;

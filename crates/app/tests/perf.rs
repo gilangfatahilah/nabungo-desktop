@@ -83,6 +83,71 @@ fn dashboard(ledger: &mut Ledger) {
     ledger.list_rules(today).unwrap();
 }
 
+/// Rincian S2: median tiap panggilan dasbor pada ledger yang sudah terbuka (tanpa budget).
+fn dashboard_breakdown(ledger: &mut Ledger) -> Vec<(&'static str, u128)> {
+    let today = local_today();
+    let period = ledger.period_of(today).unwrap();
+    vec![
+        (
+            "post_auto_due",
+            time(|| {
+                let _ = ledger.post_auto_due(today);
+            }),
+        ),
+        (
+            "accounts_overview",
+            time(|| drop(ledger.accounts_overview().unwrap())),
+        ),
+        (
+            "list_categories",
+            time(|| drop(ledger.list_categories().unwrap())),
+        ),
+        (
+            "list_txns_8",
+            time(|| {
+                drop(
+                    ledger
+                        .list_txns(&TxnQuery {
+                            limit: 8,
+                            ..TxnQuery::default()
+                        })
+                        .unwrap(),
+                )
+            }),
+        ),
+        (
+            "budget_overview",
+            time(|| drop(ledger.budget_overview(period, today).unwrap())),
+        ),
+        (
+            "category_breakdown",
+            time(|| {
+                drop(
+                    ledger
+                        .category_breakdown(period, CategoryKind::Expense)
+                        .unwrap(),
+                )
+            }),
+        ),
+        (
+            "allocation_overview",
+            time(|| drop(ledger.allocation_overview().unwrap())),
+        ),
+        (
+            "cashflow_report",
+            time(|| drop(ledger.cashflow_report(period, PERIODS).unwrap())),
+        ),
+        (
+            "net_worth_history",
+            time(|| drop(ledger.net_worth_history(period, PERIODS).unwrap())),
+        ),
+        (
+            "list_rules",
+            time(|| drop(ledger.list_rules(today).unwrap())),
+        ),
+    ]
+}
+
 fn page(q: TxnQuery) -> TxnQuery {
     TxnQuery { limit: 100, ..q }
 }
@@ -253,6 +318,15 @@ fn perf_50k() {
 
     let plain_ms = measure(Variant::Plain, &plain, None, tmp.path(), &summary);
     let enc_ms = measure(Variant::Encrypted, &enc, Some(&key), tmp.path(), &summary);
+    let backups = tmp.path().join("backups-breakdown");
+    let plain_parts = dashboard_breakdown(&mut open(&plain, &backups, None));
+    let enc_parts = dashboard_breakdown(&mut open(&enc, &backups, Some(&key)));
+
+    println!("\n| rincian startup | plaintext ms | sqlcipher ms |");
+    println!("|---|---:|---:|");
+    for (&(name, p), &(_, e)) in plain_parts.iter().zip(&enc_parts) {
+        println!("| `{name}` | {} | {} |", ms(p), ms(e));
+    }
 
     println!("\n| skenario | plaintext ms | sqlcipher ms | budget ms |");
     println!("|---|---:|---:|---:|");

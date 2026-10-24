@@ -130,6 +130,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0007_tags_attachments.sql"),
     include_str!("../migrations/0008_bucket_target_amount.sql"),
     include_str!("../migrations/0009_perf_indexes.sql"),
+    include_str!("../migrations/0010_reconciled_index.sql"),
 ];
 
 /// Versi skema terbaru (`user_version` setelah semua migrasi).
@@ -337,7 +338,11 @@ mod tests {
     #[test]
     fn perf_indexes_exist() {
         let conn = open_in_memory().unwrap();
-        for index in ["idx_posting_account_txn", "idx_posting_txn_cat"] {
+        for index in [
+            "idx_posting_account_txn",
+            "idx_posting_txn_cat",
+            "idx_posting_reconciled",
+        ] {
             let n: i64 = conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",

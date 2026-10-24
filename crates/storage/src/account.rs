@@ -239,6 +239,39 @@ impl RawAccount {
     }
 }
 
+/// Atribut akun yang menentukan net worth/alokasi, tanpa menghitung saldo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountMeta {
+    pub id: Uuid,
+    pub kind: AccountKind,
+    pub include_in_net_worth: bool,
+}
+
+/// Semua akun (termasuk diarsip), urutan sama dengan [`list_accounts`].
+pub fn list_account_meta(conn: &Connection) -> Result<Vec<AccountMeta>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT id, kind, include_in_net_worth FROM account ORDER BY sort_order, name",
+    )?;
+    let raw = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, bool>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    raw.into_iter()
+        .map(|(id, kind, include_in_net_worth)| {
+            Ok(AccountMeta {
+                kind: parse_kind(&id, &kind)?,
+                id: parse_uuid("account", &id)?,
+                include_in_net_worth,
+            })
+        })
+        .collect()
+}
+
 /// Semua akun (termasuk diarsip) dengan saldo dan saldo awal, dalam satu query.
 /// Saldo memakai aturan yang sama dengan [`crate::txn::account_balance`].
 pub fn list_accounts(conn: &Connection) -> Result<Vec<AccountRow>> {
@@ -442,6 +475,31 @@ mod tests {
         assert_eq!(rb.opening, None);
         assert_eq!(rb.balance, 200_000);
         assert_eq!(row(&tx, c.id).balance, 0);
+    }
+
+    #[test]
+    fn list_account_meta_matches_list_accounts() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let (a, b) = (bank(&tx, "A"), bank(&tx, "B"));
+        record(
+            &tx,
+            TxnKind::Opening,
+            date!(2026 - 10 - 01),
+            &[(a, 500_000)],
+        );
+        set_account_archived(&tx, b.id, true, &now_utc()).unwrap();
+        let expected: Vec<AccountMeta> = list_accounts(&tx)
+            .unwrap()
+            .into_iter()
+            .map(|r| AccountMeta {
+                id: r.id,
+                kind: r.kind,
+                include_in_net_worth: r.include_in_net_worth,
+            })
+            .collect();
+        assert_eq!(expected.len(), 2);
+        assert_eq!(list_account_meta(&tx).unwrap(), expected);
     }
 
     fn draft(kind: TxnKind, on: Date, postings: &[(AccountRef, i64)]) -> ValidTxn {
