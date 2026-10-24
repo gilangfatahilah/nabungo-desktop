@@ -117,6 +117,45 @@ pub fn run_auto_post(ledger: &mut Ledger) {
     }
 }
 
+/// Alasan app masuk mode pemulihan (P1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryReason {
+    Unreadable,
+    TooNew,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RecoveryState {
+    pub reason: RecoveryReason,
+}
+
+/// Hasil membuka DB saat startup → mode pemulihan (`None` = berhasil).
+pub fn startup_mode(r: Result<(), AppError>) -> Option<RecoveryState> {
+    let reason = match r.err()? {
+        AppError::DatabaseTooNew => RecoveryReason::TooNew,
+        _ => RecoveryReason::Unreadable,
+    };
+    Some(RecoveryState { reason })
+}
+
+/// Keluar dari mode pemulihan setelah DB diganti: buka DB baru, lalu perlakukan seperti restore.
+pub fn leave_recovery(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError> {
+    let state = app.state::<AppState>();
+    *state.recovery.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    if let Err(e) = open_unlocked(app, key) {
+        // DB pengganti pun gagal dibuka: tetap di pemulihan agar user bisa mencoba lagi.
+        let reason = if matches!(e, AppError::DatabaseTooNew) {
+            RecoveryReason::TooNew
+        } else {
+            RecoveryReason::Unreadable
+        };
+        *state.recovery.lock().unwrap_or_else(|e| e.into_inner()) = Some(RecoveryState { reason });
+        return Err(e);
+    }
+    on_restored(app);
+    Ok(())
+}
+
 /// Buka DB (plaintext: `key = None`) dan pasang ke state. Integrity check penuh
 /// dijalankan sekali per proses bila sesi sebelumnya tidak berakhir normal — untuk DB
 /// terenkripsi baru bisa saat unlock pertama.
@@ -211,6 +250,23 @@ pub fn spawn_backup_scheduler(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_mode_maps_errors() {
+        assert!(startup_mode(Ok(())).is_none());
+        assert_eq!(
+            startup_mode(Err(AppError::DatabaseTooNew)).map(|r| r.reason),
+            Some(RecoveryReason::TooNew)
+        );
+        assert_eq!(
+            startup_mode(Err(AppError::DatabaseUnreadable)).map(|r| r.reason),
+            Some(RecoveryReason::Unreadable)
+        );
+        assert_eq!(
+            startup_mode(Err(AppError::Io(std::io::Error::other("disk")))).map(|r| r.reason),
+            Some(RecoveryReason::Unreadable)
+        );
+    }
 
     #[test]
     fn first_tick_waits_until_ready() {

@@ -27,6 +27,7 @@ mod ledger;
 mod onboarding;
 mod payee;
 mod reconcile;
+pub mod recovery;
 mod recurring;
 mod reports;
 pub mod security;
@@ -41,7 +42,9 @@ pub mod vault;
 pub use accounts::{AccountFields, AccountsOverview};
 pub use allocation::{AllocationOverview, AllocationPoint, BucketFields};
 pub use attachments::{AttachmentRow, MAX_ATTACHMENT_BYTES};
-pub use backup::{BackupInfo, BackupKind, is_auto_due, list_backups, parse_backup_name};
+pub use backup::{
+    BackupInfo, BackupKind, backup_needs_key, is_auto_due, list_backups, parse_backup_name,
+};
 pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
 pub use categories::CategoryFields;

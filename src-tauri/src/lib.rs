@@ -97,7 +97,11 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::list_backups,
             commands::backup_now,
             commands::restore_backup,
-            commands::restore_backup_from_file,
+            commands::pick_backup_file,
+            commands::inspect_backup_source,
+            commands::recovery_status,
+            commands::recover_from_backup,
+            commands::recovery_start_fresh,
             commands::export_json,
             commands::export_csv,
             commands::set_auto_lock_minutes,
@@ -134,16 +138,19 @@ fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
     if unclean_shutdown {
         tracing::warn!("sesi sebelumnya tidak berakhir normal");
     }
-    let db_state = match nabungo_app::security::db_state(&data_dir.db_path()) {
-        Ok(st) => st,
+    // DB yang gagal dibuka tidak fatal: app masuk mode pemulihan agar restore terjangkau (P1).
+    let db_state = nabungo_app::security::db_state(&data_dir.db_path());
+    let recovery = match &db_state {
+        Ok(_) => None,
         Err(e) => {
-            tracing::error!(error = %e, "gagal memeriksa file database");
-            return Err(e.into());
+            tracing::error!(error = %e, "gagal memeriksa file database; mode pemulihan");
+            lifecycle::startup_mode(Err(nabungo_app::AppError::DatabaseUnreadable))
         }
     };
     app.manage(state::LogGuard(guard));
     app.manage(state::AppState {
         ledger: std::sync::Mutex::new(None),
+        recovery: std::sync::Mutex::new(recovery),
         data_dir,
         startup: std::sync::Mutex::new(lifecycle::StartupReport {
             unclean_shutdown,
@@ -155,16 +162,19 @@ fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
         ready_logged: std::sync::atomic::AtomicBool::new(false),
     });
     match db_state {
-        nabungo_app::security::DbState::Plain => {
-            if let Err(e) = lifecycle::open_unlocked(app.handle(), None) {
-                tracing::error!(error = %e, "gagal membuka database");
-                eprintln!("gagal membuka database: {e}");
-                return Err(e.into());
+        Ok(nabungo_app::security::DbState::Plain) => {
+            let opened = lifecycle::open_unlocked(app.handle(), None);
+            if let Err(e) = &opened {
+                tracing::error!(error = %e, "gagal membuka database; mode pemulihan");
             }
+            let state = app.state::<state::AppState>();
+            *state.recovery.lock().unwrap_or_else(|e| e.into_inner()) =
+                lifecycle::startup_mode(opened);
         }
-        nabungo_app::security::DbState::Encrypted { .. } => {
+        Ok(nabungo_app::security::DbState::Encrypted { .. }) => {
             tracing::info!("database terenkripsi; menunggu unlock");
         }
+        Err(_) => {}
     }
     Ok(())
 }

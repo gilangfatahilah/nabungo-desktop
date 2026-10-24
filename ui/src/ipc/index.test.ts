@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { appInfo, getUiSettings, IpcFailure, parseAmount, setTheme } from './index'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { __enterRecovery, __leaveRecovery } from './browser-ledger'
+import { appInfo, getUiSettings, getOnboardingStatus, IpcFailure, parseAmount, setRecoveryHandler, setTheme } from './index'
 
 // jsdom tanpa Tauri: semua fungsi jatuh ke implementasi browser.
 describe('ipc facade (browser fallback)', () => {
@@ -20,5 +21,21 @@ describe('ipc facade (browser fallback)', () => {
 
   it('parseAmount accepts integer input', async () => {
     expect(await parseAmount('15000')).toBe(15000)
+  })
+
+  describe('mode pemulihan', () => {
+    afterEach(() => {
+      __leaveRecovery()
+      setRecoveryHandler(null)
+    })
+
+    it('code recovery_required memanggil handler pemulihan', async () => {
+      const handler = vi.fn()
+      setRecoveryHandler(handler)
+      __enterRecovery('unreadable')
+      const err = await getOnboardingStatus().catch((e: unknown) => e)
+      expect((err as IpcFailure).error.code).toBe('recovery_required')
+      expect(handler).toHaveBeenCalledOnce()
+    })
   })
 })

@@ -60,6 +60,12 @@ pub enum AppError {
     /// Backup dibuat oleh versi aplikasi yang lebih baru.
     #[error("backup was made by a newer app version")]
     BackupTooNew,
+    /// Backup terenkripsi dengan key lain (atau bukan file SQLite): butuh recovery key-nya.
+    #[error("backup needs its recovery key")]
+    BackupKeyRequired,
+    /// DB aktif dibuat oleh versi aplikasi yang lebih baru.
+    #[error("database was made by a newer app version")]
+    DatabaseTooNew,
     /// Tujuan/sumber backup adalah DB yang sedang dipakai.
     #[error("backup target is the live database")]
     BackupTargetInvalid,
@@ -121,6 +127,7 @@ impl AppError {
     pub(crate) fn from_backup(e: StorageError) -> AppError {
         match e {
             StorageError::InvalidBackup => AppError::InvalidBackup,
+            StorageError::BackupKeyRequired => AppError::BackupKeyRequired,
             StorageError::BackupTooNew(_) => AppError::BackupTooNew,
             e => e.into(),
         }

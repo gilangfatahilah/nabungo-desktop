@@ -125,8 +125,15 @@ export const commands = {
 	appReady: () => __TAURI_INVOKE<void>("app_ready"),
 	listBackups: () => typedError<BackupDto[], IpcError>(__TAURI_INVOKE("list_backups")),
 	backupNow: () => typedError<string | null, IpcError>(__TAURI_INVOKE("backup_now")),
-	restoreBackup: (fileName: string) => typedError<null, IpcError>(__TAURI_INVOKE("restore_backup", { fileName })),
-	restoreBackupFromFile: () => typedError<boolean, IpcError>(__TAURI_INVOKE("restore_backup_from_file")),
+	restoreBackup: (source: BackupSourceDto, srcRecoveryKey: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("restore_backup", { source, srcRecoveryKey })),
+	pickBackupFile: () => typedError<string | null, IpcError>(__TAURI_INVOKE("pick_backup_file")),
+	/**  Apakah sumber butuh recovery key-nya sendiri (terenkripsi dengan key selain key aktif). */
+	inspectBackupSource: (source: BackupSourceDto) => typedError<BackupSourceInfoDto, IpcError>(__TAURI_INVOKE("inspect_backup_source", { source })),
+	recoveryStatus: () => __TAURI_INVOKE<RecoveryStatusDto>("recovery_status"),
+	/**  Ganti DB yang tidak bisa dibuka dengan backup (P4); DB lama dipindah, tidak dihapus. */
+	recoverFromBackup: (source: BackupSourceDto, secret: BackupSecretDto) => typedError<null, IpcError>(__TAURI_INVOKE("recover_from_backup", { source, secret })),
+	/**  Mulai dengan DB kosong (onboarding); DB dan key file lama dipindah ke samping. */
+	recoveryStartFresh: () => typedError<null, IpcError>(__TAURI_INVOKE("recovery_start_fresh")),
 	exportJson: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_json")),
 	exportCsv: () => typedError<string | null, IpcError>(__TAURI_INVOKE("export_csv")),
 	setAutoLockMinutes: (minutes: number) => typedError<null, IpcError>(__TAURI_INVOKE("set_auto_lock_minutes", { minutes })),
@@ -244,6 +251,17 @@ export type BackupDto = {
 };
 
 export type BackupKindDto = "auto" | "pre_migration" | "pre_restore";
+
+/**  Rahasia pembuka backup saat pemulihan (P5). */
+export type BackupSecretDto = { kind: "none" } | { kind: "password"; password: string } | { kind: "recoveryKey"; recoveryKey: string; newPassword: string };
+
+/**  Sumber restore/pemulihan (P9): backup app-managed (nama file) atau file pilihan user. */
+export type BackupSourceDto = { kind: "named"; fileName: string } | { kind: "path"; path: string };
+
+export type BackupSourceInfoDto = {
+	/**  Sumber terenkripsi dengan key lain (atau bukan SQLite): butuh recovery key-nya. */
+	needsKey: boolean,
+};
 
 /**
  *  Target efektif: `target_bp` global (porsi dari gross) dan `target_amount` (satuan minor);
@@ -380,7 +398,11 @@ export type ContactDto = {
 	name: string,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "internal";
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "database_unreadable" | "database_too_new" | 
+/**  DB gagal dibuka saat startup; pulihkan dari backup dulu (P1). */
+"recovery_required" | 
+/**  Command pemulihan dipanggil saat DB sedang terbuka. */
+"recovery_unavailable" | "internal";
 
 export type FeeDto = {
 	amount: number,
@@ -452,6 +474,16 @@ export type ReconciliationDto = {
 	adjustmentId: string | null,
 	difference: number,
 	marked: number,
+};
+
+export type RecoveryReasonDto = "unreadable" | "tooNew";
+
+export type RecoveryStatusDto = {
+	active: boolean,
+	reason: RecoveryReasonDto | null,
+	dataDir: string,
+	/**  `nabungo.key` ada di samping DB (diperiksa langsung, bukan lewat `db_state`). */
+	hasKeyfile: boolean,
 };
 
 /**  Anchor (hari/tanggal) diambil dari tanggal mulai/kejadian berikutnya. */

@@ -52,7 +52,7 @@ pub struct BackupInfo {
     pub size_bytes: u64,
 }
 
-const STAMP: &[FormatItem<'static>] =
+pub(crate) const STAMP: &[FormatItem<'static>] =
     format_description!("[year][month][day]T[hour][minute][second]Z");
 
 /// Backup otomatis jatuh tempo setelah jeda ini.
@@ -236,7 +236,17 @@ fn copy_to_sidecar(conn: &Connection, attachments_dir: &Path, dest: &Path) -> Re
 
 /// Salin lampiran dari sidecar `src` ke `attachments_dir`: hanya file bernama sha256
 /// yang isinya cocok, dan yang belum ada. Seluruhnya best-effort: DB sudah dipulihkan.
-fn restore_sidecar(src: &Path, attachments_dir: &Path) {
+/// `true` bila `src` terenkripsi dengan key selain `live_key` (atau bukan file SQLite), sehingga
+/// restore butuh recovery key milik file tersebut (P7).
+pub fn backup_needs_key(src: &Path, live_key: Option<&DbKey>) -> Result<bool, AppError> {
+    match nabungo_storage::inspect_backup(src, live_key) {
+        Ok(_) => Ok(false),
+        Err(StorageError::BackupKeyRequired) => Ok(true),
+        Err(e) => Err(AppError::from_backup(e)),
+    }
+}
+
+pub(crate) fn restore_sidecar(src: &Path, attachments_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(attachments_sidecar(src)) else {
         return;
     };
@@ -288,6 +298,23 @@ fn resolve(path: &Path) -> Result<PathBuf, AppError> {
     Ok(std::fs::canonicalize(parent)?.join(name))
 }
 
+/// `target` bukan DB `live`, sibling `-wal`/`-shm`/`-journal`-nya, maupun key file-nya.
+pub(crate) fn ensure_not_live_path(live: &Path, target: &Path) -> Result<(), AppError> {
+    let live = resolve(live)?;
+    let target = resolve(target)?;
+    if target == live || target == keyfile_path(&live) {
+        return Err(AppError::BackupTargetInvalid);
+    }
+    for suffix in ["-wal", "-shm", "-journal"] {
+        let mut forbidden = live.clone().into_os_string();
+        forbidden.push(suffix);
+        if target.as_os_str() == forbidden {
+            return Err(AppError::BackupTargetInvalid);
+        }
+    }
+    Ok(())
+}
+
 impl Ledger {
     /// Buka DB (dengan `key` bila terenkripsi); bila skemanya lama (bukan DB baru), simpan
     /// backup pra-migrasi dulu (K6).
@@ -304,6 +331,9 @@ impl Ledger {
             e => e.into(),
         })?;
         let version = nabungo_storage::schema_version(&conn)?;
+        if version > nabungo_storage::latest_version() {
+            return Err(AppError::DatabaseTooNew);
+        }
         if version > 0 && version < nabungo_storage::latest_version() {
             write_backup(&conn, key, backup_dir, BackupKind::PreMigration, now)?;
         }
@@ -321,27 +351,10 @@ impl Ledger {
 
     /// Tolak `target` bila menunjuk DB utama atau file pendampingnya (K10).
     pub(crate) fn ensure_not_live(&self, target: &Path) -> Result<(), AppError> {
-        let Some(live) = &self.path else {
-            return Ok(());
-        };
-        let live = resolve(live)?;
-        let target = resolve(target)?;
-        let mut forbidden = live.clone().into_os_string();
-        let base = forbidden.clone();
-        if target == live {
-            return Err(AppError::BackupTargetInvalid);
+        match &self.path {
+            Some(live) => ensure_not_live_path(live, target),
+            None => Ok(()),
         }
-        for suffix in ["-wal", "-shm", "-journal"] {
-            forbidden.clone_from(&base);
-            forbidden.push(suffix);
-            if target.as_os_str() == forbidden {
-                return Err(AppError::BackupTargetInvalid);
-            }
-        }
-        if target == keyfile_path(&live) {
-            return Err(AppError::BackupTargetInvalid);
-        }
-        Ok(())
     }
 
     /// Backup manual ke path pilihan user (K3), tanpa retensi. Lampiran ikut disalin ke
@@ -370,15 +383,18 @@ impl Ledger {
         write_backup(&self.conn, self.key.as_ref(), dir, BackupKind::Auto, now).map(Some)
     }
 
-    /// Pulihkan dari file pilihan user, lalu lampiran dari sidecar-nya (K7).
+    /// Pulihkan dari file pilihan user, lalu lampiran dari sidecar-nya (K7). `src_recovery`:
+    /// key file backup terenkripsi dari instalasi lain (dari recovery key-nya); `None` = key DB
+    /// aktif. DB aktif tetap pada status enkripsi dan key-nya sendiri.
     pub fn restore_file(
         &mut self,
         src: &Path,
+        src_recovery: Option<&DbKey>,
         backup_dir: &Path,
         attachments_dir: &Path,
         now: OffsetDateTime,
     ) -> Result<(), AppError> {
-        self.restore_db(src, backup_dir, now)?;
+        self.restore_db(src, src_recovery, backup_dir, now)?;
         restore_sidecar(src, attachments_dir);
         Ok(())
     }
@@ -388,11 +404,17 @@ impl Ledger {
     fn restore_db(
         &mut self,
         src: &Path,
+        src_recovery: Option<&DbKey>,
         backup_dir: &Path,
         now: OffsetDateTime,
     ) -> Result<(), AppError> {
         self.ensure_not_live(src)?;
-        nabungo_storage::inspect_backup(src, self.key.as_ref()).map_err(AppError::from_backup)?;
+        let src_key = src_recovery.or(self.key.as_ref());
+        let backup_err = |e| match AppError::from_backup(e) {
+            AppError::BackupKeyRequired if src_recovery.is_some() => AppError::InvalidRecoveryKey,
+            e => e,
+        };
+        nabungo_storage::inspect_backup(src, src_key).map_err(backup_err)?;
         write_unpruned(
             &self.conn,
             self.key.as_ref(),
@@ -400,8 +422,8 @@ impl Ledger {
             BackupKind::PreRestore,
             now,
         )?;
-        nabungo_storage::restore_from(&mut self.conn, src, self.key.as_ref())
-            .map_err(AppError::from_backup)?;
+        nabungo_storage::restore_from(&mut self.conn, src, src_key, self.key.as_ref())
+            .map_err(backup_err)?;
         nabungo_storage::migrate(&mut self.conn)?;
         // Retensi setelah restore: sumbernya bisa saja pre-restore tertua.
         prune_logged(backup_dir, BackupKind::PreRestore);
@@ -413,13 +435,14 @@ impl Ledger {
         &mut self,
         backup_dir: &Path,
         file_name: &str,
+        src_recovery: Option<&DbKey>,
         now: OffsetDateTime,
     ) -> Result<(), AppError> {
         if file_name.contains(['/', '\\']) || parse_backup_name(file_name).is_none() {
             return Err(AppError::InvalidBackup);
         }
         // Backup app-managed berbagi folder lampiran yang sama; tidak ada sidecar.
-        self.restore_db(&backup_dir.join(file_name), backup_dir, now)
+        self.restore_db(&backup_dir.join(file_name), src_recovery, backup_dir, now)
     }
 
     /// Pesan `PRAGMA integrity_check`; kosong = sehat.
@@ -810,7 +833,7 @@ mod tests {
             let dir2 = tempfile::tempdir().unwrap();
             let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
             fresh
-                .restore_file(&x, &dir2.path().join("backups"), &no_att(), NOW)
+                .restore_file(&x, None, &dir2.path().join("backups"), &no_att(), NOW)
                 .unwrap();
             assert_eq!(snapshot(&fresh), before);
             let mode: String = fresh
@@ -832,7 +855,9 @@ mod tests {
             assert_ne!(with_new, at_backup);
 
             let backups = f.backups();
-            f.ledger.restore_file(&x, &backups, &no_att(), NOW).unwrap();
+            f.ledger
+                .restore_file(&x, None, &backups, &no_att(), NOW)
+                .unwrap();
             assert_eq!(snapshot(&f.ledger), at_backup);
 
             let pre: Vec<_> = backup_files(&backups)
@@ -841,7 +866,7 @@ mod tests {
                 .collect();
             assert_eq!(pre.len(), 1);
             f.ledger
-                .restore_named(&backups, &pre[0], NOW + Duration::minutes(1))
+                .restore_named(&backups, &pre[0], None, NOW + Duration::minutes(1))
                 .unwrap();
             assert_eq!(snapshot(&f.ledger), with_new);
         }
@@ -855,9 +880,10 @@ mod tests {
             let backups = f.backups();
             let err = f
                 .ledger
-                .restore_file(&txt, &backups, &no_att(), NOW)
+                .restore_file(&txt, None, &backups, &no_att(), NOW)
                 .unwrap_err();
-            assert!(matches!(err, AppError::InvalidBackup), "{err:?}");
+            // Header non-SQLite tak bisa dibedakan dari file terenkripsi key lain (P7).
+            assert!(matches!(err, AppError::BackupKeyRequired), "{err:?}");
             assert_eq!(snapshot(&f.ledger), before);
             assert!(backup_files(&backups).is_empty());
         }
@@ -892,7 +918,7 @@ mod tests {
             let f = Fixture::new();
             let mut ledger = f.ledger;
             ledger
-                .restore_file(&old, &f.root.join("backups"), &no_att(), NOW)
+                .restore_file(&old, None, &f.root.join("backups"), &no_att(), NOW)
                 .unwrap();
             assert_eq!(
                 nabungo_storage::schema_version(&ledger.conn).unwrap(),
@@ -909,7 +935,10 @@ mod tests {
             std::fs::write(backups.join("catatan.txt"), "x").unwrap();
             let abs = f.db().to_string_lossy().into_owned();
             for name in ["../nabungo.db", abs.as_str(), "catatan.txt", "auto-x.db"] {
-                let err = f.ledger.restore_named(&backups, name, NOW).unwrap_err();
+                let err = f
+                    .ledger
+                    .restore_named(&backups, name, None, NOW)
+                    .unwrap_err();
                 assert!(matches!(err, AppError::InvalidBackup), "{name}: {err:?}");
             }
             assert_eq!(backup_files(&backups), ["catatan.txt"]);
@@ -926,7 +955,7 @@ mod tests {
             for i in 0..5 {
                 expense(&mut f.ledger, bca, 1_000);
                 f.ledger
-                    .restore_file(&x, &backups, &no_att(), NOW + Duration::minutes(i))
+                    .restore_file(&x, None, &backups, &no_att(), NOW + Duration::minutes(i))
                     .unwrap();
             }
             // Pre-restore tertua = state awal; harus tetap bisa dipulihkan walau jatah penuh.
@@ -934,7 +963,7 @@ mod tests {
             assert_eq!(list.len(), 5, "{list:?}");
             let oldest = list[0].clone();
             f.ledger
-                .restore_named(&backups, &oldest, NOW + Duration::hours(1))
+                .restore_named(&backups, &oldest, None, NOW + Duration::hours(1))
                 .unwrap();
             let mut expected = first;
             expected.0.iter_mut().find(|(n, _)| n == "BCA").unwrap().1 -= 1_000;
@@ -980,7 +1009,7 @@ mod tests {
             let (db, backups) = (f.db(), f.backups());
             let err = f
                 .ledger
-                .restore_file(&db, &backups, &no_att(), NOW)
+                .restore_file(&db, None, &backups, &no_att(), NOW)
                 .unwrap_err();
             assert!(matches!(err, AppError::BackupTargetInvalid), "{err:?}");
             assert!(backup_files(&backups).is_empty());
@@ -1041,6 +1070,156 @@ mod tests {
             assert_eq!(backup_files(&dir).len(), 2);
         }
 
+        /// Instalasi terenkripsi baru di folder `dir` dengan data `seed`.
+        fn encrypted_install(dir: &Path, key: &crate::DbKey) -> Ledger {
+            let mut l = Ledger::open_with_backups(
+                &dir.join("nabungo.db"),
+                &dir.join("backups"),
+                Some(key),
+                NOW,
+            )
+            .unwrap();
+            seed(&mut l);
+            l
+        }
+
+        #[test]
+        fn restore_foreign_encrypted_backup_matches_balances() {
+            let a_dir = tempfile::tempdir().unwrap();
+            let key_a = crate::DbKey::generate();
+            let a = encrypted_install(a_dir.path(), &key_a);
+            let x = a_dir.path().join("x.db");
+            a.backup_to(&x, &no_att()).unwrap();
+
+            let f = {
+                let dir = tempfile::tempdir().unwrap();
+                let root = dir.path().to_path_buf();
+                (dir, Ledger::open(&root.join("nabungo.db")).unwrap(), root)
+            };
+            let (_b_dir, mut b, b_root) = f;
+            b.restore_file(&x, Some(&key_a), &b_root.join("backups"), &no_att(), NOW)
+                .unwrap();
+            assert_eq!(snapshot(&b), snapshot(&a));
+            assert!(!b.is_encrypted());
+        }
+
+        #[test]
+        fn restore_foreign_backup_into_encrypted_keeps_live_key() {
+            let a_dir = tempfile::tempdir().unwrap();
+            let key_a = crate::DbKey::generate();
+            let a = encrypted_install(a_dir.path(), &key_a);
+            let x = a_dir.path().join("x.db");
+            a.backup_to(&x, &no_att()).unwrap();
+
+            let b_dir = tempfile::tempdir().unwrap();
+            let key_b = crate::DbKey::generate();
+            let mut b = Ledger::open_with_backups(
+                &b_dir.path().join("nabungo.db"),
+                &b_dir.path().join("backups"),
+                Some(&key_b),
+                NOW,
+            )
+            .unwrap();
+            b.restore_file(
+                &x,
+                Some(&key_a),
+                &b_dir.path().join("backups"),
+                &no_att(),
+                NOW,
+            )
+            .unwrap();
+            drop(b);
+            let b = Ledger::open_with_backups(
+                &b_dir.path().join("nabungo.db"),
+                &b_dir.path().join("backups"),
+                Some(&key_b),
+                NOW,
+            )
+            .unwrap();
+            assert_eq!(snapshot(&b), snapshot(&a));
+        }
+
+        #[test]
+        fn restore_foreign_backup_without_key_is_key_required() {
+            let a_dir = tempfile::tempdir().unwrap();
+            let a = encrypted_install(a_dir.path(), &crate::DbKey::generate());
+            let x = a_dir.path().join("x.db");
+            a.backup_to(&x, &no_att()).unwrap();
+
+            let mut f = Fixture::new();
+            let before = snapshot(&f.ledger);
+            let backups = f.backups();
+            let err = f
+                .ledger
+                .restore_file(&x, None, &backups, &no_att(), NOW)
+                .unwrap_err();
+            assert!(matches!(err, AppError::BackupKeyRequired), "{err:?}");
+            assert_eq!(snapshot(&f.ledger), before);
+            assert!(backup_files(&backups).is_empty());
+        }
+
+        #[test]
+        fn restore_foreign_backup_wrong_key_is_invalid_recovery_key() {
+            let a_dir = tempfile::tempdir().unwrap();
+            let a = encrypted_install(a_dir.path(), &crate::DbKey::generate());
+            let x = a_dir.path().join("x.db");
+            a.backup_to(&x, &no_att()).unwrap();
+
+            let mut f = Fixture::new();
+            let backups = f.backups();
+            let err = f
+                .ledger
+                .restore_file(
+                    &x,
+                    Some(&crate::DbKey::generate()),
+                    &backups,
+                    &no_att(),
+                    NOW,
+                )
+                .unwrap_err();
+            assert!(matches!(err, AppError::InvalidRecoveryKey), "{err:?}");
+        }
+
+        #[test]
+        fn backup_needs_key_reports_foreign() {
+            let a_dir = tempfile::tempdir().unwrap();
+            let key_a = crate::DbKey::generate();
+            let a = encrypted_install(a_dir.path(), &key_a);
+            let x = a_dir.path().join("x.db");
+            a.backup_to(&x, &no_att()).unwrap();
+            let f = Fixture::new();
+            let plain = f.root.join("p.db");
+            f.ledger.backup_to(&plain, &no_att()).unwrap();
+
+            let key_b = crate::DbKey::generate();
+            assert!(super::super::backup_needs_key(&x, Some(&key_b)).unwrap());
+            assert!(super::super::backup_needs_key(&x, None).unwrap());
+            assert!(!super::super::backup_needs_key(&x, Some(&key_a)).unwrap());
+            assert!(!super::super::backup_needs_key(&plain, None).unwrap());
+        }
+
+        #[test]
+        fn open_newer_schema_is_too_new() {
+            let dir = tempfile::tempdir().unwrap();
+            let db = dir.path().join("nabungo.db");
+            {
+                let mut conn = nabungo_storage::open_file(&db, None).unwrap();
+                nabungo_storage::migrate(&mut conn).unwrap();
+                conn.pragma_update(
+                    None,
+                    "user_version",
+                    nabungo_storage::latest_version() as i64 + 1,
+                )
+                .unwrap();
+            }
+            let backups = dir.path().join("backups");
+            let Err(err) = Ledger::open_with_backups(&db, &backups, None, NOW) else {
+                panic!("DB versi baru harus ditolak");
+            };
+            assert!(matches!(err, AppError::DatabaseTooNew), "{err:?}");
+            assert!(backup_files(&backups).is_empty());
+        }
+
         /// Rusak satu halaman b-tree `posting` (jumlah sel mustahil); DB harus tertutup.
         fn corrupt_posting_page(db: &Path) {
             let (root, page_size): (i64, i64) = {
@@ -1076,7 +1255,9 @@ mod tests {
 
             let mut ledger = Ledger::open(&db).unwrap();
             assert!(!matches!(ledger.integrity_check(), Ok(p) if p.is_empty()));
-            ledger.restore_file(&x, &backups, &no_att(), NOW).unwrap();
+            ledger
+                .restore_file(&x, None, &backups, &no_att(), NOW)
+                .unwrap();
             assert_eq!(snapshot(&ledger), before);
             assert!(ledger.integrity_check().unwrap().is_empty());
             let list = backup_files(&backups);
@@ -1185,7 +1366,7 @@ mod tests {
             let att2 = dir2.path().join("attachments");
             let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
             fresh
-                .restore_file(&x, &dir2.path().join("backups"), &att2, NOW)
+                .restore_file(&x, None, &dir2.path().join("backups"), &att2, NOW)
                 .unwrap();
             let rows = fresh.list_attachments(txn, &att2).unwrap();
             assert_eq!(rows.len(), 1);
@@ -1238,7 +1419,7 @@ mod tests {
             let att2 = dir2.path().join("attachments");
             let mut fresh = Ledger::open(&dir2.path().join("nabungo.db")).unwrap();
             fresh
-                .restore_file(&x, &dir2.path().join("backups"), &att2, NOW)
+                .restore_file(&x, None, &dir2.path().join("backups"), &att2, NOW)
                 .unwrap();
             assert!(fresh.list_attachments(txn, &att2).unwrap()[0].missing);
             assert!(backup_files(&att2).is_empty());

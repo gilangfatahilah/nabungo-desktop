@@ -11,10 +11,12 @@ use nabungo_storage::rusqlite::Connection;
 use nabungo_storage::{DbKey, StorageError, convert_file, is_encrypted_file};
 
 use crate::backup::list_backups;
+use crate::recovery::{broken_suffix, move_aside};
 use crate::vault::{
     KdfParams, KeyFile, format_recovery_key, keyfile_path, parse_recovery_key, validate_password,
 };
 use crate::{AppError, Ledger};
+use time::OffsetDateTime;
 
 /// Status file DB di disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,9 +52,24 @@ fn convert_path(db: &Path) -> PathBuf {
     sibling(db, ".convert")
 }
 
-/// Status enkripsi `db` sekaligus membersihkan sisa enable/disable yang terputus: file
-/// konversi sementara, dan key file di samping DB plaintext. DB yang belum ada = `Plain`.
+/// Status enkripsi `db` sekaligus membersihkan sisa enable/disable/pemulihan yang terputus:
+/// file konversi sementara, `.recover`, dan key file di samping DB plaintext. DB yang belum
+/// ada = `Plain`.
 pub fn db_state(db: &Path) -> Result<DbState, AppError> {
+    // Pemulihan (P4): `.recover` tanpa DB = rename final terputus; selain itu belum selesai.
+    let recover = sibling(db, ".recover");
+    if recover.is_file() && !db.exists() {
+        tracing::warn!("menuntaskan pemulihan yang terputus");
+        // Sidecar DB lama yang belum sempat dipindah tidak boleh di-replay ke DB pulihan.
+        let suffix = broken_suffix(OffsetDateTime::now_utc());
+        for s in ["-wal", "-shm", "-journal"] {
+            move_aside(&sibling(db, s), &suffix)?;
+        }
+        std::fs::rename(&recover, db)?;
+    }
+    for suffix in ["", "-journal", "-wal", "-shm"] {
+        remove_if_exists(&sibling(&recover, suffix))?;
+    }
     let convert = convert_path(db);
     for path in [
         convert.clone(),
@@ -70,9 +87,10 @@ pub fn db_state(db: &Path) -> Result<DbState, AppError> {
         });
     }
     // Hanya bila DB-nya ada: DB yang dipindah sementara tidak boleh kehilangan key file-nya.
+    // Dipindah ke samping, tidak dihapus: bisa jadi satu-satunya kunci DB lama di `.broken-*`.
     if db.is_file() && keyfile.exists() {
-        tracing::warn!("key file tersisa di samping DB plaintext; dihapus");
-        remove_if_exists(&keyfile)?;
+        tracing::warn!("key file tersisa di samping DB plaintext; dipindah ke samping");
+        move_aside(&keyfile, &broken_suffix(OffsetDateTime::now_utc()))?;
     }
     Ok(DbState::Plain)
 }
@@ -135,6 +153,11 @@ pub(crate) fn convert_backups(dir: &Path, from: Option<&DbKey>, to: Option<&DbKe
 }
 
 impl Ledger {
+    /// Key DB aktif; `None` untuk DB plaintext.
+    pub fn key(&self) -> Option<&DbKey> {
+        self.key.as_ref()
+    }
+
     pub fn is_encrypted(&self) -> bool {
         self.key.is_some()
     }
@@ -245,7 +268,6 @@ mod tests {
     use super::*;
     use crate::AccountFields;
     use nabungo_core::AccountKind;
-    use time::OffsetDateTime;
     use time::macros::{date, datetime};
 
     const NOW: OffsetDateTime = datetime!(2026-10-20 03:15:00 UTC);
@@ -296,6 +318,82 @@ mod tests {
 
     fn reopen(e: &Env, key: &DbKey) -> Ledger {
         Ledger::open_with_backups(&e.db, &e.backups, Some(key), NOW).unwrap()
+    }
+
+    #[test]
+    fn db_state_finishes_interrupted_recovery() {
+        let e = env();
+        let recover = sibling(&e.db, ".recover");
+        {
+            let mut l = Ledger::open(&recover).unwrap();
+            add_account(&mut l, "Dompet", 50_000);
+        }
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(!recover.exists());
+        assert_eq!(
+            names(&Ledger::open(&e.db).unwrap()),
+            vec![("Dompet".into(), 50_000)]
+        );
+    }
+
+    /// Nama file di folder `db` yang diawali `prefix` (selain persis `prefix`).
+    fn aside(db: &Path, prefix: &str) -> Vec<PathBuf> {
+        let mut v: Vec<PathBuf> = std::fs::read_dir(db.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                let n = p.file_name().unwrap().to_string_lossy();
+                n.starts_with(prefix) && n != prefix
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn db_state_keeps_keyfile_when_finishing_plain_recovery() {
+        // Crash/gagal di antara DB dipindah dan key file dipindah (restore plaintext / mulai baru).
+        let e = env();
+        drop(Ledger::open(&sibling(&e.db, ".recover")).unwrap());
+        std::fs::write(keyfile_path(&e.db), b"kunci-lama").unwrap();
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(e.db.is_file());
+        let kept = aside(&e.db, "nabungo.key");
+        assert_eq!(kept.len(), 1, "key file harus dipindah, bukan dihapus");
+        assert_eq!(std::fs::read(&kept[0]).unwrap(), b"kunci-lama");
+    }
+
+    #[test]
+    fn db_state_moves_orphan_wal_aside_before_finishing_recovery() {
+        let e = env();
+        let recover = sibling(&e.db, ".recover");
+        {
+            let mut l = Ledger::open(&recover).unwrap();
+            add_account(&mut l, "Dompet", 50_000);
+        }
+        // Sisa sidecar DB lama yang tidak sempat dipindah.
+        std::fs::write(sibling(&e.db, "-wal"), b"wal-lama").unwrap();
+        std::fs::write(sibling(&e.db, "-shm"), b"shm-lama").unwrap();
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(!sibling(&e.db, "-wal").exists());
+        assert!(!sibling(&e.db, "-shm").exists());
+        assert_eq!(aside(&e.db, "nabungo.db-wal").len(), 1);
+        assert_eq!(
+            names(&Ledger::open(&e.db).unwrap()),
+            vec![("Dompet".into(), 50_000)]
+        );
+    }
+
+    #[test]
+    fn db_state_discards_incomplete_recover() {
+        let e = env();
+        drop(Ledger::open(&e.db).unwrap());
+        let before = std::fs::read(&e.db).unwrap();
+        let recover = sibling(&e.db, ".recover");
+        std::fs::write(&recover, b"setengah jadi").unwrap();
+        assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
+        assert!(!recover.exists());
+        assert_eq!(std::fs::read(&e.db).unwrap(), before);
     }
 
     #[test]
@@ -495,7 +593,7 @@ mod tests {
         std::fs::create_dir_all(&e.backups).unwrap();
         let name = "auto-20261020T031500Z.db";
         std::fs::copy(&plain, e.backups.join(name)).unwrap();
-        l.restore_named(&e.backups, name, NOW).unwrap();
+        l.restore_named(&e.backups, name, None, NOW).unwrap();
         assert_eq!(names(&l), vec![("Lama".into(), 10)]);
         drop(l);
         assert!(is_encrypted_file(&e.db).unwrap());
@@ -511,6 +609,7 @@ mod tests {
         std::fs::write(convert_path(&e.db), b"sisa").unwrap();
         assert_eq!(db_state(&e.db).unwrap(), DbState::Plain);
         assert!(!keyfile_path(&e.db).exists());
+        assert_eq!(aside(&e.db, "nabungo.key").len(), 1);
         assert!(!convert_path(&e.db).exists());
         // DB belum ada: Plain, key file tidak disentuh.
         let missing = e.db.with_file_name("baru.db");

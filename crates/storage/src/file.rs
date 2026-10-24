@@ -171,12 +171,18 @@ fn copy_into(conn: &Connection, dest: &Path, key: Option<&DbKey>, verify: bool) 
 }
 
 /// Ganti isi `conn` (DB aktif dengan key `live_key`) dengan isi file `src` dalam satu langkah
-/// backup API (atomik di sisi tujuan). Sumber terenkripsi dibuka dengan `live_key`; bila status
-/// enkripsi sumber berbeda dari DB aktif, sumber lebih dulu dikonversi ke file sementara di
-/// samping DB aktif.
-pub fn restore_from(conn: &mut Connection, src: &Path, live_key: Option<&DbKey>) -> Result<()> {
+/// backup API (atomik di sisi tujuan). Sumber terenkripsi dibuka dengan `src_key` (bisa key
+/// instalasi lain); sumber plaintext mengabaikannya. Bila status enkripsi atau key sumber berbeda
+/// dari DB aktif, sumber lebih dulu dikonversi ke file sementara di samping DB aktif.
+pub fn restore_from(
+    conn: &mut Connection,
+    src: &Path,
+    src_key: Option<&DbKey>,
+    live_key: Option<&DbKey>,
+) -> Result<()> {
     let src_encrypted = is_encrypted_file(src)?;
-    if src_encrypted == live_key.is_some() {
+    let src_key = if src_encrypted { src_key } else { None };
+    if src_key == live_key {
         let src = open_file_read_only(src, live_key)?;
         return copy_all(&Backup::new(&src, conn)?);
     }
@@ -187,7 +193,6 @@ pub fn restore_from(conn: &mut Connection, src: &Path, live_key: Option<&DbKey>)
         .unwrap_or_else(|| src.to_path_buf());
     let tmp = sibling(&base, ".restore-partial");
     remove_partial(&tmp);
-    let src_key = if src_encrypted { live_key } else { None };
     let result = convert_file(src, src_key, &tmp, live_key).and_then(|()| {
         let tmp_conn = open_file_read_only(&tmp, live_key)?;
         copy_all(&Backup::new(&tmp_conn, conn)?)
@@ -278,6 +283,11 @@ pub fn inspect_backup(path: &Path, key: Option<&DbKey>) -> Result<usize> {
     };
     let version = match check() {
         Ok(v) => v,
+        Err(StorageError::KeyRequired | StorageError::WrongKey)
+            if is_encrypted_file(path).unwrap_or(false) =>
+        {
+            return Err(StorageError::BackupKeyRequired);
+        }
         Err(StorageError::Sqlite(_) | StorageError::KeyRequired | StorageError::WrongKey) => {
             return Err(StorageError::InvalidBackup);
         }
@@ -372,7 +382,7 @@ mod tests {
         let mut b = open(&b_path, None).unwrap();
         put(&mut b, "b");
         drop(b);
-        restore_from(&mut a, &b_path, None).unwrap();
+        restore_from(&mut a, &b_path, None, None).unwrap();
         assert_eq!(get(&a).as_deref(), Some("b"));
     }
 
@@ -385,9 +395,10 @@ mod tests {
             "bukan database sama sekali, cukup panjang untuk header",
         )
         .unwrap();
+        // Header bukan SQLite: tidak bisa dibedakan dari file terenkripsi (P7).
         assert!(matches!(
             inspect_backup(&text, None),
-            Err(StorageError::InvalidBackup)
+            Err(StorageError::BackupKeyRequired)
         ));
 
         let empty = dir.path().join("e.db");
@@ -573,7 +584,7 @@ mod tests {
         );
         assert!(matches!(
             inspect_backup(&dest, None),
-            Err(StorageError::InvalidBackup)
+            Err(StorageError::BackupKeyRequired)
         ));
     }
 
@@ -587,7 +598,7 @@ mod tests {
         let live_path = dir.path().join("live.db");
         let mut live = open(&live_path, Some(&key(5))).unwrap();
         put(&mut live, "lama");
-        restore_from(&mut live, &src, Some(&key(5))).unwrap();
+        restore_from(&mut live, &src, None, Some(&key(5))).unwrap();
         assert_eq!(get(&live).as_deref(), Some("dari-plain"));
         drop(live);
         assert!(is_encrypted_file(&live_path).unwrap());
@@ -608,7 +619,81 @@ mod tests {
         let live_path = dir.path().join("live.db");
         let mut live = open(&live_path, None).unwrap();
         // Sumber terenkripsi dengan key yang tidak dimiliki live → tidak bisa dibaca.
-        assert!(restore_from(&mut live, &src, None).is_err());
+        assert!(restore_from(&mut live, &src, None, None).is_err());
         assert_eq!(get(&live), None);
+    }
+
+    #[test]
+    fn restore_from_foreign_encrypted_into_plain() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("enc.db");
+        let mut s = open(&src, Some(&key(7))).unwrap();
+        put(&mut s, "asing");
+        drop(s);
+        let live_path = dir.path().join("live.db");
+        let mut live = open(&live_path, None).unwrap();
+        restore_from(&mut live, &src, Some(&key(7)), None).unwrap();
+        assert_eq!(get(&live).as_deref(), Some("asing"));
+        drop(live);
+        assert!(!is_encrypted_file(&live_path).unwrap());
+    }
+
+    #[test]
+    fn restore_from_foreign_encrypted_into_other_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("enc.db");
+        let mut s = open(&src, Some(&key(7))).unwrap();
+        put(&mut s, "asing");
+        drop(s);
+        let live_path = dir.path().join("live.db");
+        let mut live = open(&live_path, Some(&key(8))).unwrap();
+        put(&mut live, "lama");
+        restore_from(&mut live, &src, Some(&key(7)), Some(&key(8))).unwrap();
+        assert_eq!(get(&live).as_deref(), Some("asing"));
+        drop(live);
+        assert_eq!(
+            get(&open(&live_path, Some(&key(8))).unwrap()).as_deref(),
+            Some("asing")
+        );
+    }
+
+    #[test]
+    fn inspect_backup_encrypted_without_key_requires_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("enc.db");
+        drop(open(&src, Some(&key(7))).unwrap());
+        assert!(matches!(
+            inspect_backup(&src, None),
+            Err(StorageError::BackupKeyRequired)
+        ));
+        assert!(matches!(
+            inspect_backup(&src, Some(&key(8))),
+            Err(StorageError::BackupKeyRequired)
+        ));
+    }
+
+    #[test]
+    fn inspect_backup_garbage_header_requires_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let junk = dir.path().join("junk.db");
+        let bytes: Vec<u8> = (0..4096u32).map(|i| (i * 31 % 251) as u8).collect();
+        std::fs::write(&junk, bytes).unwrap();
+        assert!(matches!(
+            inspect_backup(&junk, None),
+            Err(StorageError::BackupKeyRequired)
+        ));
+    }
+
+    #[test]
+    fn inspect_backup_corrupt_sqlite_is_invalid() {
+        let dir = tempfile::tempdir().unwrap();
+        let bad = dir.path().join("bad.db");
+        let mut bytes = PLAIN_HEADER.to_vec();
+        bytes.extend((0..4080u32).map(|i| (i * 17 % 253) as u8));
+        std::fs::write(&bad, bytes).unwrap();
+        assert!(matches!(
+            inspect_backup(&bad, None),
+            Err(StorageError::InvalidBackup)
+        ));
     }
 }

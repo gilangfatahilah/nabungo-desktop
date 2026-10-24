@@ -2,28 +2,41 @@
 
 use std::path::{Path, PathBuf};
 
+use nabungo_app::recovery::{self, BackupSecret};
 use nabungo_app::security::{self, DbState};
 use nabungo_app::vault::KdfParams;
-use nabungo_app::{AppError, OffsetDateTime, PeriodStartDay, Recurrence, Uuid};
+use nabungo_app::{AppError, Ledger, OffsetDateTime, PeriodStartDay, Recurrence, Uuid};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-    AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BucketFieldsDto, BudgetAlertDto,
-    BudgetOverviewDto, CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto,
-    CategoryKindDto, ContactDto, LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto,
-    PayeeUsageDto, ReconciliationDto, RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto,
+    AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BackupSecretDto, BackupSourceDto,
+    BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CashflowPointDto,
+    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, ContactDto, LocaleDto,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto,
+    RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto,
     SecurityStatusDto, ShareDto, StartupReportDto, TagUsageDto, ThemeDto, TxnDetailDto,
     TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
     parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
+use crate::lifecycle::RecoveryReason;
 use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
 
 fn ledger<'a>(state: &'a State<'_, AppState>) -> Result<LedgerGuard<'a>, IpcError> {
+    ensure_not_recovering(state)?;
     lock_ledger(&state.ledger)
+}
+
+/// Mode pemulihan aktif → `recovery_required` (bukan `locked`, yang membuka layar unlock).
+fn ensure_not_recovering(state: &AppState) -> Result<(), IpcError> {
+    let recovery = state.recovery.lock().unwrap_or_else(|e| e.into_inner());
+    match *recovery {
+        Some(_) => Err(IpcError::code(ErrorCode::RecoveryRequired)),
+        None => Ok(()),
+    }
 }
 
 #[tauri::command]
@@ -865,33 +878,148 @@ pub async fn backup_now(
     Ok(Some(display(&dest)))
 }
 
+/// Path backup dari `source`; nama app-managed harus nama backup yang sah tanpa separator.
+fn resolve_source(backup_dir: &Path, source: BackupSourceDto) -> Result<PathBuf, IpcError> {
+    match source {
+        BackupSourceDto::Named { file_name } => {
+            if file_name.contains(['/', '\\'])
+                || nabungo_app::parse_backup_name(&file_name).is_none()
+            {
+                return Err(IpcError::code(ErrorCode::BackupInvalid));
+            }
+            Ok(backup_dir.join(file_name))
+        }
+        BackupSourceDto::Path { path } => Ok(PathBuf::from(path)),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pick_backup_file(app: AppHandle) -> Result<Option<String>, IpcError> {
+    Ok(pick_path(&app, Dialog::Open).await?.map(|p| display(&p)))
+}
+
+/// Apakah sumber butuh recovery key-nya sendiri (terenkripsi dengan key selain key aktif).
+#[tauri::command]
+#[specta::specta]
+pub fn inspect_backup_source(
+    state: State<'_, AppState>,
+    source: BackupSourceDto,
+) -> Result<BackupSourceInfoDto, IpcError> {
+    let src = resolve_source(&state.data_dir.backups_path(), source)?;
+    let slot = lock_slot(&state.ledger)?;
+    let live_key = slot.as_ref().and_then(|l| l.key());
+    Ok(BackupSourceInfoDto {
+        needs_key: nabungo_app::backup_needs_key(&src, live_key)?,
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn restore_backup(
     app: AppHandle,
     state: State<'_, AppState>,
-    file_name: String,
+    source: BackupSourceDto,
+    src_recovery_key: Option<String>,
 ) -> Result<(), IpcError> {
+    let src_key = src_recovery_key
+        .map(|k| nabungo_app::vault::parse_recovery_key(&k))
+        .transpose()?;
     let dir = state.data_dir.backups_path();
-    ledger(&state)?.restore_named(&dir, &file_name, OffsetDateTime::now_utc())?;
+    let now = OffsetDateTime::now_utc();
+    match source {
+        BackupSourceDto::Named { file_name } => {
+            ledger(&state)?.restore_named(&dir, &file_name, src_key.as_ref(), now)?
+        }
+        BackupSourceDto::Path { path } => {
+            let att = state.data_dir.attachments_path();
+            ledger(&state)?.restore_file(Path::new(&path), src_key.as_ref(), &dir, &att, now)?
+        }
+    }
     crate::lifecycle::on_restored(&app);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn restore_backup_from_file(
+pub fn recovery_status(state: State<'_, AppState>) -> RecoveryStatusDto {
+    let reason = state
+        .recovery
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .map(|r| match r.reason {
+            RecoveryReason::Unreadable => RecoveryReasonDto::Unreadable,
+            RecoveryReason::TooNew => RecoveryReasonDto::TooNew,
+        });
+    RecoveryStatusDto {
+        active: reason.is_some(),
+        reason,
+        data_dir: display(&state.data_dir.path),
+        has_keyfile: nabungo_app::vault::keyfile_path(&state.data_dir.db_path()).is_file(),
+    }
+}
+
+/// Slot ledger kosong (pemulihan atau terkunci); DB yang sedang terbuka tidak boleh diganti.
+fn recovery_slot(state: &AppState) -> Result<std::sync::MutexGuard<'_, Option<Ledger>>, IpcError> {
+    let slot = lock_slot(&state.ledger)?;
+    if slot.is_some() {
+        return Err(IpcError::code(ErrorCode::RecoveryUnavailable));
+    }
+    Ok(slot)
+}
+
+/// Ganti DB yang tidak bisa dibuka dengan backup (P4); DB lama dipindah, tidak dihapus.
+#[tauri::command]
+#[specta::specta]
+pub async fn recover_from_backup(
     app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<bool, IpcError> {
-    let Some(src) = pick_path(&app, Dialog::Open).await? else {
-        return Ok(false);
-    };
-    let dir = state.data_dir.backups_path();
-    let att = state.data_dir.attachments_path();
-    ledger(&state)?.restore_file(&src, &dir, &att, OffsetDateTime::now_utc())?;
-    crate::lifecycle::on_restored(&app);
-    Ok(true)
+    source: BackupSourceDto,
+    secret: BackupSecretDto,
+) -> Result<(), IpcError> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let secret = match secret {
+            BackupSecretDto::None => BackupSecret::None,
+            BackupSecretDto::Password { password } => BackupSecret::Password(password),
+            BackupSecretDto::RecoveryKey {
+                recovery_key,
+                new_password,
+            } => BackupSecret::RecoveryKey {
+                key: recovery_key,
+                new_password,
+            },
+        };
+        let recovered = {
+            // Ditahan selama pemulihan: `security_status` (`db_state`) tidak boleh berjalan
+            // bersamaan, karena ia membuang `.recover` yang belum selesai.
+            let _slot = recovery_slot(&state)?;
+            let src = resolve_source(&state.data_dir.backups_path(), source)?;
+            recovery::restore_into_fresh(
+                &state.data_dir.db_path(),
+                &src,
+                &state.data_dir.attachments_path(),
+                &secret,
+                KdfParams::DEFAULT,
+                OffsetDateTime::now_utc(),
+            )?
+        };
+        crate::lifecycle::leave_recovery(&app, recovered.key)?;
+        Ok(())
+    })
+    .await
+}
+
+/// Mulai dengan DB kosong (onboarding); DB dan key file lama dipindah ke samping.
+#[tauri::command]
+#[specta::specta]
+pub fn recovery_start_fresh(app: AppHandle) -> Result<(), IpcError> {
+    let state = app.state::<AppState>();
+    {
+        let _slot = recovery_slot(&state)?;
+        recovery::start_fresh(&state.data_dir.db_path(), OffsetDateTime::now_utc())?;
+    }
+    crate::lifecycle::leave_recovery(&app, None)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -939,6 +1067,7 @@ async fn blocking<T: Send + 'static>(
 #[tauri::command]
 #[specta::specta]
 pub fn security_status(state: State<'_, AppState>) -> Result<SecurityStatusDto, IpcError> {
+    ensure_not_recovering(&state)?;
     let slot = lock_slot(&state.ledger)?;
     if let Some(l) = slot.as_ref() {
         let has_keyfile = l.is_encrypted()
@@ -1152,6 +1281,41 @@ pub fn preview_recurrence(
 mod tests {
     use super::*;
     use crate::dto::FreqDto;
+
+    #[test]
+    fn backup_source_named_rejects_paths() {
+        let dir = Path::new("/data/backups");
+        for name in ["../x.db", "sub/auto-20261024T101500Z.db", "catatan.db"] {
+            let err = resolve_source(
+                dir,
+                BackupSourceDto::Named {
+                    file_name: name.into(),
+                },
+            )
+            .unwrap_err();
+            assert_eq!(err.code, ErrorCode::BackupInvalid, "{name}");
+        }
+        assert_eq!(
+            resolve_source(
+                dir,
+                BackupSourceDto::Named {
+                    file_name: "auto-20261024T101500Z.db".into()
+                }
+            )
+            .unwrap(),
+            dir.join("auto-20261024T101500Z.db")
+        );
+        assert_eq!(
+            resolve_source(
+                dir,
+                BackupSourceDto::Path {
+                    path: "/home/u/x.db".into()
+                }
+            )
+            .unwrap(),
+            PathBuf::from("/home/u/x.db")
+        );
+    }
 
     #[test]
     fn preview_recurrence_monthly_31() {

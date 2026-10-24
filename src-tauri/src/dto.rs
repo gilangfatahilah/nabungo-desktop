@@ -1933,6 +1933,58 @@ impl From<StartupReport> for StartupReportDto {
     }
 }
 
+/// Sumber restore/pemulihan (P9): backup app-managed (nama file) atau file pilihan user.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum BackupSourceDto {
+    #[serde(rename_all = "camelCase")]
+    Named {
+        file_name: String,
+    },
+    Path {
+        path: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupSourceInfoDto {
+    /// Sumber terenkripsi dengan key lain (atau bukan SQLite): butuh recovery key-nya.
+    pub needs_key: bool,
+}
+
+/// Rahasia pembuka backup saat pemulihan (P5).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum BackupSecretDto {
+    None,
+    Password {
+        password: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    RecoveryKey {
+        recovery_key: String,
+        new_password: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum RecoveryReasonDto {
+    Unreadable,
+    TooNew,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryStatusDto {
+    pub active: bool,
+    pub reason: Option<RecoveryReasonDto>,
+    pub data_dir: String,
+    /// `nabungo.key` ada di samping DB (diperiksa langsung, bukan lewat `db_state`).
+    pub has_keyfile: bool,
+}
+
 /// Status enkripsi untuk UI; tersedia juga saat terkunci.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

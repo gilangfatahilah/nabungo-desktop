@@ -15,6 +15,10 @@ import {
   type PayeeUsageDto,
   type TagUsageDto,
   type BackupDto,
+  type BackupSecretDto,
+  type BackupSourceDto,
+  type BackupSourceInfoDto,
+  type RecoveryStatusDto,
   type BucketFieldsDto,
   type BudgetAlertDto,
   type BudgetOverviewDto,
@@ -57,6 +61,11 @@ export type {
   AttachmentDto,
   BackupDto,
   BackupKindDto,
+  BackupSecretDto,
+  BackupSourceDto,
+  BackupSourceInfoDto,
+  RecoveryReasonDto,
+  RecoveryStatusDto,
   BucketActualDto,
   BucketBpDto,
   BucketDto,
@@ -130,16 +139,23 @@ function api(): typeof browserCommands {
 }
 
 let lockedHandler: (() => void) | null = null
+let recoveryHandler: (() => void) | null = null
 
 /** Dipanggil setiap kali backend menjawab `locked` (DB terenkripsi belum dibuka). */
 export function setLockedHandler(fn: (() => void) | null): void {
   lockedHandler = fn
 }
 
+/** Dipanggil setiap kali backend menjawab `recovery_required` (DB gagal dibuka saat startup). */
+export function setRecoveryHandler(fn: (() => void) | null): void {
+  recoveryHandler = fn
+}
+
 async function unwrap<T>(p: Promise<Result<T>>): Promise<T> {
   const r = await p
   if (r.status === 'error') {
     if (r.error.code === 'locked') lockedHandler?.()
+    if (r.error.code === 'recovery_required') recoveryHandler?.()
     throw new IpcFailure(r.error)
   }
   return r.data
@@ -516,14 +532,34 @@ export function backupNow(): Promise<string | null> {
   return unwrap(api().backupNow())
 }
 
-/** Setelah sukses, UI wajib memuat ulang semua data. */
-export async function restoreBackup(fileName: string): Promise<void> {
-  await unwrap(api().restoreBackup(fileName))
+/** Setelah sukses, UI wajib memuat ulang semua data. `srcRecoveryKey`: recovery key milik
+ *  backup terenkripsi dari instalasi lain. */
+export async function restoreBackup(source: BackupSourceDto, srcRecoveryKey: string | null = null): Promise<void> {
+  await unwrap(api().restoreBackup(source, srcRecoveryKey))
 }
 
-/** Dialog buka file; `false` bila dibatalkan. */
-export function restoreBackupFromFile(): Promise<boolean> {
-  return unwrap(api().restoreBackupFromFile())
+/** Dialog buka file backup; `null` bila dibatalkan. */
+export function pickBackupFile(): Promise<string | null> {
+  return unwrap(api().pickBackupFile())
+}
+
+/** `needsKey`: backup terenkripsi dengan key selain key DB aktif (mis. instalasi lain). */
+export function inspectBackupSource(source: BackupSourceDto): Promise<BackupSourceInfoDto> {
+  return unwrap(api().inspectBackupSource(source))
+}
+
+export function recoveryStatus(): Promise<RecoveryStatusDto> {
+  return api().recoveryStatus()
+}
+
+/** Ganti DB yang tidak bisa dibuka dengan backup; DB lama dipindah ke samping, tidak dihapus. */
+export async function recoverFromBackup(source: BackupSourceDto, secret: BackupSecretDto): Promise<void> {
+  await unwrap(api().recoverFromBackup(source, secret))
+}
+
+/** Mulai dengan DB kosong (onboarding); DB lama dipindah ke samping. */
+export async function recoveryStartFresh(): Promise<void> {
+  await unwrap(api().recoveryStartFresh())
 }
 
 export function exportJson(): Promise<string | null> {

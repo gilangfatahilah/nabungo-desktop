@@ -1,4 +1,4 @@
-import { getOnboardingStatus, securityStatus } from '@/ipc'
+import { getOnboardingStatus, recoveryStatus, securityStatus } from '@/ipc'
 import { createRouter, createWebHashHistory, type NavigationGuard, type RouteRecordRaw } from 'vue-router'
 
 export type RouteName =
@@ -14,6 +14,7 @@ export type RouteName =
   | 'settings'
   | 'onboarding'
   | 'unlock'
+  | 'recovery'
 
 type NamedRoute = RouteRecordRaw & { name: RouteName }
 
@@ -31,6 +32,7 @@ export const routes: NamedRoute[] = [
   // `bare`: tanpa sidebar, palette, sheet, dan shortcut global.
   { path: '/onboarding', name: 'onboarding', component: () => import('@/views/OnboardingView.vue'), meta: { bare: true } },
   { path: '/unlock', name: 'unlock', component: () => import('@/views/UnlockView.vue'), meta: { bare: true } },
+  { path: '/recovery', name: 'recovery', component: () => import('@/views/RecoveryView.vue'), meta: { bare: true } },
 ]
 
 declare module 'vue-router' {
@@ -39,9 +41,26 @@ declare module 'vue-router' {
   }
 }
 
-/** Terkunci → semua route ke `unlock`; tidak terkunci → `unlock` dialihkan ke dasbor. */
+/**
+ * Pemulihan aktif (DB gagal dibuka) → semua route ke `recovery`. Tidak aktif → `recovery` hanya
+ * boleh dibuka saat terkunci (tautan dari layar kunci); selain itu dialihkan ke dasbor.
+ */
+export function recoveryGuard(isRecovery: () => Promise<boolean>, isLocked: () => Promise<boolean>): NavigationGuard {
+  return async (to) => {
+    const active = await isRecovery()
+    if (active) return to.name === 'recovery' ? true : { name: 'recovery' }
+    if (to.name === 'recovery' && !(await isLocked())) return { name: 'dashboard' }
+    return true
+  }
+}
+
+/**
+ * Terkunci → semua route ke `unlock`; tidak terkunci → `unlock` dialihkan ke dasbor.
+ * `recovery` dilewatkan: diputuskan `recoveryGuard`, dan saat pemulihan `securityStatus` gagal.
+ */
 export function securityGuard(isLocked: () => Promise<boolean>): NavigationGuard {
   return async (to) => {
+    if (to.name === 'recovery') return true
     const locked = await isLocked()
     if (locked && to.name !== 'unlock') return { name: 'unlock' }
     if (!locked && to.name === 'unlock') return { name: 'dashboard' }
@@ -51,11 +70,11 @@ export function securityGuard(isLocked: () => Promise<boolean>): NavigationGuard
 
 /**
  * Belum onboarding → semua route ke `onboarding`; sudah → `onboarding` dialihkan ke dasbor.
- * `unlock` dilewatkan: saat terkunci status onboarding tidak bisa dibaca.
+ * `unlock` dan `recovery` dilewatkan: status onboarding tidak bisa dibaca saat itu.
  */
 export function onboardingGuard(isOnboarded: () => Promise<boolean>): NavigationGuard {
   return async (to) => {
-    if (to.name === 'unlock') return true
+    if (to.name === 'unlock' || to.name === 'recovery') return true
     const done = await isOnboarded()
     if (!done && to.name !== 'onboarding') return { name: 'onboarding' }
     if (done && to.name === 'onboarding') return { name: 'dashboard' }
@@ -68,8 +87,13 @@ export const router = createRouter({
   routes,
 })
 
+const isLocked = async () => (await securityStatus()).locked
+
+// Sebelum guard keamanan: saat pemulihan `securityStatus` menjawab `recovery_required`.
+router.beforeEach(recoveryGuard(async () => (await recoveryStatus()).active, isLocked))
+
 // Dicek tiap navigasi: lock bisa terjadi kapan saja (idle, perintah backend).
-router.beforeEach(securityGuard(async () => (await securityStatus()).locked))
+router.beforeEach(securityGuard(isLocked))
 
 // Status hanya di-cache setelah `true`: onboarding tidak bisa dibatalkan.
 let onboarded = false
