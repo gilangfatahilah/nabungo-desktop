@@ -149,7 +149,7 @@ fn move_db_aside(db: &Path, suffix: &str) -> Result<Vec<PathBuf>, AppError> {
 }
 
 /// Rename `path` → `path<suffix>` (atau `<suffix>-N` bila sudah ada); `None` bila tidak ada.
-fn move_aside(path: &Path, suffix: &str) -> Result<Option<PathBuf>, AppError> {
+pub(crate) fn move_aside(path: &Path, suffix: &str) -> Result<Option<PathBuf>, AppError> {
     if !path.exists() {
         return Ok(None);
     }
