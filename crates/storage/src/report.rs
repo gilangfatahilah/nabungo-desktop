@@ -30,6 +30,33 @@ pub fn category_totals(
     )
 }
 
+/// [`category_totals`] hanya untuk `categories`. `CROSS JOIN` memaksa SQLite mulai dari
+/// `idx_posting_cat`: rentang tanggal panjang (rantai rollover) tidak lagi memindai semua
+/// transaksi di rentang itu.
+pub fn category_totals_in(
+    conn: &Connection,
+    from: Date,
+    to_exclusive: Date,
+    categories: &[Uuid],
+) -> Result<Vec<(Uuid, i64)>> {
+    if categories.is_empty() {
+        return Ok(Vec::new());
+    }
+    let marks = vec!["?"; categories.len()].join(", ");
+    let mut stmt = conn.prepare(&format!(
+        "SELECT p.category_id, SUM(p.amount)
+         FROM posting p CROSS JOIN txn t ON t.id = p.txn_id
+         WHERE p.category_id IN ({marks}) AND t.deleted_at IS NULL AND t.status = 'posted'
+           AND t.date >= ? AND t.date < ?
+         GROUP BY p.category_id ORDER BY p.category_id"
+    ))?;
+    let args = categories
+        .iter()
+        .map(|c| c.to_string())
+        .chain([format_date(from), format_date(to_exclusive)]);
+    collect_pairs(stmt.query(rusqlite::params_from_iter(args))?, "category")
+}
+
 /// Saldo per akun pada akhir `date` (inklusif). Akun tanpa posting tidak muncul.
 pub fn balances_as_of(conn: &Connection, date: Date) -> Result<Vec<(Uuid, i64)>> {
     let mut stmt = conn.prepare_cached(
@@ -214,6 +241,54 @@ mod tests {
 
         let totals = category_totals(&tx, date!(2026 - 10 - 01), date!(2026 - 11 - 01)).unwrap();
         assert_eq!(totals, vec![(kopi.id, -20_001)]);
+    }
+
+    #[test]
+    fn category_totals_in_filters_categories() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let bca = bank(&tx, "BCA");
+        let (kopi, teh, roti) = (
+            expense_cat(&tx, "Kopi"),
+            expense_cat(&tx, "Teh"),
+            expense_cat(&tx, "Roti"),
+        );
+        add(
+            &tx,
+            TxnKind::Expense,
+            date!(2026 - 10 - 02),
+            vec![(bca, Some(kopi), -25_000), (bca, Some(teh), -5_000)],
+        );
+        add(
+            &tx,
+            TxnKind::Expense,
+            date!(2026 - 10 - 03),
+            vec![(bca, Some(roti), -9_000)],
+        );
+        let gone = add(
+            &tx,
+            TxnKind::Expense,
+            date!(2026 - 10 - 04),
+            vec![(bca, Some(kopi), -1_000)],
+        );
+        soft_delete(&tx, gone, &now_utc()).unwrap();
+        add(
+            &tx,
+            TxnKind::Expense,
+            date!(2026 - 11 - 01),
+            vec![(bca, Some(teh), -7_000)],
+        );
+        let (from, to) = (date!(2026 - 10 - 01), date!(2026 - 11 - 01));
+        let mut ids = [kopi.id, teh.id];
+        ids.sort();
+        let mut expected: Vec<_> = category_totals(&tx, from, to)
+            .unwrap()
+            .into_iter()
+            .filter(|(id, _)| ids.contains(id))
+            .collect();
+        expected.sort();
+        assert_eq!(category_totals_in(&tx, from, to, &ids).unwrap(), expected);
+        assert_eq!(category_totals_in(&tx, from, to, &[]).unwrap(), vec![]);
     }
 
     #[test]

@@ -155,11 +155,47 @@ pub(crate) fn overview_on(
     period: BudgetPeriod,
     today: Option<Date>,
 ) -> Result<BudgetOverview, AppError> {
+    overview_scoped(conn, start, period, today, None)
+}
+
+/// Kategori expense yang levelnya bisa berubah bila `touched` berubah realisasinya:
+/// seluruh subtree root dari tiap kategori (parent mencakup semua child-nya).
+pub(crate) fn budget_scope(
+    conn: &Connection,
+    touched: impl IntoIterator<Item = Uuid>,
+) -> Result<HashSet<Uuid>, AppError> {
+    let cats: Vec<CategoryRow> = category::list_categories(conn)?
+        .into_iter()
+        .filter(|c| c.kind == CategoryKind::Expense)
+        .collect();
+    let touched: HashSet<Uuid> = touched.into_iter().collect();
+    let roots: HashSet<Uuid> = cats
+        .iter()
+        .filter(|c| touched.contains(&c.id))
+        .map(|c| c.parent_id.unwrap_or(c.id))
+        .collect();
+    Ok(cats
+        .iter()
+        .filter(|c| roots.contains(&c.parent_id.unwrap_or(c.id)))
+        .map(|c| c.id)
+        .collect())
+}
+
+/// [`overview_on`] dibatasi ke `scope` (hasil [`budget_scope`]): baris kategori di luar
+/// scope tidak ada dan `totals` hanya mencakup scope. Untuk peringatan budget.
+pub(crate) fn overview_scoped(
+    conn: &Connection,
+    start: PeriodStartDay,
+    period: BudgetPeriod,
+    today: Option<Date>,
+    scope: Option<&HashSet<Uuid>>,
+) -> Result<BudgetOverview, AppError> {
     let (from, to) = period.date_range(start);
     let last = period.last_day(start);
     let cats: Vec<CategoryRow> = category::list_categories(conn)?
         .into_iter()
         .filter(|c| c.kind == CategoryKind::Expense)
+        .filter(|c| scope.is_none_or(|s| s.contains(&c.id)))
         .collect();
     let tree: Vec<BudgetCategory> = cats
         .iter()
@@ -168,15 +204,14 @@ pub(crate) fn overview_on(
             parent_id: c.parent_id,
         })
         .collect();
-    let direct: HashMap<Uuid, i64> = report::category_totals(conn, from, to)?
-        .into_iter()
-        .collect();
+    let direct = totals(conn, from, to, scope)?;
     let spent = rollup_spent(&tree, &direct);
     let budgets: HashMap<Uuid, budget::BudgetRow> = budget::list_budgets(conn, &period.key())?
         .into_iter()
+        .filter(|b| scope.is_none_or(|s| s.contains(&b.category_id)))
         .map(|b| (b.category_id, b))
         .collect();
-    let carry = carries(conn, start, period, &tree, &budgets)?;
+    let carry = carries(conn, start, period, &tree, &budgets, scope)?;
     let days = today.and_then(|t| days_left(t, from, last));
 
     let mut rows = Vec::new();
@@ -237,6 +272,23 @@ pub(crate) fn overview_on(
     })
 }
 
+/// Realisasi langsung per kategori di `[from, to)`, dibatasi `scope` bila ada.
+fn totals(
+    conn: &Connection,
+    from: Date,
+    to: Date,
+    scope: Option<&HashSet<Uuid>>,
+) -> Result<HashMap<Uuid, i64>, AppError> {
+    let rows = match scope {
+        None => report::category_totals(conn, from, to)?,
+        Some(s) => {
+            let ids: Vec<Uuid> = s.iter().copied().collect();
+            report::category_totals_in(conn, from, to, &ids)?
+        }
+    };
+    Ok(rows.into_iter().collect())
+}
+
 /// Carry per kategori ber-budget di `period` (K2): Σ nominal rantai rollover
 /// dikurangi realisasi rantai. Satu query realisasi per awal rantai unik.
 fn carries(
@@ -245,6 +297,7 @@ fn carries(
     period: BudgetPeriod,
     tree: &[BudgetCategory],
     budgets: &HashMap<Uuid, budget::BudgetRow>,
+    scope: Option<&HashSet<Uuid>>,
 ) -> Result<HashMap<Uuid, i64>, AppError> {
     let mut out = HashMap::new();
     if budgets.is_empty() {
@@ -271,9 +324,7 @@ fn carries(
     let (until, _) = period.date_range(start);
     for (first, members) in by_start {
         let (chain_from, _) = first.date_range(start);
-        let direct: HashMap<Uuid, i64> = report::category_totals(conn, chain_from, until)?
-            .into_iter()
-            .collect();
+        let direct = totals(conn, chain_from, until, scope)?;
         let spent = rollup_spent(tree, &direct);
         for (id, sum) in members {
             let used = spent.get(&id).copied().unwrap_or(0);
@@ -524,6 +575,33 @@ mod tests {
         if rollover {
             k.ledger.set_budget_rollover(cat, p, true).unwrap();
         }
+    }
+
+    #[test]
+    fn scoped_overview_matches_full_rows() {
+        let mut k = Kit::new(1, date!(2026 - 08 - 01));
+        set(&mut k, "Makan & Minum", "2026-09", 500_000, true);
+        set(&mut k, "Makan & Minum", "2026-10", 500_000, false);
+        set(&mut k, "Restoran", "2026-10", 200_000, false);
+        set(&mut k, "Bensin", "2026-10", 100_000, false);
+        k.expense(date!(2026 - 09 - 10), "Restoran", 350_000);
+        k.expense(date!(2026 - 10 - 05), "Makan & Minum", 120_000);
+        k.expense(date!(2026 - 10 - 06), "Restoran", 90_000);
+        k.expense(date!(2026 - 10 - 07), "Bensin", 40_000);
+        let start = k.ledger.period_start_day().unwrap();
+        let oct = period("2026-10");
+        let scope = budget_scope(&k.ledger.conn, [k.cat("Restoran")]).unwrap();
+        assert!(scope.contains(&k.cat("Makan & Minum")));
+        assert!(!scope.contains(&k.cat("Bensin")));
+        let full = overview_on(&k.ledger.conn, start, oct, None).unwrap();
+        let scoped = overview_scoped(&k.ledger.conn, start, oct, None, Some(&scope)).unwrap();
+        let expected: Vec<_> = full
+            .rows
+            .into_iter()
+            .filter(|r| scope.contains(&r.category_id))
+            .collect();
+        assert!(expected.iter().any(|r| r.carry == 150_000));
+        assert_eq!(scoped.rows, expected);
     }
 
     #[test]
