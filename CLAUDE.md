@@ -64,6 +64,9 @@ Cargo workspace + pnpm workspace. Arah dependensi wajib: `ui → src-tauri → n
 - Backup/restore memakai SQLite online backup API (`backup_into`, `restore_from`), bukan salin file. File backup memakai `journal_mode=DELETE` (satu file tanpa `-wal`).
 - Penamaan/retensi backup ada di `crates/app/src/backup.rs`; DB aktif (+ `-wal`/`-shm`/`-journal`) tidak boleh jadi sumber/tujuan (`BackupTargetInvalid`).
 - Dialog native (tauri-plugin-dialog) dipanggil dari command `async` lewat `spawn_blocking`; `Mutex<Ledger>` dikunci setelah dialog ditutup.
+- Mode pemulihan (Fase 8b): DB gagal dibuka saat startup → `AppState.recovery = Some(..)`, ledger `None`, command ledger mengembalikan `recovery_required`, UI (`setRecoveryHandler`) pindah ke `/recovery`. Command pemulihan (`recover_from_backup`, `recovery_start_fresh`) hanya jalan saat ledger `None` (mode pemulihan atau terkunci), selain itu `recovery_unavailable`.
+- Pemulihan tanpa Ledger (`crates/app/src/recovery.rs`): restore ke `nabungo.db.recover` → DB lama (+ sibling, key file) dipindah ke `*.broken-<ts>` (tidak pernah dihapus) → rename `.recover` → `nabungo.db`. Sisa `.recover` dibereskan `security::db_state`.
+- Restore backup terenkripsi instalasi lain memakai recovery key **milik file backup** (`BackupSecret::RecoveryKey`) + password baru, lalu key file baru ditulis; `backup_key_required` bila kunci belum diberikan.
 
 ### Enkripsi (SEC-01, SQLCipher)
 

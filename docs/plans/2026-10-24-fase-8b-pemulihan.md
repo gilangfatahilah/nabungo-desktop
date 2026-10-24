@@ -315,4 +315,12 @@ Aturan `restore_into_fresh`:
 
 ## Hasil
 
-_(diisi setelah eksekusi)_
+Commit `b50d1ed`..HEAD di branch `fase-8b-pemulihan` (Task 1–7). Suite akhir: `cargo fmt --check` + clippy `-D warnings` bersih, `cargo test --workspace` 481 lulus (3 ignored, benchmark), UI vitest 480 lulus, typecheck bersih, Playwright 18 lulus (baru: `e2e/recovery.spec.ts`). `bindings.ts` sudah ter-generate dan di-commit.
+
+- **Mode pemulihan**: `startup_mode` memasang `AppState.recovery` bila `db_state` gagal atau DB plaintext tidak terbuka (`unreadable` / `tooNew`). UI: guard `/recovery`, `RecoveryView` (daftar backup, pilih file, rahasia backup terenkripsi, mulai data kosong). Gagal unlock dengan `database_unreadable`/`key_file_invalid` tidak masuk mode pemulihan. Layar kunci menonjolkan tautan "Pulihkan dari backup".
+- **Restore lintas instalasi**: Pengaturan → Backup dan layar pemulihan menerima backup terenkripsi instalasi lain dengan recovery key-nya (`inspect_backup_source` → `needsKey`).
+- **QA manual (diisi user, release build portable)**: belum dijalankan.
+  - [ ] 1. Timpa `data/nabungo.db` dengan sampah → app start ke layar pemulihan, lalu pulihkan dari backup otomatis.
+  - [ ] 2. Ulangi pada instalasi terenkripsi dengan password.
+  - [ ] 3. Restore backup terenkripsi dari folder data lain dengan recovery key-nya, lewat Pengaturan.
+  - [ ] 4. "Mulai dengan data kosong" → onboarding, dan file `.broken-*` ada di folder data.
