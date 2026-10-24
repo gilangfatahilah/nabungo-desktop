@@ -173,6 +173,10 @@ export async function setTheme(theme: ThemeDto): Promise<void> {
   await unwrap(api().setTheme(theme))
 }
 
+export async function setFontScale(scale: number): Promise<void> {
+  await unwrap(api().setFontScale(scale))
+}
+
 export async function setLocale(locale: LocaleDto): Promise<void> {
   await unwrap(api().setLocale(locale))
 }

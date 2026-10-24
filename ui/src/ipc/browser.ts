@@ -2,6 +2,7 @@
 import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
 import { __enterRecovery, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
+import { isFontScale } from '@/lib/fontScale'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
@@ -59,6 +60,11 @@ export const browserCommands = lockGuard({
   setAutoLockMinutes: async (minutes: number): Promise<Result<null>> => {
     if (!(AUTO_LOCK_CHOICES as readonly number[]).includes(minutes)) return { status: 'error', error: { code: 'invalid_auto_lock', entity: null } }
     settings.autoLockMinutes = minutes
+    return ok(null)
+  },
+  setFontScale: async (scale: number): Promise<Result<null>> => {
+    if (!isFontScale(scale)) return { status: 'error', error: { code: 'invalid_font_scale', entity: null } }
+    settings.fontScale = scale
     return ok(null)
   },
 })

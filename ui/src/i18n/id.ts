@@ -22,6 +22,8 @@ export default {
     theme: 'Tema',
     language: 'Bahasa',
     themes: { light: 'Terang', dark: 'Gelap', system: 'Ikuti sistem' },
+    fontScale: 'Ukuran teks',
+    fontScaleHint: 'Juga lewat Ctrl + = (perbesar), Ctrl + − (perkecil), Ctrl + 0 (normal).',
     locales: { id: 'Indonesia', en: 'English' },
     periodStartDay: 'Tanggal awal periode budget',
     periodStartDayHint: 'Budget bulanan dihitung mulai tanggal ini (mis. tanggal gajian).',

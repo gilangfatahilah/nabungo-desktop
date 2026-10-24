@@ -22,6 +22,8 @@ export default {
     theme: 'Theme',
     language: 'Language',
     themes: { light: 'Light', dark: 'Dark', system: 'Follow system' },
+    fontScale: 'Text size',
+    fontScaleHint: 'Also via Ctrl + = (larger), Ctrl + − (smaller), Ctrl + 0 (normal).',
     locales: { id: 'Indonesia', en: 'English' },
     periodStartDay: 'Budget period start day',
     periodStartDayHint: 'Monthly budgets start on this day (e.g. your payday).',
