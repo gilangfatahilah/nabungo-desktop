@@ -170,13 +170,15 @@ impl Ledger {
     ) -> Result<Vec<(BudgetPeriod, Date, Vec<AccountBalance>)>, AppError> {
         let start = self.period_start_day()?;
         let accounts = account::list_accounts(&self.conn)?;
-        periods_ending(end, count)
+        let periods = periods_ending(end, count);
+        let dates: Vec<Date> = periods.iter().map(|p| p.last_day(start)).collect();
+        let per_date = report::balances_at_dates(&self.conn, &dates)?;
+        periods
             .into_iter()
-            .map(|period| {
-                let date = period.last_day(start);
-                let balances: HashMap<_, _> = report::balances_as_of(&self.conn, date)?
-                    .into_iter()
-                    .collect();
+            .zip(dates)
+            .zip(per_date)
+            .map(|((period, date), balances)| {
+                let balances: HashMap<_, _> = balances.into_iter().collect();
                 let list = accounts
                     .iter()
                     .map(|a| AccountBalance {
