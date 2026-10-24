@@ -121,6 +121,8 @@ export const commands = {
 	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
 	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
 	startupReport: () => __TAURI_INVOKE<StartupReportDto>("startup_report"),
+	/**  Dasbor pertama selesai dimuat: catat waktu sejak proses mulai, sekali per proses (log lokal). */
+	appReady: () => __TAURI_INVOKE<void>("app_ready"),
 	listBackups: () => typedError<BackupDto[], IpcError>(__TAURI_INVOKE("list_backups")),
 	backupNow: () => typedError<string | null, IpcError>(__TAURI_INVOKE("backup_now")),
 	restoreBackup: (fileName: string) => typedError<null, IpcError>(__TAURI_INVOKE("restore_backup", { fileName })),

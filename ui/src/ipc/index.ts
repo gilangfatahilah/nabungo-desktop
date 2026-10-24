@@ -501,6 +501,11 @@ export function startupReport(): Promise<StartupReportDto> {
   return api().startupReport()
 }
 
+/** Dasbor pertama tampil: backend mencatat `startup_ms` ke log lokal (sekali per proses). */
+export function appReady(): Promise<void> {
+  return api().appReady()
+}
+
 /** Backup otomatis/pra-migrasi/pra-restore, terbaru dulu. */
 export function listBackups(): Promise<BackupDto[]> {
   return unwrap(api().listBackups())

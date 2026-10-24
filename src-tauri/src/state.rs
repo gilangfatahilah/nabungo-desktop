@@ -3,6 +3,7 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
+use std::time::Instant;
 
 use nabungo_app::Ledger;
 
@@ -19,6 +20,9 @@ pub struct AppState {
     pub scheduler_started: AtomicBool,
     /// Sesi sebelumnya tidak berakhir normal; integrity check menunggu DB dibuka.
     pub unclean_shutdown: bool,
+    /// Awal `run()`; acuan `startup_ms` saat dasbor pertama tampil.
+    pub started: Instant,
+    pub ready_logged: AtomicBool,
 }
 
 /// Ledger yang sedang terbuka; hanya dibuat oleh [`lock_ledger`] bila tidak terkunci.

@@ -22,6 +22,7 @@ mod budget_alerts;
 mod categories;
 mod defaults;
 mod export;
+pub mod fixture;
 mod ledger;
 mod onboarding;
 mod payee;

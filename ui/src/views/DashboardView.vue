@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { PlusIcon } from '@lucide/vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -16,6 +16,7 @@ import NetWorthCard from '@/components/dashboard/NetWorthCard.vue'
 import RecentTxnsCard from '@/components/dashboard/RecentTxnsCard.vue'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
+import { appReady } from '@/ipc'
 import { defaultAccountId } from '@/lib/accounts'
 import { formatRange } from '@/lib/date'
 import { withErrorToast } from '@/lib/notify'
@@ -53,7 +54,8 @@ const budgetTotal = computed(() => {
 const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.load(), scheduled.reload()]))
 
 onMounted(() => {
-  void load()
+  // Ukur startup sampai dasbor pertama terisi (log lokal di backend; mode browser no-op).
+  void load().then(() => nextTick()).then(() => appReady())
   void withErrorToast(() => Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()]))
 })
 

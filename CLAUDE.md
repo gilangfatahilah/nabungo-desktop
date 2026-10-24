@@ -17,6 +17,8 @@ cargo test --workspace               # semua test Rust
 cargo test -p nabungo-core money::   # satu modul / filter nama test
 cargo test -p nabungo-storage -- --exact tests::foreign_keys_enabled
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p nabungo-app --release --test perf -- --ignored --nocapture   # benchmark 50.000 transaksi (Fase 8a)
+cargo run -p nabungo-app --release --example seed_fixture -- <dir> [--txns N] [--password P]  # folder data berisi fixture
 
 pnpm --filter @nabungo/ui test                         # vitest run
 pnpm --filter @nabungo/ui exec vitest run src/lib/money.test.ts -t "negative"

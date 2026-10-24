@@ -1,15 +1,17 @@
 //! Peringatan budget (BUD-04): kategori ber-budget yang levelnya naik ke
 //! `Warning` (≥ 80%) atau `Exceeded` (≥ 100%) karena transaksi yang disimpan.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use nabungo_core::{BudgetLevel, BudgetPeriod};
+use nabungo_core::{BudgetLevel, BudgetPeriod, form_postings};
+use nabungo_storage::recurring as repo;
 use time::Date;
 use uuid::Uuid;
 
 use crate::TxnForm;
-use crate::budget::overview_on;
+use crate::budget::{budget_scope, overview_scoped};
 use crate::ledger::{AppError, Ledger};
+use crate::recurring::template_form;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BudgetAlert {
@@ -21,13 +23,23 @@ pub struct BudgetAlert {
 
 type Levels = HashMap<(Uuid, BudgetPeriod), BudgetLevel>;
 
+/// Kategori yang levelnya dihitung (lihat [`budget_scope`]) dan level sebelum simpan.
+type Before = (HashSet<Uuid>, Levels);
+
+/// Kategori posting form; form yang tidak valid tidak tersimpan, jadi tidak perlu alert.
+fn form_categories(form: &TxnForm) -> Vec<Uuid> {
+    form_postings(&form.body)
+        .map(|ps| ps.into_iter().filter_map(|p| p.category_id).collect())
+        .unwrap_or_default()
+}
+
 impl Ledger {
     pub fn create_txn_with_alerts(
         &mut self,
         form: &TxnForm,
     ) -> Result<(Uuid, Vec<BudgetAlert>), AppError> {
         let periods = vec![self.period_of(form.date)?];
-        let before = self.budget_levels(&periods);
+        let before = self.budget_levels(&periods, form_categories(form));
         let id = self.create_txn(form)?;
         Ok((id, self.alerts_after_save(&periods, before)))
     }
@@ -40,7 +52,9 @@ impl Ledger {
         form: Option<&TxnForm>,
     ) -> Result<(Uuid, Vec<BudgetAlert>), AppError> {
         let periods = vec![self.period_of(form.map_or(date, |f| f.date))?];
-        let before = self.budget_levels(&periods);
+        let before = self
+            .occurrence_categories(id, date, form)
+            .and_then(|cats| self.budget_levels(&periods, cats));
         let txn = self.confirm_occurrence(id, date, form)?;
         Ok((txn, self.alerts_after_save(&periods, before)))
     }
@@ -52,11 +66,16 @@ impl Ledger {
         id: Uuid,
         form: &TxnForm,
     ) -> Result<Vec<BudgetAlert>, AppError> {
-        let old = self.get_txn(id)?.date;
-        let mut periods = vec![self.period_of(old)?, self.period_of(form.date)?];
+        let old = self.get_txn(id)?;
+        let mut periods = vec![self.period_of(old.date)?, self.period_of(form.date)?];
         periods.sort();
         periods.dedup();
-        let before = self.budget_levels(&periods);
+        let touched = old
+            .postings
+            .iter()
+            .filter_map(|p| p.category_id)
+            .chain(form_categories(form));
+        let before = self.budget_levels(&periods, touched);
         self.update_txn(id, form)?;
         Ok(self.alerts_after_save(&periods, before))
     }
@@ -66,9 +85,9 @@ impl Ledger {
     fn alerts_after_save(
         &self,
         periods: &[BudgetPeriod],
-        before: Result<Levels, AppError>,
+        before: Result<Before, AppError>,
     ) -> Vec<BudgetAlert> {
-        match before.and_then(|b| self.budget_alerts(periods, &b)) {
+        match before.and_then(|(scope, b)| self.budget_alerts(periods, &scope, &b)) {
             Ok(alerts) => alerts,
             Err(e) => {
                 tracing::warn!(error = %e, "gagal menghitung peringatan budget");
@@ -77,28 +96,58 @@ impl Ledger {
         }
     }
 
-    fn budget_levels(&self, periods: &[BudgetPeriod]) -> Result<Levels, AppError> {
+    /// Kategori template (atau form editan) kejadian yang akan dikonfirmasi.
+    fn occurrence_categories(
+        &self,
+        id: Uuid,
+        date: Date,
+        form: Option<&TxnForm>,
+    ) -> Result<Vec<Uuid>, AppError> {
+        if let Some(f) = form {
+            return Ok(form_categories(f));
+        }
+        match repo::get_rule(&self.conn, id)? {
+            Some(rec) => Ok(form_categories(&template_form(&rec, date)?)),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Level sebelum simpan, hanya untuk subtree kategori yang disentuh: kategori lain
+    /// tidak berubah realisasinya, jadi tidak mungkin naik level.
+    fn budget_levels(
+        &self,
+        periods: &[BudgetPeriod],
+        touched: impl IntoIterator<Item = Uuid>,
+    ) -> Result<Before, AppError> {
+        let scope = budget_scope(&self.conn, touched)?;
         let start = self.period_start_day()?;
         let mut out = HashMap::new();
         for &p in periods {
-            for r in overview_on(&self.conn, start, p, None)?.rows {
+            if scope.is_empty() {
+                break;
+            }
+            for r in overview_scoped(&self.conn, start, p, None, Some(&scope))?.rows {
                 if let Some(level) = r.level {
                     out.insert((r.category_id, p), level);
                 }
             }
         }
-        Ok(out)
+        Ok((scope, out))
     }
 
     fn budget_alerts(
         &self,
         periods: &[BudgetPeriod],
+        scope: &HashSet<Uuid>,
         before: &Levels,
     ) -> Result<Vec<BudgetAlert>, AppError> {
-        let start = self.period_start_day()?;
         let mut out = Vec::new();
+        if scope.is_empty() {
+            return Ok(out);
+        }
+        let start = self.period_start_day()?;
         for &p in periods {
-            for r in overview_on(&self.conn, start, p, None)?.rows {
+            for r in overview_scoped(&self.conn, start, p, None, Some(scope))?.rows {
                 let Some(level) = r.level else { continue };
                 let was = before
                     .get(&(r.category_id, p))
@@ -121,6 +170,7 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::budget::overview_on;
     use crate::testkit::Kit;
     use nabungo_core::{FormBody, SplitLine};
     use time::macros::date;
@@ -224,6 +274,130 @@ mod tests {
                 alert(&k, "Makan & Minum", "2026-10", BudgetLevel::Warning, 83),
                 alert(&k, "Restoran", "2026-10", BudgetLevel::Exceeded, 100),
             ]
+        );
+    }
+
+    /// Alert versi penuh (semua kategori), pembanding untuk versi ber-scope.
+    fn full_levels(k: &Kit, p: BudgetPeriod) -> Levels {
+        let start = k.ledger.period_start_day().unwrap();
+        overview_on(&k.ledger.conn, start, p, None)
+            .unwrap()
+            .rows
+            .into_iter()
+            .filter_map(|r| r.level.map(|l| ((r.category_id, p), l)))
+            .collect()
+    }
+
+    fn full_alerts(before: &Levels, after: &Levels) -> Vec<(Uuid, BudgetLevel)> {
+        let mut out: Vec<_> = after
+            .iter()
+            .filter(|(key, level)| {
+                **level > before.get(*key).copied().unwrap_or(BudgetLevel::Ok)
+                    && **level != BudgetLevel::Ok
+            })
+            .map(|((id, _), level)| (*id, *level))
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn alerts_scoped_to_touched_categories_match_full() {
+        let mut k = kit_with_budget(100_000);
+        let oct = period("2026-10");
+        for (name, amount) in [
+            ("Restoran", 50_000),
+            ("Bensin", 50_000),
+            ("Biaya admin", 10_000),
+        ] {
+            let c = k.cat(name);
+            k.ledger.set_budget(c, oct, Some(amount)).unwrap();
+        }
+        spend(&mut k, "Biaya admin", 9_000);
+        let before = full_levels(&k, oct);
+        let form = TxnForm {
+            body: FormBody::Expense {
+                account_id: k.bca,
+                amount: 100_000,
+                splits: vec![
+                    SplitLine {
+                        category_id: k.cat("Restoran"),
+                        amount: 45_000,
+                        memo: None,
+                    },
+                    SplitLine {
+                        category_id: k.cat("Bensin"),
+                        amount: 55_000,
+                        memo: None,
+                    },
+                ],
+            },
+            date: date!(2026 - 10 - 10),
+            payee: None,
+            note: None,
+            tags: vec![],
+        };
+        let alerts = k.ledger.create_txn_with_alerts(&form).unwrap().1;
+        let mut got: Vec<_> = alerts.iter().map(|a| (a.category_id, a.level)).collect();
+        got.sort();
+        assert_eq!(got, full_alerts(&before, &full_levels(&k, oct)));
+        assert_eq!(
+            alerts,
+            vec![
+                alert(&k, "Restoran", "2026-10", BudgetLevel::Warning, 90),
+                alert(&k, "Bensin", "2026-10", BudgetLevel::Exceeded, 110),
+            ]
+        );
+    }
+
+    #[test]
+    fn transfer_fee_alerts_fee_category() {
+        let mut k = kit_with_budget(100_000);
+        let admin = k.cat("Biaya admin");
+        k.ledger
+            .set_budget(admin, period("2026-10"), Some(10_000))
+            .unwrap();
+        let (from, to) = (k.bca, k.dompet);
+        let form = TxnForm {
+            body: FormBody::Transfer {
+                from,
+                to,
+                amount: 50_000,
+                fee: Some(nabungo_core::Fee {
+                    amount: 9_000,
+                    category_id: admin,
+                }),
+            },
+            date: date!(2026 - 10 - 10),
+            payee: None,
+            note: None,
+            tags: vec![],
+        };
+        assert_eq!(
+            k.ledger.create_txn_with_alerts(&form).unwrap().1,
+            vec![alert(
+                &k,
+                "Biaya admin",
+                "2026-10",
+                BudgetLevel::Warning,
+                90
+            )]
+        );
+    }
+
+    #[test]
+    fn update_changing_category_alerts_new_category() {
+        let mut k = kit_with_budget(100_000);
+        let bensin = k.cat("Bensin");
+        k.ledger
+            .set_budget(bensin, period("2026-10"), Some(100_000))
+            .unwrap();
+        let form = expense(&k, date!(2026 - 10 - 10), "Makan & Minum", 90_000);
+        let (id, _) = k.ledger.create_txn_with_alerts(&form).unwrap();
+        let moved = expense(&k, date!(2026 - 10 - 10), "Bensin", 90_000);
+        assert_eq!(
+            k.ledger.update_txn_with_alerts(id, &moved).unwrap(),
+            vec![alert(&k, "Bensin", "2026-10", BudgetLevel::Warning, 90)]
         );
     }
 
