@@ -89,3 +89,27 @@ test('delete and undo', async ({ page }) => {
   await expect(row).toBeVisible()
   await expect(netWorth(page)).toHaveText(amount('975.000'))
 })
+
+test('tampilan tabel: sortir nominal, filter cepat, kembali ke riwayat', async ({ page }) => {
+  await onboard(page)
+  await quickExpense(page)
+  await goTransactions(page)
+
+  await page.locator('[data-testid="txn-view-table"]').click()
+  const rows = page.locator('[data-testid="txn-table-row"]')
+  await expect(rows).toHaveCount(2)
+  // Default tanggal terbaru: pengeluaran dulu, saldo awal di bawah.
+  await expect(rows.first()).toContainText('Kopi')
+
+  await page.locator('[data-testid="sort-amount"]').click()
+  await expect(page.locator('th[aria-sort="descending"]')).toContainText('Nominal')
+  await expect(rows.first()).toContainText('Saldo awal')
+
+  await rows.filter({ hasText: 'Kopi' }).locator('[data-testid="cell-filter-category"]').click()
+  await expect(page.locator('[data-testid="chip-category"]')).toBeVisible()
+  await expect(rows).toHaveCount(1)
+  await expect(page.getByRole('dialog')).toBeHidden()
+
+  await page.locator('[data-testid="txn-view-history"]').click()
+  await expect(page.locator('[role="listitem"][data-txn-id]')).toHaveCount(1)
+})

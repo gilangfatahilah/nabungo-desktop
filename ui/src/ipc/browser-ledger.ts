@@ -8,7 +8,7 @@ import type {
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
   CategoryFieldsDto, CategoryKindDto, ContactDto, ErrorCode, IpcError, OnboardingDto, PayeeSuggestionDto, PostingDto,
-  TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto,
+  TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnKindDto, TxnPageDto, TxnQueryDto, TxnRowDto, TxnSortDto,
   ReconciliationDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
   AttachmentDto, PayeeUsageDto, TagUsageDto,
   RecurrenceDto, RuleDto, RuleInputDto,
@@ -471,8 +471,24 @@ function runningBalances(accountId: string): Map<string, number> {
   return out
 }
 
+/** Cermin `TxnSort::order_by` di `txn_list.rs`: tie-break selalu terbaru dulu. */
+function bySort(sort: TxnSortDto | null): (a: Txn, b: Txn) => number {
+  const s = sort ?? { field: 'date', desc: true }
+  const dir = s.desc ? -1 : 1
+  const cmp = (x: number | string, y: number | string) => (x < y ? -1 : x > y ? 1 : 0)
+  if (s.field === 'date') return (a, b) => dir * (cmp(a.date, b.date) || a.seq - b.seq)
+  if (s.field === 'amount') return (a, b) => dir * cmp(rowAmount(a), rowAmount(b)) || byNewest(a, b)
+  const label = (t: Txn) => (payeeName(t) ?? t.note)?.toLowerCase() ?? null
+  return (a, b) => {
+    const x = label(a)
+    const y = label(b)
+    if (x === null || y === null) return (x === null ? 1 : 0) - (y === null ? 1 : 0) || byNewest(a, b)
+    return dir * cmp(x, y) || byNewest(a, b)
+  }
+}
+
 function listPage(q: TxnQueryDto): TxnPageDto {
-  const hits = activeTxns().filter((t) => matches(t, q)).sort(byNewest)
+  const hits = activeTxns().filter((t) => matches(t, q)).sort(bySort(q.sort))
   const running = q.accountId ? runningBalances(q.accountId) : null
   return {
     rows: hits.slice(q.offset, q.offset + q.limit).map((t) => shapeRow(t, running, q.accountId)),

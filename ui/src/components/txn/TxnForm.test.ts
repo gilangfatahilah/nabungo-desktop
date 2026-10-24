@@ -66,7 +66,7 @@ beforeAll(async () => {
 
 async function txns() {
   return ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
-    amountMin: null, amountMax: null, search: null, limit: 1000, offset: 0 })
+    amountMin: null, amountMax: null, search: null, sort: null, limit: 1000, offset: 0 })
 }
 
 function expense(over: Partial<TxnFormDto> = {}): TxnFormDto {

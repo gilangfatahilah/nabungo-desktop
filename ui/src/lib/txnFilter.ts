@@ -1,6 +1,7 @@
 import type { TxnQueryDto } from '@/ipc'
 
-export type TxnFilter = Omit<TxnQueryDto, 'limit' | 'offset'>
+// Urutan bukan filter: tidak dihitung sebagai filter aktif dan tidak ikut "Hapus semua".
+export type TxnFilter = Omit<TxnQueryDto, 'limit' | 'offset' | 'sort'>
 
 /** Preset periode di toolbar Transaksi. Periode budget menyusul di Fase 5. */
 export type Period = 'all' | 'thisMonth' | 'last30' | 'custom'

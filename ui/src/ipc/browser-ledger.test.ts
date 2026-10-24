@@ -32,7 +32,7 @@ function form(over: Partial<TxnFormDto>): TxnFormDto {
 }
 
 const q = { dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
-  amountMin: null, amountMax: null, search: null, limit: 100, offset: 0 }
+  amountMin: null, amountMax: null, search: null, sort: null, limit: 100, offset: 0 }
 
 describe('browser ledger transaksi (paritas Rust)', () => {
   it('transfer dengan biaya: saldo A 793.500, B 200.000', async () => {
@@ -81,6 +81,22 @@ describe('browser ledger transaksi (paritas Rust)', () => {
     const page = await data(L.listTxns({ ...q, accountId: a, search: 'diskon' }))
     expect(page.rows).toHaveLength(1)
     expect(page.rows[0]).toMatchObject({ runningBalance: 5_925_000, accountDelta: -50_000, amount: -50_000 })
+  })
+
+  it('sortir nominal bertanda & payee NOCASE (kosong di akhir), paginasi stabil', async () => {
+    const a = await account('Sort', 1_000_000)
+    const c = await category('expense', 'Kopi Sort')
+    const kopi = (await data(L.createTxn(form({ accountId: a, date: '2026-10-02', amount: 25_000, payee: 'Kopi Kenangan', splits: [{ categoryId: c, amount: 25_000, memo: null }] })))).id
+    const makan = (await data(L.createTxn(form({ accountId: a, date: '2026-10-04', amount: 50_000, note: 'makan 50% diskon', splits: [{ categoryId: c, amount: 50_000, memo: null }] })))).id
+    const opening = (await data(L.listTxns({ ...q, accountId: a }))).rows.find((r) => r.kind === 'opening')!.id
+    const ids = async (field: 'date' | 'amount' | 'payee', desc: boolean, extra = {}) =>
+      (await data(L.listTxns({ ...q, accountId: a, sort: { field, desc }, ...extra }))).rows.map((r) => r.id)
+    expect(await ids('amount', false)).toEqual([makan, kopi, opening])
+    expect(await ids('amount', true)).toEqual([opening, kopi, makan])
+    expect(await ids('payee', false)).toEqual([kopi, makan, opening])
+    expect(await ids('payee', true)).toEqual([makan, kopi, opening])
+    expect(await ids('date', false)).toEqual([opening, kopi, makan])
+    expect([...await ids('amount', true, { limit: 2 }), ...await ids('amount', true, { limit: 2, offset: 2 })]).toEqual([opening, kopi, makan])
   })
 
   it('search "50%" literal dan tanpa beda huruf', async () => {

@@ -299,6 +299,8 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 - shadcn `Table` di dalam `Card` (Dasbor) atau langsung di Lembar (layar kerja). Header `text-meta` Tinta pudar 500, baris 40px, pemisah Garis.
 - Kolom angka rata kanan, `num`. Kolom teks terpotong dengan `truncate`, nilai penuh di `title`.
 - Baris yang bisa dibuka: seluruh baris bisa diklik/difokus, hover Kanvas.
+- Header yang bisa disortir: `button` berisi label + ikon `arrow-up-down` (tidak aktif) / `arrow-up` / `arrow-down`, `aria-sort` di `<th>`, `aria-label` "Urutkan menurut {kolom}". Sortir dijalankan backend agar benar lintas paginasi.
+- Tabel panjang divirtualisasi dengan baris pengisi `<tr>` atas/bawah (struktur `<table>` tetap utuh). Header lengket memakai `<table>` langsung di dalam scroller, bukan komponen `Table` (pembungkus `overflow-x-auto`-nya mematahkan `sticky`).
 
 ## 8. Pola layar
 
@@ -347,7 +349,14 @@ Susunan "balance details": hero kekayaan bersih di atas, lalu grid kartu 12 kolo
 
 ### 8.2 Transaksi
 
-Tanpa PageHeader. Toolbar filter (§7.6) di atas, menempel saat daftar di-scroll, lalu daftar virtual §7.5 yang mengisi sisa tinggi inset. Tidak ada kotak ber-border di sekeliling daftar; header tanggal menempel saat scroll.
+Tanpa PageHeader. Toolbar filter (§7.6) di atas, menempel saat daftar di-scroll, lalu isi yang mengisi sisa tinggi inset. Tidak ada kotak ber-border di sekeliling isi.
+
+Dua tampilan, dipilih lewat ToggleGroup outline ikon `list` (**Riwayat**) / `table-2` (**Tabel**) di ujung kanan toolbar, sesudah jumlah hasil. Pilihan dan kolom tersembunyi disimpan per perangkat (`localStorage`), bukan setting backend.
+
+- **Riwayat** (default): daftar virtual §7.5 dikelompokkan per tanggal; header tanggal aktif menempel di atas saat scroll. Selalu urut tanggal terbaru (kembali ke Riwayat mereset sortir).
+- **Tabel**: tabel datar §7.13 bergaya "Transaksi terakhir" Dasbor. Kolom: Tanggal ↕ · Deskripsi ↕ (tile 24px + judul, sortir = pihak/catatan, kosong di akhir) · Kategori · Akun (asal → tujuan, ≥ `@3xl/main`) · Tag (≥ `@5xl/main`) · Nominal ↕ (bertanda, rata kanan) · Saldo (hanya saat filter satu akun **dan** urut tanggal) · ikon lampiran/rekonsiliasi · `⋯`. Kategori, Akun, Tag bisa disembunyikan lewat menu **Kolom** (muncul di toolbar hanya di Tabel).
+- Filter cepat di Tabel: klik nama kategori/akun/`#tag` di sel menerapkan filter itu (chip muncul di toolbar) tanpa membuka sheet edit. Klik di bagian lain baris → sheet edit; keyboard sama dengan Riwayat.
+- Sortir bukan filter: tidak dihitung di jumlah filter dan tidak ikut "Hapus semua".
 
 ### 8.3 Akun
 

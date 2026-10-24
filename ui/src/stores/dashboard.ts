@@ -20,7 +20,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   async function load() {
     const period = await ipc.periodOf(todayIso())
     const [page, overview, breakdown, alloc] = await Promise.all([
-      ipc.listTxns({ ...EMPTY_FILTER, limit: RECENT_LIMIT, offset: 0 }),
+      ipc.listTxns({ ...EMPTY_FILTER, sort: null, limit: RECENT_LIMIT, offset: 0 }),
       ipc.budgetOverview(period),
       ipc.categoryBreakdown(period, 'expense'),
       ipc.allocationOverview(),

@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { ListFilterIcon, SearchIcon, XIcon } from '@lucide/vue'
+import { Columns3Icon, ListFilterIcon, ListIcon, SearchIcon, Table2Icon, XIcon } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import DateInput from '@/components/DateInput.vue'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { listTags, parseAmount } from '@/ipc'
 import { todayIso } from '@/lib/date'
 import { errorMessage, type Translate } from '@/lib/errors'
 import { formatIdr } from '@/lib/money'
 import { activeFilterCount, type Period, periodOf, periodRange } from '@/lib/txnFilter'
 import { withErrorToast } from '@/lib/notify'
+import { OPTIONAL_COLUMNS, type TxnView } from '@/lib/txnView'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useLabelsStore } from '@/stores/labels'
@@ -115,6 +118,11 @@ function focusPanel(e: Event) {
   ;(e.target as HTMLElement | null)?.focus()
 }
 
+function setView(v: unknown) {
+  // ToggleGroup tunggal mengirim kosong saat item aktif diklik lagi: abaikan.
+  if (v === 'history' || v === 'table') void withErrorToast(() => store.setView(v as TxnView))
+}
+
 function reset() {
   clearTimeout(timer)
   search.value = ''
@@ -189,6 +197,33 @@ function reset() {
         </PopoverContent>
       </Popover>
       <p class="num ml-auto text-meta text-muted-foreground" data-testid="filter-count">{{ t('txn.filters.count', { n: store.total }) }}</p>
+      <DropdownMenu v-if="store.view === 'table'">
+        <DropdownMenuTrigger as-child>
+          <Button variant="outline" data-testid="table-columns"><Columns3Icon /> {{ t('txn.columns.menu') }}</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-44">
+          <DropdownMenuLabel class="text-meta text-muted-foreground">{{ t('txn.columns.menu') }}</DropdownMenuLabel>
+          <DropdownMenuCheckboxItem
+            v-for="col in OPTIONAL_COLUMNS" :key="col" :data-testid="`column-${col}`"
+            :model-value="!store.hiddenColumns.includes(col)"
+            @update:model-value="(v: boolean) => store.toggleColumn(col, v)"
+            @select.prevent
+          >
+            {{ t(`txn.columns.${col}`) }}
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ToggleGroup
+        type="single" variant="outline" :model-value="store.view" :aria-label="t('txn.view.label')"
+        data-testid="txn-view" @update:model-value="setView"
+      >
+        <ToggleGroupItem value="history" data-testid="txn-view-history" :aria-label="t('txn.view.history')" :title="t('txn.view.history')">
+          <ListIcon />
+        </ToggleGroupItem>
+        <ToggleGroupItem value="table" data-testid="txn-view-table" :aria-label="t('txn.view.table')" :title="t('txn.view.table')">
+          <Table2Icon />
+        </ToggleGroupItem>
+      </ToggleGroup>
     </div>
     <div v-if="hasFilter" class="flex flex-wrap items-center gap-2">
       <span
