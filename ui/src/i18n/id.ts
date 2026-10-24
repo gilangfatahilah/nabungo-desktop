@@ -615,6 +615,7 @@ export default {
     key_file_invalid: 'File kunci rusak atau hilang; pakai recovery key',
     encryption_state: 'Status enkripsi sudah berubah; muat ulang halaman',
     invalid_auto_lock: 'Durasi kunci otomatis tidak valid',
+    invalid_font_scale: 'Ukuran teks tidak valid',
     database_unreadable: 'Password benar, tapi file database tidak bisa dibaca (rusak atau bukan pasangannya). Pulihkan dari backup',
     recovery_required: 'Database tidak bisa dibuka. Pulihkan dari backup terlebih dahulu.',
     recovery_unavailable: 'Pemulihan hanya tersedia saat database tidak terbuka.',

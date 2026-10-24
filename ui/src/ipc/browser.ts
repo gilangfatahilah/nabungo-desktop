@@ -6,7 +6,7 @@ import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
 type Result<T> = { status: 'ok'; data: T } | { status: 'error'; error: IpcError }
 
-const settings: UiSettingsDto = { theme: 'system', locale: 'id', autoLockMinutes: 5 }
+const settings: UiSettingsDto = { theme: 'system', locale: 'id', autoLockMinutes: 5, fontScale: 100 }
 
 
 const ok = <T>(data: T): Result<T> => ({ status: 'ok', data })

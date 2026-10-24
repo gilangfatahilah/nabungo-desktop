@@ -86,6 +86,8 @@ pub enum AppError {
     EncryptionState,
     #[error("invalid auto-lock duration")]
     InvalidAutoLock,
+    #[error("invalid font scale")]
+    InvalidFontScale,
     /// Key sudah terverifikasi (key file terbuka) tapi file DB tidak cocok atau rusak.
     #[error("database file cannot be read with this key")]
     DatabaseUnreadable,

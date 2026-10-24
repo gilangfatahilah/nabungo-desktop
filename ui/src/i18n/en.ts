@@ -615,6 +615,7 @@ export default {
     key_file_invalid: 'Key file is damaged or missing; use the recovery key',
     encryption_state: 'Encryption state already changed; reload the page',
     invalid_auto_lock: 'Invalid auto-lock duration',
+    invalid_font_scale: 'Invalid text size',
     database_unreadable: 'The password is correct, but the database file cannot be read (damaged or mismatched). Restore it from a backup',
     recovery_required: 'The database cannot be opened. Restore it from a backup first.',
     recovery_unavailable: 'Recovery is only available while the database is not open.',
