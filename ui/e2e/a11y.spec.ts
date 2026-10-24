@@ -167,31 +167,58 @@ test('keyboard: transaksi baru hanya dengan keyboard', async ({ page }) => {
   await expect(page.locator('[data-testid="sidebar-net-worth"]')).toContainText('4.985.000')
 })
 
-async function noHorizontalOverflow(page: Page) {
-  const { scroll, client } = await page.evaluate(() => ({
-    scroll: document.documentElement.scrollWidth,
-    client: document.documentElement.clientWidth,
-  }))
-  expect(scroll).toBeLessThanOrEqual(client)
+// Konten berada di dalam inset `overflow-hidden` dengan scroller sendiri, jadi dokumen tidak pernah
+// meluap; yang diperiksa adalah setiap scroller di dalam inset, judul SiteHeader yang terpotong, dan
+// elemen fixed (toast) yang keluar dari jendela. Tabel data (`TableScroll`, role=region) boleh
+// di-scroll sendiri: dikecualikan dari reflow oleh WCAG 1.4.10.
+async function noHorizontalOverflow(page: Page, where: string) {
+  const problems = await page.evaluate(() => {
+    const out: string[] = []
+    const inset = document.querySelector('[data-slot="sidebar-inset"]')
+    for (const el of inset ? [inset, ...inset.querySelectorAll('*')] : []) {
+      const cs = getComputedStyle(el)
+      if (!/(auto|scroll)/.test(cs.overflowX) || el.getAttribute('role') === 'region') continue
+      if (el.scrollWidth > el.clientWidth + 1) out.push(`scroll ${el.className.toString().slice(0, 40)} ${el.scrollWidth}>${el.clientWidth}`)
+    }
+    const h1 = document.querySelector('header h1') as HTMLElement | null
+    if (h1 && h1.scrollWidth > h1.clientWidth + 1) out.push(`h1 terpotong "${h1.textContent}"`)
+    for (const t of document.querySelectorAll('[data-sonner-toaster]')) {
+      const r = t.getBoundingClientRect()
+      if (r.width && (r.left < 0 || r.right > innerWidth)) out.push(`toaster ${Math.round(r.left)}..${Math.round(r.right)}`)
+    }
+    return out
+  })
+  expect.soft(problems, where).toEqual([])
 }
 
 test('font scale 150 has no horizontal overflow', async ({ page }) => {
+  test.setTimeout(90_000)
   await page.setViewportSize({ width: 960, height: 600 })
-  await onboard(page)
+  await seed(page)
   for (let i = 0; i < 3; i++) await page.locator('body').press('Control+Equal')
   await expect.poll(() => page.evaluate(() => document.documentElement.style.fontSize)).toBe('150%')
 
-  for (const hash of ['#/', '#/transactions', '#/budget', '#/allocation', '#/reports', '#/accounts', '#/settings']) {
+  for (const hash of ['#/', '#/transactions', '#/budget', '#/allocation', '#/reports', '#/accounts', '#/categories', '#/labels', '#/scheduled', '#/settings']) {
     await go(page, hash)
-    await page.waitForLoadState('networkidle')
-    await noHorizontalOverflow(page)
+    await page.waitForTimeout(250)
+    await noHorizontalOverflow(page, hash)
   }
+  // Sheet terbuka + toast: simpan (toast "tersimpan" muncul) lalu langsung buka sheet lagi.
+  // Toast digeser ke kiri sheet tapi tidak boleh keluar jendela.
   await go(page, '#/transactions')
   await page.locator('body').press('n')
   await expect(page.locator('#txn-amount')).toBeFocused()
-  await noHorizontalOverflow(page)
+  await page.keyboard.type('15000')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Control+Enter')
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await page.locator('body').press('n')
+  await expect(page.locator('#txn-amount')).toBeFocused()
+  await expect(page.locator('[data-sonner-toast]').first()).toBeVisible()
+  await noHorizontalOverflow(page, 'sheet + toast')
 
-  // Ukuran tersimpan dan dipakai lagi setelah muat ulang (cache sebelum DB terbuka).
   await page.keyboard.press('Escape')
   await page.locator('body').press('Control+0')
   await expect.poll(() => page.evaluate(() => document.documentElement.style.fontSize)).toBe('100%')

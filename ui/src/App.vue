@@ -98,7 +98,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <NewTxnSheet />
     <RuleSheet />
     <IntegrityAlert />
-    <!-- Saat sheet transaksi (27.5rem = 440px pada ukuran teks 100%) terbuka, toast bergeser ke kiri agar tidak menutup tombol Simpan. -->
-    <Toaster :visible-toasts="1" :offset="ui.txnEditor ? { right: '29rem', bottom: '1.5rem' } : undefined" />
+    <!-- Saat sheet transaksi (27.5rem = 440px pada ukuran teks 100%) terbuka, toast bergeser ke kiri agar tidak menutup tombol Simpan.
+         Lebar toast tetap 356px (vue-sonner); bila jendela terlalu sempit, toast tetap di dalam jendela walau menutupi sheet. -->
+    <Toaster :visible-toasts="1" :offset="ui.txnEditor ? { right: 'min(29rem, calc(100vw - 356px - 1rem))', bottom: '1.5rem' } : undefined" />
   </SidebarProvider>
 </template>

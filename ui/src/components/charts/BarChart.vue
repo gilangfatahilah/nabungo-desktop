@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { useElementSize } from '@vueuse/core'
+import { computed, ref, useTemplateRef } from 'vue'
+import { useRootFontScale } from '@/composables/useRootFontScale'
 import ChartTooltip from './ChartTooltip.vue'
 import { yTicks } from './axis'
 
@@ -17,7 +19,11 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ select: [index: number] }>()
 
-const W = 600
+// viewBox mengikuti lebar elemen dibagi skala ukuran teks (sama dengan LineChart); 600 bila belum terukur (jsdom).
+const svg = useTemplateRef<SVGSVGElement>('svg')
+const { width } = useElementSize(svg)
+const scale = useRootFontScale()
+const W = computed(() => (width.value > 0 ? Math.round(width.value / scale.value) : 600))
 const H = 200
 const PAD = { top: 8, right: 8, bottom: 24, left: 48 }
 const TICKS = 4
@@ -25,7 +31,7 @@ const LABEL_WIDTH = 56
 // Porsi lebar kelompok yang diisi batang; sisanya jarak antarkelompok.
 const FILL = 0.6
 
-const plotW = W - PAD.left - PAD.right
+const plotW = computed(() => W.value - PAD.left - PAD.right)
 const range = computed(() => {
   const all = props.series.flatMap((s) => s.values)
   const min = Math.min(0, ...all)
@@ -36,7 +42,7 @@ const y = (v: number) => PAD.top + ((range.value.max - v) * (H - PAD.top - PAD.b
 const ticks = computed(() =>
   yTicks(range.value.min, range.value.max, TICKS, props.series.every((s) => s.values.every((v) => v === 0))))
 
-const groupW = computed(() => plotW / Math.max(props.labels.length, 1))
+const groupW = computed(() => plotW.value / Math.max(props.labels.length, 1))
 const barW = computed(() => (groupW.value * FILL) / Math.max(props.series.length, 1))
 const groupX = (i: number) => PAD.left + i * groupW.value
 const groups = computed(() =>
@@ -57,7 +63,7 @@ const groups = computed(() =>
   })),
 )
 // Label terakhir selalu tampil; sisanya per `step` dihitung mundur darinya.
-const step = computed(() => Math.max(1, Math.ceil((props.labels.length * LABEL_WIDTH) / plotW)))
+const step = computed(() => Math.max(1, Math.ceil((props.labels.length * LABEL_WIDTH) / plotW.value)))
 const showLabel = (i: number) => (props.labels.length - 1 - i) % step.value === 0
 
 const els = ref<SVGGElement[]>([])
@@ -67,7 +73,7 @@ const tooltip = computed(() => {
   if (i === null || i >= props.labels.length) return null
   const fmt = props.valueFormat ?? props.format
   return {
-    x: (groupX(i) + groupW.value / 2) / W,
+    x: (groupX(i) + groupW.value / 2) / W.value,
     title: props.labels[i],
     rows: props.series.map((s) => ({ key: s.key, label: s.label, color: s.color, value: fmt(s.values[i] ?? 0) })),
   }
@@ -88,7 +94,7 @@ function onKey(e: KeyboardEvent, i: number) {
 <template>
   <div class="relative" @mouseleave="active = null">
     <!-- `group`, bukan `img`: berisi batang yang bisa difokus (img tidak boleh punya anak interaktif). -->
-    <svg :viewBox="`0 0 ${W} ${H}`" role="group" :aria-label="label" class="h-auto w-full text-muted-foreground">
+    <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" role="group" :aria-label="label" class="h-auto w-full text-muted-foreground">
       <rect
         v-if="selected !== undefined && selected >= 0 && selected < labels.length" data-part="selected" :data-index="selected"
         :x="groupX(selected)" :y="PAD.top" :width="groupW" :height="H - PAD.top - PAD.bottom" rx="4" fill="var(--muted)"

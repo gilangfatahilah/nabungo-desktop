@@ -6,6 +6,7 @@ import { toast } from 'vue-sonner'
 import BudgetBar from '@/components/BudgetBar.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import TableScroll from '@/components/TableScroll.vue'
 import BudgetAmountCell from '@/components/budget/BudgetAmountCell.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -99,7 +100,8 @@ function copy() {
   </p>
 
   <EmptyState v-if="o && !o.rows.length" :title="t('budget.empty')" :description="t('budget.emptyHint')" />
-  <div v-else-if="o" class="-mx-2 flex flex-col" role="table">
+  <TableScroll v-else-if="o" :label="t('nav.budget')">
+    <div class="flex flex-col" role="table">
     <div :class="cn(grid, 'h-8 text-meta text-muted-foreground')" role="row">
       <span role="columnheader">{{ t('budget.category') }}</span>
       <span role="columnheader" class="text-right">{{ t('budget.amount') }}</span>
@@ -168,5 +170,6 @@ function copy() {
       <span role="cell" />
       <span role="cell" />
     </div>
-  </div>
+    </div>
+  </TableScroll>
 </template>
