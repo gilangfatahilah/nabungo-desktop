@@ -56,7 +56,7 @@ function done() {
       </DialogHeader>
 
       <div
-        class="grid grid-cols-4 gap-x-3 gap-y-2 rounded-xl border bg-muted/40 p-4 font-mono text-[15px] tracking-wider"
+        class="grid grid-cols-4 gap-x-3 gap-y-2 rounded-xl border bg-muted/40 p-4 font-mono text-[0.9375rem] tracking-wider"
         :aria-label="t('security.recoveryKey')" role="group"
       >
         <span v-for="(g, i) in groups" :key="i" data-testid="recovery-group">{{ g }}</span>

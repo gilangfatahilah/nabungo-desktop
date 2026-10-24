@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 // Ukuran teks UI (persen). Semua ukuran memakai rem, jadi cukup mengubah font-size <html>.
 export const FONT_SCALES = [90, 100, 110, 125, 150] as const
 export type FontScale = (typeof FONT_SCALES)[number]
@@ -15,8 +17,12 @@ export function stepFontScale(cur: FontScale, step: 1 | -1 | 0): FontScale {
   return FONT_SCALES[Math.min(Math.max(i, 0), FONT_SCALES.length - 1)]
 }
 
+/** Naik setiap kali ukuran teks diterapkan; komponen yang menghitung px bergantung padanya. */
+export const fontScaleRevision = ref(0)
+
 export function applyFontScale(s: FontScale): void {
   document.documentElement.style.fontSize = `${s}%`
+  fontScaleRevision.value++
 }
 
 // Cache di localStorage agar layar kunci/onboarding memakai ukuran yang sama sebelum DB terbuka.

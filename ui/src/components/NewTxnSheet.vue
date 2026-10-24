@@ -78,7 +78,7 @@ function restoreFocus(e: Event) {
 
 <template>
   <Sheet v-model:open="open">
-    <SheetContent side="right" class="w-full gap-0 sm:max-w-[440px]" @open-auto-focus.prevent @close-auto-focus="restoreFocus">
+    <SheetContent side="right" class="w-full gap-0 sm:max-w-[27.5rem]" @open-auto-focus.prevent @close-auto-focus="restoreFocus">
       <SheetHeader>
         <SheetTitle>{{ title }}</SheetTitle>
         <SheetDescription class="sr-only">{{ title }}</SheetDescription>

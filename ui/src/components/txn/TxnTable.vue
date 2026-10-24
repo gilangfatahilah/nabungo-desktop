@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import MoneyText from '@/components/MoneyText.vue'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { TxnRowDto, TxnSortFieldDto } from '@/ipc'
+import { useRootFontScale } from '@/composables/useRootFontScale'
 import { useTxnRowActions } from '@/composables/useTxnRowActions'
 import { useTxnRowDisplay } from '@/composables/useTxnRowDisplay'
 import { formatDateInput } from '@/lib/date'
@@ -23,6 +24,7 @@ import TxnRowMenu from './TxnRowMenu.vue'
 // `virtual=false` merender semua baris: khusus test, jsdom tidak mengukur layout.
 const props = withDefaults(defineProps<{ virtual?: boolean }>(), { virtual: true })
 
+// Tinggi baris & header dalam px pada ukuran teks 100%; dikali skala karena kelasnya rem.
 const ROW = 40
 const HEADER = 40
 
@@ -73,12 +75,13 @@ function filterBy(patch: Partial<TxnFilter>) {
 
 // --- Virtualisasi: baris pengisi atas/bawah menjaga struktur <table> ---
 const scroller = useTemplateRef<HTMLElement>('scroller')
+const scale = useRootFontScale()
 const virtualizer = useVirtualizer(computed(() => ({
   count: store.rows.length,
   getScrollElement: () => scroller.value,
-  estimateSize: () => ROW,
+  estimateSize: () => ROW * scale.value,
   getItemKey: (i: number) => store.rows[i]?.id ?? i,
-  paddingStart: HEADER,
+  paddingStart: HEADER * scale.value,
   overscan: 12,
 })))
 
@@ -86,11 +89,13 @@ const visible = computed(() => props.virtual
   ? virtualizer.value.getVirtualItems().map((v) => ({ row: store.rows[v.index]!, index: v.index }))
   : store.rows.map((row, index) => ({ row, index })))
 
+watch(scale, () => virtualizer.value.measure())
+
 const padding = computed(() => {
   const items = virtualizer.value.getVirtualItems()
   if (!props.virtual || items.length === 0) return { top: 0, bottom: 0 }
   return {
-    top: items[0]!.start - HEADER,
+    top: items[0]!.start - HEADER * scale.value,
     bottom: virtualizer.value.getTotalSize() - items.at(-1)!.end,
   }
 })

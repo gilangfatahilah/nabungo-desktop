@@ -101,8 +101,8 @@ const invalid = (field: NonNullable<typeof errorField.value>) => (errorField.val
 </script>
 
 <template>
-  <!-- Layar `bare` satu kolom 440px di tengah, seperti onboarding (docs/design/design.md §8.9). -->
-  <main class="mx-auto flex min-h-screen w-full max-w-[440px] flex-col justify-center gap-8 px-4 py-10">
+  <!-- Layar `bare` satu kolom 27.5rem (440px pada 100%) di tengah, seperti onboarding (docs/design/design.md §8.9). -->
+  <main class="mx-auto flex min-h-screen w-full max-w-[27.5rem] flex-col justify-center gap-8 px-4 py-10">
     <header class="flex flex-col gap-6">
       <AppLogo />
       <div>
