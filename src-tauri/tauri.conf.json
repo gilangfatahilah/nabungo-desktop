@@ -26,13 +26,44 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "rpm", "nsis", "msi"],
+    "targets": [
+      "appimage",
+      "deb",
+      "rpm",
+      "nsis",
+      "msi"
+    ],
+    "publisher": "Nabungo",
+    "category": "Finance",
+    "shortDescription": "Keuangan pribadi offline",
+    "longDescription": "Catat transaksi, saldo, budget, dan alokasi modal. Semua data tersimpan di satu file milik Anda, tanpa internet.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libssl3"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "openssl-libs"
+        ]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Indonesian",
+          "English"
+        ]
+      }
+    }
   }
 }

@@ -13,3 +13,9 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Installer < 15 MB (PRD §8). opt-level tetap default agar hasil benchmark Fase 8a berlaku.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
