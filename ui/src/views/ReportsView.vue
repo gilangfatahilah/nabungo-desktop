@@ -3,6 +3,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import TableScroll from '@/components/TableScroll.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import LineChart from '@/components/charts/LineChart.vue'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -85,7 +86,8 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
           :selected="selectedIndex" @select="(i) => store.cashflow[i] && select(store.cashflow[i]!.period)"
         />
       </div>
-      <div class="-mx-2 flex max-w-3xl flex-col" role="table">
+      <TableScroll :label="t('reports.cashflow')" class="max-w-3xl">
+      <div class="flex flex-col" role="table">
         <div :class="cn(row, 'h-8 text-meta text-muted-foreground')" role="row">
           <span role="columnheader">{{ t('reports.period') }}</span>
           <span role="columnheader" class="text-right">{{ t('reports.inflow') }}</span>
@@ -104,6 +106,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
           <span role="cell" data-part="net" :class="cn('num text-right', p.net < 0 && 'text-destructive')">{{ num(p.net) }}</span>
         </div>
       </div>
+      </TableScroll>
     </section>
 
     <section class="flex flex-col gap-4">
@@ -121,7 +124,8 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
         v-if="!store.breakdown.length" data-testid="breakdown-empty"
         :title="store.kind === 'income' ? t('reports.emptyIncome') : t('reports.emptyExpense')"
       />
-      <ul v-else class="-mx-2 flex max-w-3xl flex-col" role="table">
+      <TableScroll v-else :label="t('reports.breakdown', { period: store.period ? label(store.period) : '' })" class="max-w-3xl">
+      <ul class="flex flex-col" role="table">
         <li
           v-for="b in store.breakdown" :key="b.categoryId" data-testid="breakdown-row" role="row"
           class="grid h-12 grid-cols-[minmax(0,1fr)_8rem_5rem_8rem] items-center gap-4 rounded-lg px-2 hover:bg-muted/50"
@@ -139,6 +143,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
           </span>
         </li>
       </ul>
+      </TableScroll>
     </section>
 
     <section class="flex flex-col gap-4">
@@ -153,7 +158,8 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
       <div class="max-w-3xl" data-testid="networth-chart">
         <LineChart :labels="netWorthLabels" :series="netWorthSeries" :label="t('reports.netWorthChart')" :format="axis" :value-format="money" />
       </div>
-      <div class="-mx-2 flex max-w-3xl flex-col" role="table">
+      <TableScroll :label="t('reports.netWorth')" class="max-w-3xl">
+      <div class="flex flex-col" role="table">
         <div :class="cn(row, 'h-8 text-meta text-muted-foreground')" role="row">
           <span role="columnheader">{{ t('reports.period') }}</span>
           <span role="columnheader" class="text-right">{{ t('reports.assets') }}</span>
@@ -167,6 +173,7 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.load()))
           <span role="cell" :class="cn('num text-right', p.net < 0 && 'text-destructive')">{{ num(p.net) }}</span>
         </div>
       </div>
+      </TableScroll>
     </section>
   </div>
 </template>

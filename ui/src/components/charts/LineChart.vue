@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useElementSize } from '@vueuse/core'
 import { computed, ref, useTemplateRef } from 'vue'
+import { useRootFontScale } from '@/composables/useRootFontScale'
 import ChartTooltip from './ChartTooltip.vue'
 import { yTicks } from './axis'
 import { monotonePath } from './curve'
@@ -21,9 +22,11 @@ const props = defineProps<{
 }>()
 
 // viewBox mengikuti lebar elemen agar teks sumbu tetap 11px di kartu lebar; 600 bila belum terukur (jsdom).
+// Dibagi skala ukuran teks: teks, padding, dan tinggi chart ikut membesar seperti elemen rem.
 const svg = useTemplateRef<SVGSVGElement>('svg')
 const { width } = useElementSize(svg)
-const W = computed(() => (width.value > 0 ? Math.round(width.value) : 600))
+const scale = useRootFontScale()
+const W = computed(() => (width.value > 0 ? Math.round(width.value / scale.value) : 600))
 const H = 200
 const PAD = { top: 8, right: 8, bottom: 24, left: 48 }
 const TICKS = 4
@@ -97,7 +100,7 @@ const tooltip = computed(() => {
 
 <template>
   <div
-    class="relative rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50" tabindex="0" role="group" :aria-label="label"
+    class="relative rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring" tabindex="0" role="group" :aria-label="label"
     @mousemove="onMove" @mouseleave="active = null" @focus="active ??= last" @blur="active = null" @keydown="onKey"
   >
     <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="label" class="h-auto w-full text-muted-foreground">

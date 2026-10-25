@@ -19,13 +19,13 @@ const titleKey = computed(() => (typeof route.name === 'string' ? `nav.${route.n
     <div class="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
       <SidebarTrigger class="-ml-1" />
       <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
-      <h1 class="truncate text-heading font-medium">{{ titleKey ? $t(titleKey) : '' }}</h1>
-      <div class="ml-auto flex items-center gap-2">
+      <h1 class="shrink-0 text-heading font-medium">{{ titleKey ? $t(titleKey) : '' }}</h1>
+      <div class="ml-auto flex min-w-0 items-center gap-2">
         <!-- Tampil seperti kolom isian agar mudah ditemukan; membuka command palette. -->
         <Button
           variant="outline"
           data-testid="open-palette"
-          class="h-9 w-56 justify-start bg-muted/40 px-3 font-normal text-muted-foreground shadow-none lg:w-80"
+          class="h-9 w-56 min-w-0 shrink justify-start bg-muted/40 px-3 font-normal text-muted-foreground shadow-none lg:w-80"
           @click="ui.paletteOpen = true"
         >
           <Search />

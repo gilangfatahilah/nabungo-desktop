@@ -69,6 +69,12 @@ pub fn set_auto_lock_minutes(state: State<'_, AppState>, minutes: u8) -> Result<
 
 #[tauri::command]
 #[specta::specta]
+pub fn set_font_scale(state: State<'_, AppState>, scale: u16) -> Result<(), IpcError> {
+    Ok(ledger(&state)?.set_font_scale(scale)?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn set_locale(state: State<'_, AppState>, locale: LocaleDto) -> Result<(), IpcError> {
     Ok(ledger(&state)?.set_locale(locale.into())?)
 }

@@ -5,6 +5,7 @@ import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MoneyText from '@/components/MoneyText.vue'
 import { useTxnRowActions } from '@/composables/useTxnRowActions'
+import { useRootFontScale } from '@/composables/useRootFontScale'
 import { useTxnRowDisplay } from '@/composables/useTxnRowDisplay'
 import { formatDateHeader, groupByDate } from '@/lib/txnList'
 import { withErrorToast } from '@/lib/notify'
@@ -35,15 +36,18 @@ const showRunning = computed(() => store.query.accountId !== null)
 const { accountName, categoryPath, categoryLabel, tile, title, showCategory, tone } = useTxnRowDisplay()
 const { edit, onKey } = useTxnRowActions()
 
-// --- Virtualisasi ---
+// --- Virtualisasi --- (tinggi h-10/h-14 dalam rem, jadi ikut ukuran teks)
 const scroller = useTemplateRef<HTMLElement>('scroller')
+const scale = useRootFontScale()
 const virtualizer = useVirtualizer(computed(() => ({
   count: items.value.length,
   getScrollElement: () => scroller.value,
-  estimateSize: (i: number) => (items.value[i]?.type === 'date' ? 40 : 56),
+  estimateSize: (i: number) => (items.value[i]?.type === 'date' ? 40 : 56) * scale.value,
   getItemKey: (i: number) => items.value[i]?.key ?? i,
   overscan: 10,
 })))
+
+watch(scale, () => virtualizer.value.measure())
 
 const visible = computed(() => props.virtual
   ? virtualizer.value.getVirtualItems().map((v) => ({ item: items.value[v.index]!, index: v.index, start: v.start }))

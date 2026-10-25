@@ -44,6 +44,7 @@ pub struct UiSettingsDto {
     pub theme: ThemeDto,
     pub locale: LocaleDto,
     pub auto_lock_minutes: u8,
+    pub font_scale: u16,
 }
 
 impl From<Theme> for ThemeDto {
@@ -90,6 +91,7 @@ impl From<UiSettings> for UiSettingsDto {
             theme: s.theme.into(),
             locale: s.locale.into(),
             auto_lock_minutes: s.auto_lock_minutes,
+            font_scale: s.font_scale,
         }
     }
 }

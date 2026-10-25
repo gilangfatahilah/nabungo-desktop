@@ -105,6 +105,7 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::export_json,
             commands::export_csv,
             commands::set_auto_lock_minutes,
+            commands::set_font_scale,
             commands::security_status,
             commands::unlock,
             commands::unlock_with_recovery,

@@ -79,7 +79,7 @@ function onKey(e: KeyboardEvent) {
 
 <template>
   <div
-    class="relative size-full rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50" tabindex="0"
+    class="relative size-full rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring" tabindex="0"
     role="group" :aria-label="label"
     @mouseleave="set(null)" @focus="set(active ?? paths[0]?.key ?? null)" @blur="set(null)" @keydown="onKey"
   >

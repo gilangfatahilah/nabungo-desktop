@@ -107,4 +107,32 @@ describe('shortcuts', () => {
     press(document.body, 'n', { isComposing: true })
     expect(actions).toEqual([])
   })
+
+  it('Ctrl+= / Ctrl++ / Ctrl+- / Ctrl+0 mengubah ukuran teks', () => {
+    const { actions, press } = setup()
+    press(document.body, '=', { ctrlKey: true })
+    press(document.body, '+', { ctrlKey: true, shiftKey: true })
+    press(document.body, '-', { ctrlKey: true })
+    press(document.body, '0', { metaKey: true })
+    expect(actions).toEqual([
+      { kind: 'fontScale', step: 1 },
+      { kind: 'fontScale', step: 1 },
+      { kind: 'fontScale', step: -1 },
+      { kind: 'fontScale', step: 0 },
+    ])
+  })
+
+  it('shortcut ukuran teks tetap jalan di input dan tidak mengetik', () => {
+    const { actions, press } = setup()
+    const e = press(document.createElement('input'), '-', { ctrlKey: true })
+    expect(actions).toEqual([{ kind: 'fontScale', step: -1 }])
+    expect(e.defaultPrevented).toBe(true)
+  })
+
+  it('= tanpa modifier tidak mengubah ukuran teks', () => {
+    const { actions, press } = setup()
+    press(document.body, '=')
+    press(document.body, '-')
+    expect(actions).toEqual([])
+  })
 })

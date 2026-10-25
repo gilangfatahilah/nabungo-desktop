@@ -24,6 +24,8 @@ pub struct UiSettings {
     pub locale: Locale,
     /// Menit tanpa aktivitas sebelum app terkunci; hanya berlaku bila DB terenkripsi.
     pub auto_lock_minutes: u8,
+    /// Ukuran teks UI dalam persen (salah satu `FONT_SCALE_CHOICES`).
+    pub font_scale: u16,
 }
 
 impl Default for UiSettings {
@@ -32,6 +34,7 @@ impl Default for UiSettings {
             theme: Theme::default(),
             locale: Locale::default(),
             auto_lock_minutes: DEFAULT_AUTO_LOCK_MINUTES,
+            font_scale: DEFAULT_FONT_SCALE,
         }
     }
 }
@@ -40,10 +43,15 @@ impl Default for UiSettings {
 pub const AUTO_LOCK_CHOICES: [u8; 5] = [1, 5, 10, 15, 30];
 const DEFAULT_AUTO_LOCK_MINUTES: u8 = 5;
 
+/// Pilihan ukuran teks UI (persen dari ukuran dasar).
+pub const FONT_SCALE_CHOICES: [u16; 5] = [90, 100, 110, 125, 150];
+const DEFAULT_FONT_SCALE: u16 = 100;
+
 const KEY_THEME: &str = "ui.theme";
 pub(crate) const KEY_LOCALE: &str = "ui.locale";
 pub(crate) const KEY_PERIOD_START_DAY: &str = "budget.period_start_day";
 const KEY_AUTO_LOCK: &str = "auto_lock_minutes";
+const KEY_FONT_SCALE: &str = "ui.font_scale";
 
 impl Theme {
     fn as_str(self) -> &'static str {
@@ -94,11 +102,26 @@ impl Ledger {
             .and_then(|v| v.parse::<u8>().ok())
             .filter(|m| AUTO_LOCK_CHOICES.contains(m))
             .unwrap_or(DEFAULT_AUTO_LOCK_MINUTES);
+        let font_scale = setting::get_setting(&self.conn, KEY_FONT_SCALE)?
+            .and_then(|v| v.parse::<u16>().ok())
+            .filter(|s| FONT_SCALE_CHOICES.contains(s))
+            .unwrap_or(DEFAULT_FONT_SCALE);
         Ok(UiSettings {
             theme,
             locale,
             auto_lock_minutes,
+            font_scale,
         })
+    }
+
+    pub fn set_font_scale(&mut self, scale: u16) -> Result<(), AppError> {
+        if !FONT_SCALE_CHOICES.contains(&scale) {
+            return Err(AppError::InvalidFontScale);
+        }
+        let tx = self.conn.transaction()?;
+        setting::set_setting(&tx, KEY_FONT_SCALE, &scale.to_string())?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn set_auto_lock_minutes(&mut self, minutes: u8) -> Result<(), AppError> {
@@ -154,6 +177,7 @@ mod tests {
                 theme: Theme::System,
                 locale: Locale::Id,
                 auto_lock_minutes: 5,
+                font_scale: 100,
             }
         );
     }
@@ -169,6 +193,7 @@ mod tests {
                 theme: Theme::Dark,
                 locale: Locale::En,
                 auto_lock_minutes: 5,
+                font_scale: 100,
             }
         );
     }
@@ -209,6 +234,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(l.ui_settings().unwrap().auto_lock_minutes, 5);
+    }
+
+    #[test]
+    fn font_scale_default_100() {
+        let l = Ledger::open_in_memory().unwrap();
+        assert_eq!(l.ui_settings().unwrap().font_scale, 100);
+    }
+
+    #[test]
+    fn font_scale_roundtrip() {
+        let mut l = Ledger::open_in_memory().unwrap();
+        l.set_font_scale(125).unwrap();
+        assert_eq!(l.ui_settings().unwrap().font_scale, 125);
+    }
+
+    #[test]
+    fn font_scale_rejects_unknown() {
+        let mut l = Ledger::open_in_memory().unwrap();
+        l.set_font_scale(110).unwrap();
+        assert!(matches!(
+            l.set_font_scale(120),
+            Err(AppError::InvalidFontScale)
+        ));
+        assert_eq!(l.ui_settings().unwrap().font_scale, 110);
+    }
+
+    #[test]
+    fn font_scale_garbage_falls_back() {
+        let l = Ledger::open_in_memory().unwrap();
+        for bad in ["abc", "120"] {
+            l.conn
+                .execute(
+                    "INSERT OR REPLACE INTO setting VALUES ('ui.font_scale', ?1)",
+                    [bad],
+                )
+                .unwrap();
+            assert_eq!(l.ui_settings().unwrap().font_scale, 100);
+        }
     }
 
     #[test]

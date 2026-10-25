@@ -4,6 +4,7 @@ export type ShortcutAction =
   | { kind: 'navigate'; route: RouteName }
   | { kind: 'newTxn' }
   | { kind: 'palette' }
+  | { kind: 'fontScale'; step: 1 | -1 | 0 }
 
 interface Options {
   onAction: (a: ShortcutAction) => void
@@ -46,6 +47,9 @@ export function createShortcutHandler(opts: Options): (e: KeyboardEvent) => void
       gAt = null
       if (key === 'k') return fire(e, { kind: 'palette' })
       if (key === ',') return fire(e, { kind: 'navigate', route: 'settings' })
+      if (key === '=' || key === '+') return fire(e, { kind: 'fontScale', step: 1 })
+      if (key === '-') return fire(e, { kind: 'fontScale', step: -1 })
+      if (key === '0') return fire(e, { kind: 'fontScale', step: 0 })
       return
     }
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) {

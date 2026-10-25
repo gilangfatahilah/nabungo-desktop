@@ -78,3 +78,19 @@ describe('SettingsView backup & ekspor', () => {
     w.unmount()
   })
 })
+
+describe('SettingsView ukuran teks', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('menampilkan pilihan ukuran teks berlabel', async () => {
+    await mountView()
+    const label = [...document.body.querySelectorAll('label')].find((l) => l.textContent === id.settings.fontScale)
+    expect(label).toBeTruthy()
+    const trigger = document.body.querySelector(`[aria-labelledby="${label!.id}"]`) as HTMLElement
+    expect(trigger.textContent).toContain('100%')
+    expect(document.body.textContent).toContain(id.settings.fontScaleHint)
+  })
+})

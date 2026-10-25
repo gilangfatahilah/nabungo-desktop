@@ -24,6 +24,6 @@ const sizeClass = computed(() =>
 
 <template>
   <span class="num whitespace-nowrap" :class="[tone, sizeClass]">{{ parts.sign }}<span
-    v-if="currency" data-part="currency" class="font-normal opacity-65"
+    v-if="currency" data-part="currency" class="font-normal"
   >{{ parts.currency }}&nbsp;</span>{{ parts.number }}</span>
 </template>

@@ -85,6 +85,7 @@ pub enum ErrorCode {
     KeyFileInvalid,
     EncryptionState,
     InvalidAutoLock,
+    InvalidFontScale,
     DatabaseUnreadable,
     DatabaseTooNew,
     /// DB gagal dibuka saat startup; pulihkan dari backup dulu (P1).
@@ -249,6 +250,7 @@ impl From<AppError> for IpcError {
             AppError::KeyFileInvalid => Self::code(ErrorCode::KeyFileInvalid),
             AppError::EncryptionState => Self::code(ErrorCode::EncryptionState),
             AppError::InvalidAutoLock => Self::code(ErrorCode::InvalidAutoLock),
+            AppError::InvalidFontScale => Self::code(ErrorCode::InvalidFontScale),
             AppError::DatabaseUnreadable => Self::code(ErrorCode::DatabaseUnreadable),
         }
     }
@@ -279,6 +281,7 @@ mod tests {
             (AppError::KeyFileInvalid, ErrorCode::KeyFileInvalid),
             (AppError::EncryptionState, ErrorCode::EncryptionState),
             (AppError::InvalidAutoLock, ErrorCode::InvalidAutoLock),
+            (AppError::InvalidFontScale, ErrorCode::InvalidFontScale),
             (AppError::DatabaseUnreadable, ErrorCode::DatabaseUnreadable),
         ] {
             assert_eq!(IpcError::from(e).code, code);

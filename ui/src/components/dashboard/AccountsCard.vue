@@ -35,7 +35,7 @@ const rows = computed(() => groupAccounts(accounts.overview, { archived: false }
           v-for="a in rows" :key="a.id" type="button" role="radio" data-testid="dashboard-account"
           :aria-checked="a.id === selected"
           :class="cn(
-            'flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+            'flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:outline-none',
             a.id === selected ? 'border-primary bg-primary/5' : 'border-transparent',
           )"
           @click="selected = a.id"

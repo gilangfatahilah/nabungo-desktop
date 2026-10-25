@@ -5,7 +5,7 @@
 
 <template>
   <span class="flex items-center gap-2" data-testid="app-logo">
-    <svg viewBox="0 0 400 332" class="h-[18px] w-auto shrink-0 text-primary" fill="currentColor" aria-hidden="true">
+    <svg viewBox="0 0 400 332" class="h-[1.125rem] w-auto shrink-0 text-primary" fill="currentColor" aria-hidden="true">
       <path d="M90.8 265A155 155 0 1 1 309.2 265Z" />
       <rect y="285" width="400" height="47" rx="23.5" />
     </svg>

@@ -6,6 +6,7 @@ import { toast } from 'vue-sonner'
 import BudgetBar from '@/components/BudgetBar.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import TableScroll from '@/components/TableScroll.vue'
 import BudgetAmountCell from '@/components/budget/BudgetAmountCell.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -99,7 +100,8 @@ function copy() {
   </p>
 
   <EmptyState v-if="o && !o.rows.length" :title="t('budget.empty')" :description="t('budget.emptyHint')" />
-  <div v-else-if="o" class="-mx-2 flex flex-col" role="table">
+  <TableScroll v-else-if="o" :label="t('nav.budget')">
+    <div class="flex flex-col" role="table">
     <div :class="cn(grid, 'h-8 text-meta text-muted-foreground')" role="row">
       <span role="columnheader">{{ t('budget.category') }}</span>
       <span role="columnheader" class="text-right">{{ t('budget.amount') }}</span>
@@ -114,31 +116,33 @@ function copy() {
       v-for="r in o.rows" :key="r.categoryId" role="row" :data-testid="`budget-row-${r.categoryId}`"
       :class="cn(grid, 'group/row rounded-lg hover:bg-muted/50', r.parentId ? 'h-10' : 'h-12')"
     >
-      <span :class="cn('truncate', r.parentId ? 'pl-6' : 'font-medium')">{{ names.get(r.categoryId) ?? '' }}</span>
-      <BudgetAmountCell
-        :category-id="r.categoryId" :name="names.get(r.categoryId) ?? ''" :amount="r.budget" :locale="settings.locale"
-        @save="save(r.categoryId, $event)" @error="toast.error($event)"
-      />
+      <span role="cell" :class="cn('truncate', r.parentId ? 'pl-6' : 'font-medium')">{{ names.get(r.categoryId) ?? '' }}</span>
+      <span role="cell">
+        <BudgetAmountCell
+          :category-id="r.categoryId" :name="names.get(r.categoryId) ?? ''" :amount="r.budget" :locale="settings.locale"
+          @save="save(r.categoryId, $event)" @error="toast.error($event)"
+        />
+      </span>
       <span
         :data-testid="`budget-carry-${r.categoryId}`"
         :class="cn('num text-right', r.carry === 0 ? 'text-muted-foreground' : r.carry < 0 && 'text-destructive')"
       >{{ carry(r.carry) }}</span>
-      <span class="num text-right">{{ num(r.spent) }}</span>
+      <span role="cell" class="num text-right">{{ num(r.spent) }}</span>
       <span
         :data-testid="`budget-remaining-${r.categoryId}`"
         :class="cn('num text-right', r.remaining === null && 'text-muted-foreground', r.remaining !== null && r.remaining < 0 && 'text-destructive')"
       >{{ r.remaining === null ? '—' : num(r.remaining) }}</span>
-      <span v-if="showPerDay" :class="cn('num text-right', r.perDay === null && 'text-muted-foreground')">
+      <span role="cell" v-if="showPerDay" :class="cn('num text-right', r.perDay === null && 'text-muted-foreground')">
         {{ r.perDay === null ? '—' : num(r.perDay) }}
       </span>
-      <span class="flex items-center gap-3">
+      <span role="cell" class="flex items-center gap-3">
         <template v-if="r.available !== null && r.level !== null">
           <!-- Ruang kanan untuk bagian lebih yang menjulur keluar track (maks 25% lebar track). -->
-          <span class="flex-1 pr-[20%]"><BudgetBar :spent="r.spent" :budget="r.available" :level="r.level" /></span>
+          <span class="flex-1 pr-[20%]"><BudgetBar :spent="r.spent" :budget="r.available" :level="r.level" :label="names.get(r.categoryId) ?? ''" /></span>
           <span class="num w-10 text-right text-meta text-muted-foreground">{{ r.percent ?? '—' }}<template v-if="r.percent !== null">%</template></span>
         </template>
       </span>
-      <span>
+      <span role="cell">
         <DropdownMenu v-if="r.budget !== null">
           <DropdownMenuTrigger as-child>
             <Button
@@ -157,14 +161,15 @@ function copy() {
       </span>
     </div>
     <div :class="cn(grid, 'mt-1 h-12 border-t font-medium')" role="row" data-testid="budget-total">
-      <span>{{ t('budget.total') }}</span>
-      <span class="num text-right">{{ num(o.total.budget) }}</span>
-      <span :class="cn('num text-right', o.total.carry === 0 ? 'text-muted-foreground' : o.total.carry < 0 && 'text-destructive')">{{ carry(o.total.carry) }}</span>
-      <span class="num text-right">{{ num(o.total.spent) }}</span>
-      <span :class="cn('num text-right', o.total.remaining < 0 && 'text-destructive')">{{ num(o.total.remaining) }}</span>
-      <span v-if="showPerDay" class="num text-right">{{ o.total.perDay === null ? '—' : num(o.total.perDay) }}</span>
-      <span />
-      <span />
+      <span role="cell">{{ t('budget.total') }}</span>
+      <span role="cell" class="num text-right">{{ num(o.total.budget) }}</span>
+      <span role="cell" :class="cn('num text-right', o.total.carry === 0 ? 'text-muted-foreground' : o.total.carry < 0 && 'text-destructive')">{{ carry(o.total.carry) }}</span>
+      <span role="cell" class="num text-right">{{ num(o.total.spent) }}</span>
+      <span role="cell" :class="cn('num text-right', o.total.remaining < 0 && 'text-destructive')">{{ num(o.total.remaining) }}</span>
+      <span role="cell" v-if="showPerDay" class="num text-right">{{ o.total.perDay === null ? '—' : num(o.total.perDay) }}</span>
+      <span role="cell" />
+      <span role="cell" />
     </div>
-  </div>
+    </div>
+  </TableScroll>
 </template>

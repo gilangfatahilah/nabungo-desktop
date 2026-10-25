@@ -6,6 +6,7 @@ import { Separator } from '@/components/ui/separator'
 import { useI18n } from 'vue-i18n'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { LocaleDto, ThemeDto } from '@/ipc'
+import { FONT_SCALES, isFontScale } from '@/lib/fontScale'
 import { withErrorToast } from '@/lib/notify'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -18,6 +19,10 @@ const days = Array.from({ length: 28 }, (_, i) => i + 1)
 
 function onTheme(v: unknown) {
   if (typeof v === 'string' && (themes as string[]).includes(v)) void withErrorToast(() => settings.setTheme(v as ThemeDto))
+}
+function onFontScale(v: unknown) {
+  const s = Number(v)
+  if (isFontScale(s)) void withErrorToast(() => settings.setFontScale(s))
 }
 function onLocale(v: unknown) {
   if (typeof v === 'string' && (locales as string[]).includes(v)) void withErrorToast(() => settings.setLocale(v as LocaleDto))
@@ -42,6 +47,18 @@ function onDay(v: unknown) {
             <SelectItem v-for="v in themes" :key="v" :value="v">{{ t(`settings.themes.${v}`) }}</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div class="flex flex-col gap-2">
+        <label id="font-scale-label" class="text-sm font-medium">{{ t('settings.fontScale') }}</label>
+        <Select :model-value="String(settings.fontScale)" @update:model-value="onFontScale">
+          <SelectTrigger aria-labelledby="font-scale-label" aria-describedby="font-scale-hint" class="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem v-for="s in FONT_SCALES" :key="s" :value="String(s)">{{ s }}%</SelectItem>
+          </SelectContent>
+        </Select>
+        <p id="font-scale-hint" class="text-xs text-muted-foreground">{{ t('settings.fontScaleHint') }}</p>
       </div>
       <div class="flex flex-col gap-2">
         <label id="locale-label" class="text-sm font-medium">{{ t('settings.language') }}</label>
