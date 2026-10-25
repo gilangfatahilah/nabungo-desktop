@@ -12,6 +12,11 @@ Prasyarat Linux (Fedora): `sudo dnf install gcc webkit2gtk4.1-devel openssl-deve
 pnpm install                         # install dependensi JS (workspace root + ui/)
 pnpm dev                             # tauri dev (otomatis jalankan Vite di :5173)
 pnpm build                           # bundle installer (AppImage/deb/rpm, NSIS/MSI di Windows)
+APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build --bundles deb,rpm,appimage   # installer Linux saja (Windows: --bundles nsis,msi)
+node scripts/check-bundle-size.mjs target/release/bundle   # deb/rpm/msi/setup.exe harus < 15 MB (AppImage hanya dilaporkan)
+node scripts/check-version.mjs [v1.2.3]                    # versi tauri.conf/Cargo/package.json sama (+ cocok dengan tag)
+node --test 'scripts/*.test.mjs'                           # test skrip rilis (glob wajib: Node 24 menolak `node --test scripts/`)
+scripts/firewall-test.sh target/release/nabungo-desktop target/release/examples/seed_fixture   # 0 paket keluar; butuh sudo, tcpdump, xvfb-run, dbus-run-session (FW_SELFTEST=1 harus exit 1)
 
 cargo test --workspace               # semua test Rust
 cargo test -p nabungo-core money::   # satu modul / filter nama test
@@ -31,11 +36,11 @@ Menambah komponen shadcn-vue: jalankan dari `ui/` → `CI=true pnpm dlx shadcn-v
 
 Binding TS `ui/src/ipc/bindings.ts` di-generate oleh tauri-specta — otomatis saat `pnpm dev` (debug build) atau lewat `cargo test -p nabungo-desktop export_bindings`. Jangan diedit manual; hasil generate **wajib di-commit** (CI memeriksa tidak ada diff).
 
-Folder data (DB `nabungo.db`, `nabungo.key` bila terenkripsi, `logs/`, `backups/`, `session.lock` selama app berjalan): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
+Folder data (DB `nabungo.db`, `nabungo.key` bila terenkripsi, `logs/`, `backups/`, `session.lock` selama app berjalan, `cache/open/` salinan lampiran berekstensi untuk dibuka viewer OS — dikosongkan tiap startup): `~/.local/share/nabungo/` (Linux), `%APPDATA%\nabungo\` (Windows). Mode portable: buat file kosong `portable` di samping executable → data di `<exe_dir>/data/` (tidak untuk AppImage).
 
 Error IPC: command mengembalikan `IpcError { code, ... }`; UI menerjemahkan `code` ke kunci i18n `errors.<code>` (lewat `ui/src/lib/errors.ts`, code tak dikenal → `errors.internal`). Code baru wajib ditambahkan ke `errors` di `ui/src/i18n/id.ts` (typecheck gagal bila belum).
 
-CI (`.github/workflows/ci.yml`) menjalankan fmt check, clippy `-D warnings`, test di Linux (Windows ditunda sampai Fase 8), serta typecheck/test/build UI.
+CI (`.github/workflows/ci.yml`, hanya pada PR dan push ke `main`) menjalankan fmt check, clippy `-D warnings`, test Rust di Linux + Windows, test skrip rilis, serta typecheck/test/build UI. `release.yml` (tag `v*`, manual, atau PR yang menyentuh konfigurasi bundle/skrip) membangun installer Linux (ubuntu-22.04) + Windows, menolak installer ≥ 15 MB, menjalankan firewall test, dan pada tag membuat **draft** GitHub Release (+ `SHA256SUMS`, catatan dari `docs/release/notes.md`). Installer Windows belum ditandatangani. Tidak ada updater: update manual dari Releases. Cek manual sebelum rilis: `docs/release/v1-checklist.md`.
 
 ## Arsitektur
 
