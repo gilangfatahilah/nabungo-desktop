@@ -37,6 +37,9 @@ touch "$WORK/portable"
 
 sudo ip netns del "$NS" 2>/dev/null || true
 sudo ip netns add "$NS"
+# Tanpa IPv6: kernel mengirim router solicitation/DAD sendiri dari interface baru (paket bukan dari
+# app). Namespace tidak punya route IPv6, jadi koneksi v6 app tetap gagal tanpa paket.
+sudo ip netns exec "$NS" sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
 sudo ip -n "$NS" link set lo up
 sudo ip -n "$NS" link add fw0 type dummy
 sudo ip -n "$NS" addr add 10.255.0.2/24 dev fw0
