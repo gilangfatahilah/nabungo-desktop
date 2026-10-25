@@ -17,6 +17,10 @@ on:
       - Cargo.toml
       - Cargo.lock
 
+# Hanya job release yang butuh tulis (contents: write di job itu).
+permissions:
+  contents: read
+
 jobs:
   version:
     runs-on: ubuntu-22.04
@@ -28,6 +32,8 @@ jobs:
       - run: node scripts/check-version.mjs "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
 
   bundle:
+    # Tag dengan versi file yang salah gagal sebelum build yang lama.
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -122,5 +128,11 @@ jobs:
           mapfile -t files < <(find dist -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.msi' -o -name '*-setup.exe' \))
           (cd dist && find . -type f -printf '%P\n' | xargs -d '\n' sha256sum) > SHA256SUMS
           sed -i 's#  .*/#  #' SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" --draft --title "Nabungo ${GITHUB_REF_NAME#v}" \
-            --notes-file docs/release/notes.md --generate-notes "${files[@]}" SHA256SUMS
+          # Re-run: draft yang sudah ada diisi ulang artefaknya; release yang sudah publish tidak disentuh.
+          if is_draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft -q .isDraft 2>/dev/null); then
+            if [ "$is_draft" != true ]; then echo "release $GITHUB_REF_NAME sudah dipublish"; exit 1; fi
+            gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}" SHA256SUMS
+          else
+            gh release create "$GITHUB_REF_NAME" --draft --title "Nabungo ${GITHUB_REF_NAME#v}" \
+              --notes-file docs/release/notes.md --generate-notes "${files[@]}" SHA256SUMS
+          fi
