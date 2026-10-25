@@ -9,15 +9,16 @@ const CAPABILITY: &str = include_str!("../capabilities/default.json");
 
 /// Origin non-`'self'` yang diizinkan: IPC dan protokol asset Tauri (lokal).
 const ALLOWED_ORIGINS: [&str; 2] = ["http://ipc.localhost", "http://asset.localhost"];
-const WILDCARD_SOURCES: [&str; 5] = ["*", "http:", "https:", "ws:", "wss:"];
+/// Skema lokal yang boleh muncul sebagai source.
+const LOCAL_SCHEMES: [&str; 4] = ["data:", "blob:", "asset:", "ipc:"];
 
-/// Token CSP yang membuka origin eksternal.
+/// Source CSP di luar allowlist (keyword ber-kutip, skema lokal, origin lokal Tauri): wildcard,
+/// skema jaringan, dan host dengan atau tanpa skema.
 fn csp_violations(csp: &str) -> Vec<String> {
     csp.split(';')
         .flat_map(|directive| directive.split_whitespace().skip(1))
         .filter(|src| {
-            WILDCARD_SOURCES.contains(src)
-                || (src.contains("://") && !ALLOWED_ORIGINS.contains(src))
+            !src.starts_with('\'') && !LOCAL_SCHEMES.contains(src) && !ALLOWED_ORIGINS.contains(src)
         })
         .map(str::to_owned)
         .collect()
@@ -35,6 +36,13 @@ fn csp_violations_detects_external_origins() {
         ["https://fonts.googleapis.com", "wss:", "*"]
     );
     assert!(csp_violations("default-src 'self'; img-src 'self' data: blob:").is_empty());
+}
+
+#[test]
+fn csp_violations_detects_host_sources_without_scheme() {
+    let csp =
+        "font-src 'self' fonts.gstatic.com; img-src *.example.com; script-src 'unsafe-inline'";
+    assert_eq!(csp_violations(csp), ["fonts.gstatic.com", "*.example.com"]);
 }
 
 #[test]
