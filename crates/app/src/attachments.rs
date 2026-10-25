@@ -247,13 +247,39 @@ impl Ledger {
         Ok(())
     }
 
-    /// Path file lampiran untuk dibuka viewer OS.
-    pub fn attachment_path(&self, id: Uuid, dir: &Path) -> Result<PathBuf, AppError> {
+    /// Salinan lampiran berekstensi (`<open_dir>/<sha256>.<ext>`) untuk dibuka viewer OS:
+    /// blob di `dir` tanpa ekstensi, dan Windows memilih aplikasi dari ekstensi. Salinan, bukan
+    /// hardlink, agar viewer yang menyimpan perubahan tidak mengubah blob. Salinan yang sudah ada
+    /// dengan ukuran sama dipakai ulang (Windows mengunci file yang sedang dibuka viewer).
+    pub fn attachment_open_path(
+        &self,
+        id: Uuid,
+        dir: &Path,
+        open_dir: &Path,
+    ) -> Result<PathBuf, AppError> {
         let rec =
             attachment::get_attachment(&self.conn, id)?.ok_or(AppError::NotFound("attachment"))?;
-        blob_path(dir, &rec.sha256)
+        let blob = blob_path(dir, &rec.sha256)
             .filter(|p| p.is_file())
-            .ok_or(AppError::AttachmentMissing)
+            .ok_or(AppError::AttachmentMissing)?;
+        let dest = open_dir.join(format!("{}.{}", rec.sha256, ext_for(&rec.mime)));
+        let size = fs::metadata(&blob)?.len();
+        if fs::metadata(&dest).is_ok_and(|m| m.len() == size) {
+            return Ok(dest);
+        }
+        fs::create_dir_all(open_dir)?;
+        fs::copy(&blob, &dest)?;
+        Ok(dest)
+    }
+}
+
+/// Kosongkan folder salinan lampiran (best-effort, dipanggil saat start).
+pub fn clear_open_cache(open_dir: &Path) {
+    match fs::remove_dir_all(open_dir) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => {
+            tracing::warn!(error = %e, "failed to clear attachment open cache");
+        }
+        _ => {}
     }
 }
 
@@ -414,15 +440,87 @@ mod tests {
         let mut f = fx();
         let p = f.file("s.pdf", PDF);
         let row = f.add(f.txn, std::slice::from_ref(&p)).unwrap().remove(0);
-        let path = f.kit.ledger.attachment_path(row.id, f.dir.path()).unwrap();
-        assert_eq!(path, f.dir.path().join(sha256_file(&p).unwrap()));
-        fs::remove_file(&path).unwrap();
+        let open = tempfile::tempdir().unwrap();
+        fs::remove_file(f.dir.path().join(sha256_file(&p).unwrap())).unwrap();
         let rows = f.kit.ledger.list_attachments(f.txn, f.dir.path()).unwrap();
         assert!(rows[0].missing);
         assert!(matches!(
-            f.kit.ledger.attachment_path(row.id, f.dir.path()),
+            f.kit
+                .ledger
+                .attachment_open_path(row.id, f.dir.path(), open.path()),
             Err(AppError::AttachmentMissing)
         ));
+    }
+
+    #[test]
+    fn open_copy_has_extension_and_same_bytes() {
+        let mut f = fx();
+        let open = tempfile::tempdir().unwrap();
+        let p = f.file("s.pdf", PDF);
+        let row = f.add(f.txn, std::slice::from_ref(&p)).unwrap().remove(0);
+        let sha = sha256_file(&p).unwrap();
+        let got = f
+            .kit
+            .ledger
+            .attachment_open_path(row.id, f.dir.path(), open.path())
+            .unwrap();
+        assert_eq!(got, open.path().join(format!("{sha}.pdf")));
+        assert_eq!(fs::read(&got).unwrap(), PDF);
+        assert!(f.dir.path().join(&sha).is_file());
+    }
+
+    #[test]
+    fn open_copy_reused_when_present() {
+        // Windows mengunci file yang sedang dibuka viewer; salinan yang ada dipakai ulang.
+        let mut f = fx();
+        let open = tempfile::tempdir().unwrap();
+        let p = f.file("s.png", PNG);
+        let row = f.add(f.txn, &[p]).unwrap().remove(0);
+        let first = f
+            .kit
+            .ledger
+            .attachment_open_path(row.id, f.dir.path(), open.path())
+            .unwrap();
+        assert!(first.extension().is_some_and(|e| e == "png"));
+        let mut perms = fs::metadata(&first).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&first, perms).unwrap();
+        let second = f
+            .kit
+            .ledger
+            .attachment_open_path(row.id, f.dir.path(), open.path())
+            .unwrap();
+        assert_eq!(second, first);
+        assert_eq!(fs::read(&second).unwrap(), PNG);
+    }
+
+    #[test]
+    fn open_cache_created_when_missing() {
+        let mut f = fx();
+        let root = tempfile::tempdir().unwrap();
+        let open = root.path().join("cache").join("open");
+        let p = f.file("s.pdf", PDF);
+        let row = f.add(f.txn, &[p]).unwrap().remove(0);
+        let got = f
+            .kit
+            .ledger
+            .attachment_open_path(row.id, f.dir.path(), &open)
+            .unwrap();
+        assert!(got.starts_with(&open) && got.is_file());
+    }
+
+    #[test]
+    fn clear_open_cache_removes_files_and_ignores_missing_dir() {
+        let open = tempfile::tempdir().unwrap();
+        fs::write(open.path().join("a.pdf"), PDF).unwrap();
+        let ro = open.path().join("b.png");
+        fs::write(&ro, PNG).unwrap();
+        let mut perms = fs::metadata(&ro).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&ro, perms).unwrap();
+        clear_open_cache(open.path());
+        assert!(!open.path().exists());
+        clear_open_cache(&open.path().join("tidak-ada"));
     }
 
     #[test]
@@ -432,6 +530,7 @@ mod tests {
         let p = f.file("s.png", PNG);
         let row = f.add(f.txn, &[p]).unwrap().remove(0);
         let outside = tempfile::tempdir().unwrap();
+        let open = tempfile::tempdir().unwrap();
         let victim = outside.path().join("dokumen.txt");
         fs::write(&victim, b"penting").unwrap();
         for sha in [
@@ -446,10 +545,13 @@ mod tests {
             let rows = f.kit.ledger.list_attachments(f.txn, f.dir.path()).unwrap();
             assert!(rows[0].missing, "{sha}");
             assert!(matches!(
-                f.kit.ledger.attachment_path(row.id, f.dir.path()),
+                f.kit
+                    .ledger
+                    .attachment_open_path(row.id, f.dir.path(), open.path()),
                 Err(AppError::AttachmentMissing)
             ));
         }
+        assert_eq!(fs::read_dir(open.path()).unwrap().count(), 0);
         fs::copy(&victim, f.dir.path().join("../dokumen.txt")).unwrap();
         f.kit
             .ledger
