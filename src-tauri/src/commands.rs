@@ -790,7 +790,11 @@ pub fn open_attachment(
     id: String,
 ) -> Result<(), IpcError> {
     let id = parse_id(&id, "attachment")?;
-    let path = ledger(&state)?.attachment_path(id, &state.data_dir.attachments_path())?;
+    let path = ledger(&state)?.attachment_open_path(
+        id,
+        &state.data_dir.attachments_path(),
+        &state.data_dir.open_cache_path(),
+    )?;
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
         .map_err(|e| {

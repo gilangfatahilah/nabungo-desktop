@@ -24,6 +24,11 @@ impl DataDir {
         self.path.join("attachments")
     }
 
+    /// Salinan lampiran berekstensi untuk viewer OS; dikosongkan saat start.
+    pub fn open_cache_path(&self) -> PathBuf {
+        self.path.join("cache").join("open")
+    }
+
     pub fn session_marker_path(&self) -> PathBuf {
         self.path.join("session.lock")
     }
@@ -80,5 +85,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let d = resolve_data_dir(tmp.path(), Some(&tmp.path().join("share"))).unwrap();
         assert_eq!(d.attachments_path(), d.path.join("attachments"));
+    }
+
+    #[test]
+    fn open_cache_under_data() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = resolve_data_dir(tmp.path(), Some(&tmp.path().join("share"))).unwrap();
+        assert_eq!(d.open_cache_path(), d.path.join("cache").join("open"));
     }
 }

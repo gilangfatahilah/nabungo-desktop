@@ -133,6 +133,7 @@ fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
     let data_dir = paths::resolve_data_dir(exe_dir, base.as_ref().map(|b| b.data_dir()))?;
     let guard = logging::init_logging(&data_dir.path)?;
     tracing::info!(path = %data_dir.path.display(), portable = data_dir.portable, "Nabungo mulai");
+    nabungo_app::clear_open_cache(&data_dir.open_cache_path());
 
     let unclean_shutdown = lifecycle::SessionMarker::acquire(&data_dir.session_marker_path())
         .context("gagal menulis penanda sesi")?;
