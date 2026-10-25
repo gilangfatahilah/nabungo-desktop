@@ -52,6 +52,8 @@ echo "nameserver 10.255.0.1" | sudo tee "/etc/netns/$NS/resolv.conf" >/dev/null
 sudo ip netns exec "$NS" tcpdump -Z root -i any -n -U -w "$WORK/fw.pcap" 'ip or ip6' 2>"$WORK/tcpdump.err" &
 TCPDUMP_PID=$!
 sleep 1
+# Tangkapan yang mati diam-diam akan terbaca "0 paket".
+sudo kill -0 "$TCPDUMP_PID" 2>/dev/null || { cat "$WORK/tcpdump.err" >&2; fail_setup "tcpdump tidak berjalan"; }
 
 as_user() { sudo ip netns exec "$NS" sudo -u "$RUN_USER" env HOME="$HOME" "$@"; }
 
@@ -71,7 +73,7 @@ else
   done
   if ! grep -rqs 'dasbor pertama tampil' "$WORK/data/logs"; then
     echo "--- app output ---" >&2; cat "$WORK/app.out" >&2
-    echo "--- log ---" >&2; cat "$WORK"/data/logs/* >&2 2>/dev/null
+    echo "--- log ---" >&2; cat "$WORK"/data/logs/* >&2 2>/dev/null || true
     fail_setup "app tidak sampai dasbor dalam 60 s"
   fi
   # Beri waktu request malas dan backup otomatis startup.
@@ -83,7 +85,7 @@ sudo ip netns pids "$NS" | xargs -r sudo kill 2>/dev/null || true
 wait "$TCPDUMP_PID" 2>/dev/null || true
 TCPDUMP_PID=
 
-PACKETS=$(tcpdump -r "$WORK/fw.pcap" -n 2>/dev/null || true)
+PACKETS=$(tcpdump -r "$WORK/fw.pcap" -n 2>/dev/null) || fail_setup "hasil tangkapan tidak bisa dibaca"
 COUNT=$(printf '%s' "$PACKETS" | grep -c . || true)
 if [ "$COUNT" -gt 0 ]; then
   echo "firewall test: $COUNT paket keluar" >&2
