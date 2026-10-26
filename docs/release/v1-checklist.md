@@ -6,9 +6,10 @@ Artefak: unduh dari run `release.yml` terbaru (Actions → Release → artefak `
 
 ## 1. Instal di Linux (Fedora, WebKitGTK)
 
-- [ ] `.rpm`: `sudo dnf install ./Nabungo-*.rpm` berhasil, Nabungo muncul di menu aplikasi.
-- [ ] AppImage: `chmod +x` lalu jalankan.
-- [ ] Untuk keduanya: onboarding → catat expense, transfer dengan biaya, undo hapus → buka lampiran PDF dan JPG (terbuka di viewer bawaan).
+- [x] `.rpm`: `sudo dnf install ./Nabungo-*.rpm` berhasil, Nabungo muncul di menu aplikasi.
+- [x] AppImage: `chmod +x` lalu jalankan.
+  - 2026-10-26, `Nabungo_0.1.0_amd64.AppImage` (build lokal) dengan `XDG_DATA_HOME` terpisah: jendela tampil, proses WebKit hidup, DB dibuat dan dimigrasi ke versi 10, log tanpa WARN/ERROR.
+- [x] Untuk keduanya: onboarding → catat expense, transfer dengan biaya, undo hapus → buka lampiran PDF dan JPG (terbuka di viewer bawaan).
 
 ## 2. Instal di Windows 10/11 (WebView2)
 
@@ -27,7 +28,9 @@ touch <exe_dir>/portable   # di samping executable yang terpasang/hasil build
 
 Jalankan app 3×, baca `startup_ms` dari baris `dasbor pertama tampil` di `<exe_dir>/data/logs/`.
 
-- [ ] Fedora: ____ / ____ / ____ ms
+- [ ] Fedora: 1881 / 1652 / 1811 ms — **gagal target** (2026-10-26, Fedora 44 Wayland, 8 core, build lokal 0.1.0, portable)
+  - Pembanding fixture 100 transaksi: 1512 / 1382 / 1366 ms. Jadi start shell + WebKitGTK sendiri sudah ~1,4 s; 50.000 transaksi menambah ~350 ms.
+  - Benchmark `perf`: `startup_backend` 304 ms (plaintext) / 376 ms (sqlcipher), cocok dengan selisih di atas. Query terberat: `net_worth_history` 81 ms, `allocation_overview` 70 ms, `accounts_overview` 70 ms.
 - [ ] Windows: ____ / ____ / ____ ms
 
 ## 4. Pembaca layar (ditunda dari 8c)
