@@ -346,6 +346,7 @@ impl Ledger {
             conn,
             path: Some(path.to_path_buf()),
             key: key.cloned(),
+            readers: crate::readers::Readers::for_file(Some(path), key),
         })
     }
 
@@ -402,6 +403,16 @@ impl Ledger {
     /// Pulihkan dari `src` (K7): periksa → backup pra-restore → salin → migrasi.
     /// File tidak valid tidak mengubah apa pun.
     fn restore_db(
+        &mut self,
+        src: &Path,
+        src_recovery: Option<&DbKey>,
+        backup_dir: &Path,
+        now: OffsetDateTime,
+    ) -> Result<(), AppError> {
+        self.without_readers(|l| l.restore_db_inner(src, src_recovery, backup_dir, now))
+    }
+
+    fn restore_db_inner(
         &mut self,
         src: &Path,
         src_recovery: Option<&DbKey>,
@@ -900,6 +911,7 @@ mod tests {
                     conn: nabungo_storage::open(&src, None).unwrap(),
                     path: None,
                     key: None,
+                    readers: None,
                 };
                 seed(&mut l);
                 let expected = snapshot(&l);

@@ -33,7 +33,7 @@ const title = computed(() => t(`txn.title.${ui.txnEditor?.mode ?? 'create'}`))
 async function prepare() {
   const ed = ui.txnEditor
   if (!ed) return
-  await Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()])
+  await Promise.all([accounts.ensureLoaded(), categories.ensureLoaded()])
   const defaults = await ipc.txnFormDefaults()
   let state: TxnFormState
   if (ed.mode === 'create' || !ed.id) {

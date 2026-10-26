@@ -1,0 +1,6 @@
+[env]
+# SQLite bundled (libsqlite3-sys) dikompilasi dengan SQLITE_ENABLE_MEMORY_MANAGEMENT: semua
+# koneksi berbagi satu page cache ber-mutex global, sehingga koneksi baca paralel saling antre.
+# MEMSTATUS juga mengunci mutex global di setiap malloc. Tidak ada yang memakai
+# sqlite3_release_memory/soft heap limit. Dicek oleh test storage `sqlite_compile_options`.
+LIBSQLITE3_FLAGS = "-USQLITE_ENABLE_MEMORY_MANAGEMENT -DSQLITE_DEFAULT_MEMSTATUS=0"

@@ -121,7 +121,7 @@ export const useTransactionsStore = defineStore('transactions', () => {
     // Transaksi sudah tersimpan: gagal memuat nama kategori tidak boleh membuat save tampak gagal.
     try {
       const categories = useCategoriesStore()
-      if (!categories.loaded) await categories.load()
+      await categories.ensureLoaded()
       showBudgetAlerts(alerts, new Map(categories.list.map((c) => [c.id, c.name])))
     } catch (e) {
       console.warn('gagal menampilkan peringatan budget', e)

@@ -34,7 +34,7 @@ const reveal = 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opa
 const hasChildren = (c: CategoryDto) => store.list.some((x) => x.parentId === c.id && !x.archived)
 
 onMounted(() => {
-  if (!store.loaded) void withErrorToast(() => store.load())
+  void withErrorToast(() => store.ensureLoaded())
 })
 
 // --- form ---

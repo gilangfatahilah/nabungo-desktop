@@ -25,8 +25,8 @@ pub mod txn_list;
 
 pub use file::{
     backup_into, backup_into_unverified, convert_file, inspect_backup, integrity_check,
-    is_encrypted_file, migrate, migrate_to, open_file, open_file_read_only, restore_from,
-    schema_version,
+    is_encrypted_file, migrate, migrate_to, open_file, open_file_read_only, open_reader,
+    restore_from, schema_version,
 };
 pub use key::DbKey;
 pub use rusqlite;
@@ -210,6 +210,24 @@ mod tests {
             .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
             .unwrap();
         assert_eq!(fk, 1);
+    }
+
+    /// `.cargo/config.toml` (`LIBSQLITE3_FLAGS`): tanpa mutex page cache global, koneksi baca
+    /// paralel tidak saling antre.
+    #[test]
+    fn sqlite_compile_options() {
+        let conn = open_in_memory().unwrap();
+        let mut stmt = conn.prepare("PRAGMA compile_options").unwrap();
+        let opts: Vec<String> = stmt
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(
+            !opts.iter().any(|o| o == "ENABLE_MEMORY_MANAGEMENT"),
+            "{opts:?}"
+        );
+        assert!(opts.iter().any(|o| o == "DEFAULT_MEMSTATUS=0"), "{opts:?}");
     }
 
     #[test]

@@ -30,6 +30,24 @@ fn ledger<'a>(state: &'a State<'_, AppState>) -> Result<LedgerGuard<'a>, IpcErro
     lock_ledger(&state.ledger)
 }
 
+/// Query baca berat di thread blocking pada koneksi baca: berjalan paralel, di luar mutex
+/// ledger, dan tidak menahan main thread (command sync dijalankan di sana). Pool tidak tersedia
+/// (DB in-memory, baru ditutup karena lock/restore/konversi) → koneksi tulis.
+async fn read<T: Send + 'static>(
+    app: AppHandle,
+    f: impl Fn(&Ledger) -> Result<T, IpcError> + Send + 'static,
+) -> Result<T, IpcError> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let pool = ledger(&state)?.read_pool();
+        if let Some(r) = pool.and_then(|p| p.with_reader(&f)) {
+            return r;
+        }
+        f(&*ledger(&state)?)
+    })
+    .await
+}
+
 /// Mode pemulihan aktif → `recovery_required` (bukan `locked`, yang membuka layar unlock).
 fn ensure_not_recovering(state: &AppState) -> Result<(), IpcError> {
     let recovery = state.recovery.lock().unwrap_or_else(|e| e.into_inner());
@@ -125,8 +143,8 @@ pub fn set_period_start_day(state: State<'_, AppState>, day: u8) -> Result<(), I
 
 #[tauri::command]
 #[specta::specta]
-pub fn accounts_overview(state: State<'_, AppState>) -> Result<AccountsOverviewDto, IpcError> {
-    Ok(ledger(&state)?.accounts_overview()?.into())
+pub async fn accounts_overview(app: AppHandle) -> Result<AccountsOverviewDto, IpcError> {
+    read(app, |l| Ok(l.accounts_overview()?.into())).await
 }
 
 #[tauri::command]
@@ -328,9 +346,9 @@ pub fn get_txn(state: State<'_, AppState>, id: String) -> Result<TxnDetailDto, I
 
 #[tauri::command]
 #[specta::specta]
-pub fn list_txns(state: State<'_, AppState>, query: TxnQueryDto) -> Result<TxnPageDto, IpcError> {
+pub async fn list_txns(app: AppHandle, query: TxnQueryDto) -> Result<TxnPageDto, IpcError> {
     let query = query.try_into()?;
-    Ok(ledger(&state)?.list_txns(&query)?.into())
+    read(app, move |l| Ok(l.list_txns(&query)?.into())).await
 }
 
 #[tauri::command]
@@ -390,13 +408,13 @@ pub fn period_of(state: State<'_, AppState>, date: String) -> Result<String, Ipc
 
 #[tauri::command]
 #[specta::specta]
-pub fn budget_overview(
-    state: State<'_, AppState>,
+pub async fn budget_overview(
+    app: AppHandle,
     period: String,
 ) -> Result<BudgetOverviewDto, IpcError> {
     let period = parse_period(&period)?;
     let today = nabungo_app::local_today();
-    Ok(ledger(&state)?.budget_overview(period, today)?.into())
+    read(app, move |l| Ok(l.budget_overview(period, today)?.into())).await
 }
 
 /// `amount = null` menghapus budget kategori di periode itu.
@@ -513,8 +531,8 @@ pub fn list_contacts(state: State<'_, AppState>) -> Result<Vec<ContactDto>, IpcE
 
 #[tauri::command]
 #[specta::specta]
-pub fn list_allocation(state: State<'_, AppState>) -> Result<AllocationOverviewDto, IpcError> {
-    Ok(ledger(&state)?.allocation_overview()?.into())
+pub async fn list_allocation(app: AppHandle) -> Result<AllocationOverviewDto, IpcError> {
+    read(app, |l| Ok(l.allocation_overview()?.into())).await
 }
 
 #[tauri::command]
@@ -565,17 +583,19 @@ pub fn set_account_allocation(
 /// `count` periode berakhir di `end_period`, terlama dulu.
 #[tauri::command]
 #[specta::specta]
-pub fn allocation_history(
-    state: State<'_, AppState>,
+pub async fn allocation_history(
+    app: AppHandle,
     end_period: String,
     count: u8,
 ) -> Result<Vec<AllocationPointDto>, IpcError> {
     let end = parse_period(&end_period)?;
-    Ok(ledger(&state)?
-        .allocation_history(end, count)?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    read(app, move |l| {
+        Ok(l.allocation_history(end, count)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
 }
 
 // --- Laporan ---
@@ -583,49 +603,56 @@ pub fn allocation_history(
 /// Income/expense per periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
 #[tauri::command]
 #[specta::specta]
-pub fn cashflow_report(
-    state: State<'_, AppState>,
+pub async fn cashflow_report(
+    app: AppHandle,
     end_period: String,
     count: u8,
 ) -> Result<Vec<CashflowPointDto>, IpcError> {
     let end = parse_period(&end_period)?;
-    Ok(ledger(&state)?
-        .cashflow_report(end, count)?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    read(app, move |l| {
+        Ok(l.cashflow_report(end, count)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
 }
 
 /// Total per kategori root dalam satu periode, nominal terbesar dulu.
 #[tauri::command]
 #[specta::specta]
-pub fn category_breakdown(
-    state: State<'_, AppState>,
+pub async fn category_breakdown(
+    app: AppHandle,
     period: String,
     kind: CategoryKindDto,
 ) -> Result<Vec<CategoryAmountDto>, IpcError> {
     let period = parse_period(&period)?;
-    Ok(ledger(&state)?
-        .category_breakdown(period, kind.into())?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    let kind = kind.into();
+    read(app, move |l| {
+        Ok(l.category_breakdown(period, kind)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
 }
 
 /// Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24).
 #[tauri::command]
 #[specta::specta]
-pub fn net_worth_history(
-    state: State<'_, AppState>,
+pub async fn net_worth_history(
+    app: AppHandle,
     end_period: String,
     count: u8,
 ) -> Result<Vec<NetWorthPointDto>, IpcError> {
     let end = parse_period(&end_period)?;
-    Ok(ledger(&state)?
-        .net_worth_history(end, count)?
-        .into_iter()
-        .map(Into::into)
-        .collect())
+    read(app, move |l| {
+        Ok(l.net_worth_history(end, count)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1063,12 +1090,12 @@ pub async fn export_csv(
     Ok(Some(display(&dir)))
 }
 
-/// Kerja berat (Argon2id, konversi DB) di thread blocking agar event loop tetap jalan.
+/// Kerja berat (Argon2id, konversi DB, query baca) di thread blocking agar event loop tetap jalan.
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, IpcError> + Send + 'static,
 ) -> Result<T, IpcError> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| {
-        tracing::error!(error = %e, "task keamanan gagal");
+        tracing::error!(error = %e, "task blocking gagal");
         IpcError::code(ErrorCode::Internal)
     })?
 }

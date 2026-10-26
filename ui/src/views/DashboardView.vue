@@ -56,7 +56,7 @@ const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.l
 onMounted(() => {
   // Ukur startup sampai dasbor pertama terisi (log lokal di backend; mode browser no-op).
   void load().then(() => nextTick()).then(() => appReady())
-  void withErrorToast(() => Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()]))
+  void withErrorToast(() => Promise.all([accounts.ensureLoaded(), categories.ensureLoaded()]))
 })
 
 const txns = useTransactionsStore()
