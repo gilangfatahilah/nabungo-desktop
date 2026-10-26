@@ -67,7 +67,7 @@ describe('AppSidebar', () => {
     expect(w.find('a[aria-current="page"]').text()).toContain('Transaksi')
   })
 
-  it('header memakai wordmark dengan tanda koin', async () => {
+  it('header memakai wordmark dengan tanda N + koin', async () => {
     const w = await mountSidebar('/')
     const logo = w.find('[data-testid="app-logo"]')
     expect(logo.text()).toBe('Nabungo')
