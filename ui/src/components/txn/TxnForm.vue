@@ -69,8 +69,8 @@ watch(() => s.kind, () => {
 
 onMounted(async () => {
   focusAmount()
-  if (!categories.loaded) await categories.load()
-  if (!accounts.loaded) await accounts.load()
+  await categories.ensureLoaded()
+  await accounts.ensureLoaded()
 })
 
 function toggleSplit() {

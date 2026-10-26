@@ -82,6 +82,21 @@ pub fn open_file_read_only(path: &Path, key: Option<&DbKey>) -> Result<Connectio
     )
 }
 
+/// Koneksi baca tambahan ke DB yang sedang dipakai koneksi tulis (WAL): read-only, tanpa
+/// migrasi; melihat commit terakhir.
+pub fn open_reader(path: &Path, key: Option<&DbKey>) -> Result<Connection> {
+    let conn = open_raw(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        key,
+    )?;
+    conn.execute_batch(
+        "PRAGMA busy_timeout = 5000;
+         PRAGMA cache_size = -32768;",
+    )?;
+    Ok(conn)
+}
+
 pub fn migrate(conn: &mut Connection) -> Result<()> {
     migrations().to_latest(conn)?;
     // Statistik planner: tanpa `sqlite_stat1`, SQLite memilih indeks parsial yang memaksa

@@ -212,6 +212,8 @@ pub struct Ledger {
     pub(crate) path: Option<PathBuf>,
     /// Key SQLCipher bila DB terenkripsi.
     pub(crate) key: Option<DbKey>,
+    /// Koneksi baca; `None` untuk DB in-memory dan untuk pembaca itu sendiri.
+    pub(crate) readers: Option<crate::readers::Readers>,
 }
 
 impl Ledger {
@@ -221,6 +223,7 @@ impl Ledger {
             conn: nabungo_storage::open(path, None)?,
             path: Some(path.to_path_buf()),
             key: None,
+            readers: crate::readers::Readers::for_file(Some(path), None),
         })
     }
 
@@ -229,6 +232,7 @@ impl Ledger {
             conn: nabungo_storage::open_in_memory()?,
             path: None,
             key: None,
+            readers: None,
         })
     }
 

@@ -174,6 +174,16 @@ impl Ledger {
         converted: &Path,
         new_key: Option<DbKey>,
     ) -> Result<(), AppError> {
+        // Koneksi baca ikut ditutup: Windows menolak rename atas file yang masih terbuka.
+        self.without_readers(|l| l.swap_file_inner(db, converted, new_key))
+    }
+
+    fn swap_file_inner(
+        &mut self,
+        db: &Path,
+        converted: &Path,
+        new_key: Option<DbKey>,
+    ) -> Result<(), AppError> {
         // Koneksi sementara tanpa skema: bila buka ulang gagal, use case lain ikut gagal
         // alih-alih menulis ke tempat lain.
         let old = std::mem::replace(&mut self.conn, Connection::open_in_memory()?);

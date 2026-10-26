@@ -15,6 +15,16 @@ export const useAccountsStore = defineStore('accounts', () => {
     loaded.value = true
   }
 
+  // Muat awal bersama: pemanggil yang bersamaan (shell + layar) berbagi satu request.
+  let initial: Promise<void> | null = null
+  function ensureLoaded(): Promise<void> {
+    if (loaded.value) return Promise.resolve()
+    initial ??= load().finally(() => {
+      initial = null
+    })
+    return initial
+  }
+
   async function then<T>(p: Promise<T>): Promise<T> {
     const r = await p
     await load()
@@ -25,6 +35,7 @@ export const useAccountsStore = defineStore('accounts', () => {
     overview,
     loaded,
     load,
+    ensureLoaded,
     createAccount: (kind: AccountKindDto, fields: AccountFieldsDto) => then(ipc.createAccount(kind, fields)),
     updateAccount: (id: string, fields: AccountFieldsDto) => then(ipc.updateAccount(id, fields)),
     archiveAccount: (id: string) => then(ipc.archiveAccount(id)),

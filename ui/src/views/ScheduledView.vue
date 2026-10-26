@@ -34,8 +34,8 @@ const reveal = 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opa
 onMounted(() => {
   // Selalu muat ulang: tanggal berganti dan auto-post berjalan saat daftar dimuat.
   void withErrorToast(() => store.reload())
-  if (!accounts.loaded) void withErrorToast(() => accounts.load())
-  if (!categories.loaded) void withErrorToast(() => categories.load())
+  void withErrorToast(() => accounts.ensureLoaded())
+  void withErrorToast(() => categories.ensureLoaded())
 })
 
 const catName = (id: string) => categories.list.find((c) => c.id === id)?.name

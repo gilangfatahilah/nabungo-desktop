@@ -37,7 +37,7 @@ const { accountName, categoryPath, categoryLabel, tile, title, tone } = useTxnRo
 const { edit, onKey } = useTxnRowActions()
 
 onMounted(() => withErrorToast(async () => {
-  await Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()])
+  await Promise.all([accounts.ensureLoaded(), categories.ensureLoaded()])
 }))
 
 const shown = computed(() => ({

@@ -12,6 +12,16 @@ export const useCategoriesStore = defineStore('categories', () => {
     loaded.value = true
   }
 
+  // Muat awal bersama: pemanggil yang bersamaan (shell + layar) berbagi satu request.
+  let initial: Promise<void> | null = null
+  function ensureLoaded(): Promise<void> {
+    if (loaded.value) return Promise.resolve()
+    initial ??= load().finally(() => {
+      initial = null
+    })
+    return initial
+  }
+
   async function then<T>(p: Promise<T>): Promise<T> {
     const r = await p
     await load()
@@ -22,6 +32,7 @@ export const useCategoriesStore = defineStore('categories', () => {
     list,
     loaded,
     load,
+    ensureLoaded,
     createCategory: (kind: CategoryKindDto, fields: CategoryFieldsDto) => then(ipc.createCategory(kind, fields)),
     updateCategory: (id: string, fields: CategoryFieldsDto) => then(ipc.updateCategory(id, fields)),
     archiveCategory: (id: string) => then(ipc.archiveCategory(id)),

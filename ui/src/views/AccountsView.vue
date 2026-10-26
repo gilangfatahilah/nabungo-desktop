@@ -31,7 +31,7 @@ const archived = computed(() => groupAccounts(store.overview, { archived: true }
 const groups = computed(() => sections.value.flatMap((s) => (s.group ? [s.group] : [])))
 
 onMounted(() => {
-  if (!store.loaded) void withErrorToast(() => store.load())
+  void withErrorToast(() => store.ensureLoaded())
 })
 
 // --- form akun ---

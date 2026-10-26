@@ -49,8 +49,8 @@ useIdleLock(
 watch(
   () => route.name !== undefined && !route.meta.bare,
   (ready) => {
-    if (ready && !accounts.loaded) void withErrorToast(() => accounts.load())
-    if (ready && !categories.loaded) void withErrorToast(() => categories.load())
+    if (ready) void withErrorToast(() => accounts.ensureLoaded())
+    if (ready) void withErrorToast(() => categories.ensureLoaded())
   },
   { immediate: true },
 )

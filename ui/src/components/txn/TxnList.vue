@@ -27,7 +27,7 @@ const categories = useCategoriesStore()
 const settings = useSettingsStore()
 
 onMounted(() => withErrorToast(async () => {
-  await Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()])
+  await Promise.all([accounts.ensureLoaded(), categories.ensureLoaded()])
 }))
 
 const items = computed(() => groupByDate(store.rows))

@@ -39,7 +39,7 @@ const summary = computed(() => ({
 
 onMounted(() => {
   void withErrorToast(async () => {
-    if (!categories.loaded) await categories.load()
+    await categories.ensureLoaded()
     await store.init()
   })
 })

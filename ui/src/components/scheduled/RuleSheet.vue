@@ -49,7 +49,7 @@ async function findRule(id: string) {
 }
 
 async function prepare(ed: RuleEditor) {
-  await Promise.all([accounts.loaded ? null : accounts.load(), categories.loaded ? null : categories.load()])
+  await Promise.all([accounts.ensureLoaded(), categories.ensureLoaded()])
   let state: TxnFormState
   rec.value = { freq: 'monthly', interval: 1, until: null }
   autoPost.value = false
