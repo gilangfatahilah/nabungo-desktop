@@ -62,11 +62,11 @@
   --text-meta--line-height: 1rem;
 }
 
-/* Palet "Zamrud" (tema emerald shadcn, skala emerald Tailwind) — docs/design/design.md §3.
+/* Palet "Tunas" (hijau logo Nabungo: hijau tua di light, lime di dark) — docs/design/design.md §3.
    Kanvas = sidebar/hover, Lembar = konten.
-   Kontras teks (light, vs Lembar/Kanvas): tinta 16.5/15.2, pudar 6.0/5.5, zamrud 5.5/5.1,
+   Kontras teks (light, vs Lembar/Kanvas): tinta 16.5/15.2, pudar 6.0/5.5, tunas 5.4/5.0,
    masuk 5.3/4.9, keluar 5.9/5.5, waspada 5.4/5.0.
-   Non-teks (≥ 3:1, vs Lembar/Kanvas/Kanvas aktif): batas kontrol `--input` 3.7/3.4/3.1; ring = zamrud penuh.
+   Non-teks (≥ 3:1, vs Lembar/Kanvas/Kanvas aktif): batas kontrol `--input` 3.7/3.4/3.1; ring = tunas penuh.
    `--border` hanya pemisah dekoratif; `--input-fill` = isi kontrol (bukan batas). */
 :root {
   --radius: 10px;
@@ -76,7 +76,7 @@
   --card-foreground: #17202a;
   --popover: #ffffff;
   --popover-foreground: #17202a;
-  --primary: #047857;
+  --primary: #167a3a;
   --primary-foreground: #ffffff;
   --secondary: #f4f6f8;
   --secondary-foreground: #17202a;
@@ -88,66 +88,67 @@
   --border: #e1e5ea;
   --input: #7c8692;
   --input-fill: #cfd5dc;
-  --ring: #047857;
+  --ring: #167a3a;
   --income: #1e7a4f;
   --expense: #b4382f;
   --transfer: var(--muted-foreground);
   --warning: #9a5b00;
-  --chart-1: #047857;
+  --chart-1: #167a3a;
   --chart-2: #24508f;
   --chart-3: #b4382f;
   --chart-4: #9a5b00;
   --chart-5: #5b6472;
   --sidebar: #f4f6f8;
   --sidebar-foreground: #17202a;
-  --sidebar-primary: #047857;
+  --sidebar-primary: #167a3a;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e6eaee;
   --sidebar-accent-foreground: #17202a;
   --sidebar-border: #e1e5ea;
-  --sidebar-ring: #047857;
+  --sidebar-ring: #167a3a;
 }
 
-/* Kontras teks (dark, vs Lembar/Kanvas): tinta 13.6/14.9, pudar 6.3/7.0, zamrud 8.6/9.4,
-   masuk 7.6/8.3, keluar 6.8/7.5, waspada 7.9/8.7.
+/* Netral graphite (brand Graphite #1C1C22 / Black #09090B), aksen lime.
+   Kontras teks (dark, vs Lembar/Kanvas): tinta 13.9/15.4, pudar 6.6/7.4, tunas 11.2/12.5,
+   masuk 7.8/8.7, keluar 7.0/7.8, waspada 8.1/9.0.
    Non-teks (vs Lembar/Kanvas/Kanvas aktif/popover): batas kontrol `--input` 3.5/3.9/3.1/3.3. */
 .dark {
-  --background: #1a1f27;
-  --foreground: #e6e9ee;
-  --card: #1a1f27;
-  --card-foreground: #e6e9ee;
-  --popover: #1f252e;
-  --popover-foreground: #e6e9ee;
-  --primary: #34d399;
-  --primary-foreground: #022c22;
-  --secondary: #12161c;
-  --secondary-foreground: #e6e9ee;
-  --muted: #12161c;
-  --muted-foreground: #98a1ae;
-  --accent: #232a34;
-  --accent-foreground: #e6e9ee;
+  --background: #1c1c22;
+  --foreground: #e8e8ec;
+  --card: #1c1c22;
+  --card-foreground: #e8e8ec;
+  --popover: #222229;
+  --popover-foreground: #e8e8ec;
+  --primary: #a3e635;
+  --primary-foreground: #1a2e05;
+  --secondary: #111115;
+  --secondary-foreground: #e8e8ec;
+  --muted: #111115;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272f;
+  --accent-foreground: #e8e8ec;
   --destructive: #f08a80;
-  --border: #2a313b;
-  --input: #6b7583;
-  --input-fill: #3a434f;
-  --ring: #34d399;
+  --border: #2e2e36;
+  --input: #71717c;
+  --input-fill: #3a3a44;
+  --ring: #a3e635;
   --income: #5cc38e;
   --expense: #f08a80;
   --transfer: var(--muted-foreground);
   --warning: #e5a84b;
-  --chart-1: #34d399;
+  --chart-1: #a3e635;
   --chart-2: #8fb0e8;
   --chart-3: #f08a80;
   --chart-4: #e5a84b;
-  --chart-5: #98a1ae;
-  --sidebar: #12161c;
-  --sidebar-foreground: #e6e9ee;
-  --sidebar-primary: #34d399;
-  --sidebar-primary-foreground: #022c22;
-  --sidebar-accent: #232a34;
-  --sidebar-accent-foreground: #e6e9ee;
-  --sidebar-border: #2a313b;
-  --sidebar-ring: #34d399;
+  --chart-5: #a1a1aa;
+  --sidebar: #111115;
+  --sidebar-foreground: #e8e8ec;
+  --sidebar-primary: #a3e635;
+  --sidebar-primary-foreground: #1a2e05;
+  --sidebar-accent: #27272f;
+  --sidebar-accent-foreground: #e8e8ec;
+  --sidebar-border: #2e2e36;
+  --sidebar-ring: #a3e635;
 }
 
 /* Angka uang: figur tabular agar kolom sejajar (§5). */

@@ -8,7 +8,7 @@ Acuan visual & interaksi untuk semua layar Nabungo. Setiap perubahan UI dicek te
 - **Pengguna:** satu orang, di laptop/desktop, membuka aplikasi beberapa kali seminggu untuk mencatat dan mengecek "masih aman nggak sampai gajian berikutnya".
 - **Tugas utama layar:** mencatat transaksi secepat mungkin (keyboard), lalu membaca angka dengan yakin.
 
-Angka adalah konten utama, bukan dekorasi. Kerangka aplikasi mengikuti pola dasbor shadcn yang familier, tetapi isinya tetap padat dan tenang: satu aksen (Zamrud), warna hanya bermakna, dan angka selalu rapi sejajar.
+Angka adalah konten utama, bukan dekorasi. Kerangka aplikasi mengikuti pola dasbor shadcn yang familier, tetapi isinya tetap padat dan tenang: satu aksen (Tunas), warna hanya bermakna, dan angka selalu rapi sejajar.
 
 ## 2. Referensi: shadcn-vue `dashboard-01`
 
@@ -27,25 +27,27 @@ Kerangka mengikuti blok [`dashboard-01`](https://www.shadcn-vue.com/view/dashboa
 
 Token didefinisikan sebagai CSS variable di `ui/src/style.css` (`:root` dan `.dark`), lalu dipetakan ke nama shadcn. Komponen **tidak boleh** memakai warna Tailwind mentah (`text-red-600`, `bg-gray-100`); selalu pakai token.
 
-### 3.1 Palet dasar "Zamrud"
+### 3.1 Palet dasar "Tunas"
 
-Zamrud (emerald) adalah warna logo Nabungo (`docs/design/brand/`), diambil dari skala emerald Tailwind. Dipakai hemat: aksi utama, fokus, seleksi.
+Tunas adalah hijau logo Nabungo (§3.4): hijau tua di light, lime (warna koin logo) di dark. Dipakai hemat: aksi utama, fokus, seleksi.
 
 | Nama | Peran | Light | Dark | Token shadcn |
 |---|---|---|---|---|
-| **Tinta** | teks utama | `#17202A` | `#E6E9EE` | `--foreground` |
-| **Tinta pudar** | teks sekunder, meta | `#5B6472` | `#98A1AE` | `--muted-foreground` |
-| **Kanvas** | sidebar & latar di luar inset, hover, latar muted | `#F4F6F8` | `#12161C` | `--sidebar`, `--muted`, `--secondary`, `--accent` (light) |
-| **Kanvas aktif** | item sidebar aktif/hover | `#E6EAEE` | `#232A34` | `--sidebar-accent` |
-| **Lembar** | inset konten, kartu, sheet, dialog | `#FFFFFF` | `#1A1F27` | `--background`, `--card`, `--popover` |
-| **Garis** | border & pemisah | `#E1E5EA` | `#2A313B` | `--border` (pemisah dekoratif) |
-| **Batas kontrol** | border input, select, checkbox, track switch | `#7C8692` | `#6B7583` | `--input` |
-| **Isi kontrol** | latar input/select/tombol outline (dark), input nonaktif | `#CFD5DC` | `#3A434F` | `--input-fill` (`bg-input-fill/*`) |
-| **Zamrud** | aksi utama, fokus, seleksi | `#047857` (emerald-700) | `#34D399` (emerald-400) | `--primary`, `--ring` |
+| **Tinta** | teks utama | `#17202A` | `#E8E8EC` | `--foreground` |
+| **Tinta pudar** | teks sekunder, meta | `#5B6472` | `#A1A1AA` | `--muted-foreground` |
+| **Kanvas** | sidebar & latar di luar inset, hover, latar muted | `#F4F6F8` | `#111115` | `--sidebar`, `--muted`, `--secondary`, `--accent` (light) |
+| **Kanvas aktif** | item sidebar aktif/hover | `#E6EAEE` | `#27272F` | `--sidebar-accent` |
+| **Lembar** | inset konten, kartu, sheet, dialog | `#FFFFFF` | `#1C1C22` | `--background`, `--card`, `--popover` |
+| **Garis** | border & pemisah | `#E1E5EA` | `#2E2E36` | `--border` (pemisah dekoratif) |
+| **Batas kontrol** | border input, select, checkbox, track switch | `#7C8692` | `#71717C` | `--input` |
+| **Isi kontrol** | latar input/select/tombol outline (dark), input nonaktif | `#CFD5DC` | `#3A3A44` | `--input-fill` (`bg-input-fill/*`) |
+| **Tunas** | aksi utama, fokus, seleksi | `#167A3A` | `#A3E635` (lime-400) | `--primary`, `--ring` |
 
 Batas kontrol ≥ 3:1 terhadap Lembar, Kanvas, Kanvas aktif, dan popover (light 3.7/3.4/3.1, dark 3.5/3.9/3.1/3.3; WCAG 1.4.11). Garis (`--border`) hanya untuk pemisah dekoratif, tidak untuk batas kontrol. Isi kontrol tetap memakai nilai lama agar latar input tidak menggelap; jangan pakai `bg-input` untuk isi selain track switch.
 
-Teks di atas Zamrud memakai `#FFFFFF` (light) / `#022C22` (dark). Light memakai emerald-700, bukan emerald-600: emerald-600 dengan teks putih hanya 3.8:1.
+Teks di atas Tunas memakai `#FFFFFF` (light, 5.4:1) / `#1A2E05` (dark, lime-950, 9.7:1). Lime tidak dipakai di light: teks putih di atasnya hanya ~1.6:1 dan lime sebagai teks di Lembar putih gagal kontras.
+
+Netral dark mengikuti tile ikon (Graphite `#1C1C22`, Black `#09090B`): abu netral tanpa rona biru.
 
 ### 3.2 Warna semantik
 
@@ -64,11 +66,25 @@ Semua pasangan teks/latar lolos kontras ≥ 4.5:1 di Lembar, Kanvas, dan Kanvas 
 - Warna income/expense **tidak pernah jadi satu-satunya pembeda**. Selalu ada tanda (`+` / `−` U+2212) atau ikon.
 - Warna hanya pada **angka** (dan ikon tren di badge), bukan latar baris atau seluruh teks baris.
 - Total, saldo, dan kekayaan bersih memakai **Tinta**. Saldo negatif memakai Keluar.
-- Zamrud tidak dipakai untuk angka (akan terbaca sebagai income).
+- Tunas tidak dipakai untuk angka (akan terbaca sebagai income).
 
 ### 3.3 Warna kategori
 
 Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya muncul sebagai **tile ikon** 28px, dengan latar warna kategori 14% alfa dan ikon warna penuh. Tidak dipakai untuk teks atau chart utama, kecuali di laporan per kategori.
+
+### 3.4 Logo & ikon aplikasi
+
+Huruf N berfaset yang naik ke kanan dengan koin lime yang jatuh masuk ("menabung, lalu tumbuh"). Acuan visual: `docs/design/brand/Nabungo — logo & app icon@2x.png`; sumber vektor di folder yang sama:
+
+| File | Isi | Dipakai di |
+|---|---|---|
+| `nabungo-mark.svg` | tanda N + koin, tanpa latar | `AppLogo.vue` (sidebar, Unlock, Pemulihan) |
+| `nabungo-icon.svg` | tanda di tile graphite membulat | ikon aplikasi ≥ 48px |
+| `nabungo-icon-small.svg` | tile + N diperbesar, **tanpa koin** | ikon ≤ 44px (16–44, `.ico` 16/24/32), favicon |
+
+- Warna tanda tetap (gradien faset `#417A35`→`#145541`, `#56A046`→`#38864F`, `#8AD23E`→`#4AA356`, pucuk putih 28%, koin `#A3E635`), tidak ikut tema; ini satu-satunya pengecualian aturan gradient §5. Tanda bersifat dekoratif (`aria-hidden`), nama dibaca dari wordmark teks.
+- Wordmark = teks `app.name` lowercase bold dengan font aplikasi, bukan gambar.
+- Regenerate ikon setelah mengubah SVG: render `nabungo-icon.svg` ke PNG 1024 (mis. Chromium Playwright), `pnpm tauri icon <png>` (hapus folder `android/`, `ios/` yang ikut dibuat), lalu timpa `32x32.png`, `Square30x30Logo.png`, `Square44x44Logo.png`, entri 16/24/32 di `icon.ico`, dan `ui/public/favicon.png` (64px) dengan render `nabungo-icon-small.svg`.
 
 ## 4. Tipografi
 
@@ -96,7 +112,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 - **Tinggi baris daftar:** 48px (dua baris teks). Baris header tanggal 32px. Baris tabel data 40px.
 - **Sudut, berhierarki:** 6px kontrol & menu melayang (`rounded-lg`); 10px kartu, panel, dialog, inset (`rounded-xl`); 12px sheet (`rounded-2xl`); pill untuk chip & badge.
 - **Bayangan:** lapisan melayang (popover, dropdown, dialog, sheet, toast) memakai bayangan penuh. Inset konten `shadow-sm` (bawaan varian inset). Kartu `shadow-xs`. Elemen lain tanpa bayangan.
-- **Gradient:** satu-satunya gradient adalah latar section card (`bg-linear-to-t from-primary/5 to-card`, §7.11). Tidak ada gradient lain.
+- **Gradient:** satu-satunya gradient adalah latar section card (`bg-linear-to-t from-primary/5 to-card`, §7.11). Tidak ada gradient lain, kecuali tanda logo (§3.4).
 
 ## 6. Layout
 
@@ -129,7 +145,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 
 ```
  ◓ nabungo                        ← AppLogo dalam SidebarMenuButton (ciut: tanda koin saja)
- [ + Transaksi baru         N ]  ← Quick Create: tombol Zamrud (Cari hanya di SiteHeader)
+ [ + Transaksi baru         N ]  ← Quick Create: tombol Tunas (Cari hanya di SiteHeader)
  ▣ Dasbor                    G D  ← NavMain: ikon 16px + label, Kbd saat hover/aktif
  ▣ Transaksi                 G T
  ▣ Budget                    G B
@@ -149,7 +165,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 ```
 
 - Item aktif & hover: gaya bawaan shadcn (latar Kanvas aktif, teks Tinta 500). Tidak ada garis aksen.
-- Quick Create adalah satu-satunya blok Zamrud di sidebar.
+- Quick Create adalah satu-satunya blok Tunas di sidebar.
 - Petunjuk shortcut hanya saat hover/fokus dan pada item aktif.
 - Mode ikon: label & Kbd disembunyikan, setiap item punya tooltip berisi label; Quick Create menjadi tombol ikon `+`; footer menampilkan ikon saja.
 - Daftar saldo per akun **tidak** ada di sidebar; tempatnya kartu Akun di Dasbor (§8.1) dan layar Akun.
@@ -167,7 +183,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 `ui/src/components/PageHeader.vue`, baris pertama konten bila halaman punya ringkasan atau aksi. Tidak ada judul (judul ada di SiteHeader).
 
 - Kiri: ringkasan satu baris `text-meta` Tinta pudar, mis. "Kekayaan bersih Rp 4.343.000".
-- Kanan: maksimal satu tombol utama (Zamrud) dan dua sekunder; sisanya masuk menu `⋯`. Kontrol halaman (segmented control, navigasi periode) juga boleh di sini.
+- Kanan: maksimal satu tombol utama (Tunas) dan dua sekunder; sisanya masuk menu `⋯`. Kontrol halaman (segmented control, navigasi periode) juga boleh di sini.
 - Tidak dirender bila keduanya kosong.
 
 ### 6.5 Kartu vs permukaan datar
@@ -182,7 +198,7 @@ Kategori boleh punya warna sendiri (dari `IconColorPicker`). Warna itu hanya mun
 
 | Varian | Pemakaian | Tampilan |
 |---|---|---|
-| **Utama** | satu aksi terpenting per layar/dialog | latar Zamrud, teks putih |
+| **Utama** | satu aksi terpenting per layar/dialog | latar Tunas, teks `--primary-foreground` |
 | **Sekunder** | aksi lain yang sejajar | border Garis, latar Lembar |
 | **Hantu** | aksi di baris, toolbar, header, ikon | tanpa border, hover Kanvas |
 | **Bahaya** | hapus permanen, gabung kategori | latar Bahaya; hanya di dialog konfirmasi |
@@ -197,7 +213,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 ### 7.3 Input & form
 
 - Label di atas field, `text-body` 500. Helper/error di bawah field, `text-meta`. Error berwarna Bahaya dan **menempel di field yang salah**.
-- Field error: border Bahaya + teks error. Fokus: ring 2px Zamrud (semua elemen interaktif).
+- Field error: border Bahaya + teks error. Fokus: ring 2px Tunas (semua elemen interaktif).
 - **Nominal:** rata kanan, `num`, 20px di form transaksi. Prefiks `Rp` di dalam field sebagai addon pudar.
 - **Tanggal:** `DateInput` (Popover + Calendar). Tampilan `17 Okt 2026`, nilai `YYYY-MM-DD`.
 - **Select:** shadcn `Select`/`Combobox`, tidak ada `<select>` native.
@@ -239,7 +255,7 @@ Satu komponen (`ui/kbd`) untuk semua petunjuk shortcut: tinggi 20px, padding 0 6
 - Baris 2 (`text-meta`, Tinta pudar): kategori anak (induk di tooltip), akun, `#tag`. Pemisah jarak 12px.
 - Kanan: nominal bertanda dengan warna semantik; di bawahnya saldo berjalan (bila filter satu akun).
 - Filter satu akun: ikon lingkaran centang 14px untuk transaksi terekonsiliasi ("Sudah direkonsiliasi"). Ikon klip 14px untuk transaksi berlampiran ("Ada lampiran").
-- Menu `⋯` saat hover/fokus. Baris bisa difokus (Tab/↑↓), `Enter` edit, `Delete` hapus. Hover Kanvas, fokus ring Zamrud di dalam baris.
+- Menu `⋯` saat hover/fokus. Baris bisa difokus (Tab/↑↓), `Enter` edit, `Delete` hapus. Hover Kanvas, fokus ring Tunas di dalam baris.
 
 ### 7.6 Filter (Transaksi)
 
@@ -295,7 +311,7 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 ### 7.12 Chart card
 
 - `Card` dengan `CardHeader` (judul `text-heading`, deskripsi meta) dan pemilih rentang dropdown `Select` (trigger `size="sm"`, label santai: "3 bulan terakhir", "6 bulan terakhir", "1 tahun terakhir") di `CardAction`.
-- Chart memakai komponen di `ui/src/components/charts/` (SVG sendiri). Area di bawah garis berisi 15% alfa warna seri. Seri masuk/keluar memakai `--income`/`--expense`; seri lain `--chart-1..5` (Zamrud, Biru `#24508F`/`#8FB0E8`, Keluar, Waspada, Tinta pudar).
+- Chart memakai komponen di `ui/src/components/charts/` (SVG sendiri). Area di bawah garis berisi 15% alfa warna seri. Seri masuk/keluar memakai `--income`/`--expense`; seri lain `--chart-1..5` (Tunas, Biru `#24508F`/`#8FB0E8`, Keluar, Waspada, Tinta pudar).
 - Tidak ada gradient atau 3D. Chart di layar Laporan tetap punya tabel angka di bawahnya.
 
 ### 7.13 Tabel data
@@ -468,7 +484,7 @@ Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. La
 ## 12. Aksesibilitas (lantai minimum)
 
 - Kontras teks ≥ 4.5:1, elemen UI ≥ 3:1, di light dan dark. Jangan pudarkan teks dengan opacity (`text-current/75`, `opacity-65`); pakai `text-muted-foreground`.
-- Semua aksi bisa dilakukan dengan keyboard; fokus selalu terlihat (ring Zamrud **penuh**: `ring-ring`, bukan `ring-ring/50` yang hanya ~2.3:1). Setelah hapus baris, fokus pindah ke baris berikutnya.
+- Semua aksi bisa dilakukan dengan keyboard; fokus selalu terlihat (ring Tunas **penuh**: `ring-ring`, bukan `ring-ring/50` yang hanya ~2.3:1). Setelah hapus baris, fokus pindah ke baris berikutnya.
 - Ukuran teks bisa diubah (Pengaturan → Ukuran teks, atau Ctrl/⌘ `+` / `-` / `0`): 90, 100, 110, 125, 150%, lewat `font-size` persen di `<html>`. Karena itu ukuran pakai rem, bukan px (`max-w-[27.5rem]`, bukan `max-w-[440px]`); nilai yang dihitung di JS (tinggi baris virtual, teks sumbu chart) dikalikan `useRootFontScale()`. Pada 150% dan jendela 960px halaman tidak boleh scroll horizontal dan judul header tidak boleh terpotong; tabel data dengan kolom tetap (budget, laporan) dibungkus `TableScroll` (`role=region` berlabel, bisa difokus bila memang meluap) sehingga hanya tabel itu yang di-scroll (tabel dikecualikan dari reflow, WCAG 1.4.10). Toast yang digeser di samping sheet tetap di dalam jendela.
 - ARIA: `role="row"` hanya berisi `cell`/`columnheader`; `svg role="img"` tidak boleh berisi elemen yang bisa difokus (pakai `role="group"`); progressbar wajib punya `aria-label`.
 - Audit otomatis: `ui/e2e/a11y.spec.ts` menjalankan axe (`wcag2a`, `wcag2aa`, `wcag21aa`) di semua layar, light dan dark, termasuk sheet, dialog konfirmasi, toast, dan tooltip chart; harus 0 pelanggaran. Pengecualian hanya lewat `.exclude()` per selektor dengan alasan, tanpa `disableRules`.

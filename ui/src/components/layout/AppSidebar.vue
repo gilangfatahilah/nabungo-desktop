@@ -67,7 +67,7 @@ const manage = computed<NavItem[]>(() => [
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <!-- Quick create: satu-satunya blok Zamrud di sidebar. -->
+      <!-- Quick create: satu-satunya blok Tunas (primary) di sidebar. -->
       <SidebarGroup>
         <SidebarGroupContent>
           <SidebarMenu>
