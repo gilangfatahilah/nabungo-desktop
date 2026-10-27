@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "argon2",
  "base32",
@@ -2426,7 +2426,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "serde",
@@ -2438,7 +2438,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "directories",
@@ -2460,7 +2460,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "getrandom 0.3.4",
  "nabungo-core",
