@@ -195,13 +195,19 @@ pub fn apply_rules(rules: &[Rule], msg: &MailMessage, local_offset: UtcOffset) -
 
 /// Nominal format Indonesia (`Rp 1.250.000,00`) maupun Inggris (`IDR 41,700.00`) ke satuan minor.
 /// Bila `.` dan `,` sama-sama ada, pemisah terakhir adalah desimal; satu `.` yang tidak diikuti
-/// tepat 3 digit juga desimal; `,` tanpa `.` selalu desimal (`1,500` → ditolak, bukan 1500).
+/// tepat 3 digit juga desimal. `,` tanpa `.` hanya diterima sebagai desimal 1–2 digit (`25,00`);
+/// selain itu ambigu (`25,000` bisa 25 atau 25.000) dan ditolak agar masuk unparsed.
 pub fn normalize_amount(raw: &str) -> Result<i64, AmountParseError> {
     let digits: String = raw
         .chars()
         .filter(|c| c.is_ascii_digit() || matches!(c, '.' | ','))
         .collect();
     let s = digits.trim_matches(['.', ',']);
+    if let (None, Some(comma)) = (s.rfind('.'), s.rfind(','))
+        && (s.matches(',').count() > 1 || s.len() - comma - 1 > 2)
+    {
+        return Err(AmountParseError::Invalid);
+    }
     let decimal = match (s.rfind('.'), s.rfind(',')) {
         (Some(dot), Some(comma)) => Some(dot.max(comma)),
         (None, Some(comma)) => Some(comma),

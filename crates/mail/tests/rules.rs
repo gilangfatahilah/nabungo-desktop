@@ -266,6 +266,11 @@ fn normalize_amount_handles_id_and_en_formats() {
     );
     // Satu koma tanpa titik dibaca desimal: lebih baik unparsed daripada salah nominal.
     assert!(normalize_amount("1,500").is_err());
+    // Koma diikuti tepat 3 digit = pemisah ribuan yang ambigu: tolak, jangan dibaca 25 / 1500.
+    assert!(normalize_amount("IDR 25,000").is_err());
+    assert!(normalize_amount("IDR 1,500,000").is_err());
+    assert!(normalize_amount("1,000").is_err());
+    assert_eq!(normalize_amount("Rp 25,00"), Ok(25));
     assert!(normalize_amount("20.5").is_err());
     assert_eq!(normalize_amount("Rp"), Err(AmountParseError::Empty));
 }
