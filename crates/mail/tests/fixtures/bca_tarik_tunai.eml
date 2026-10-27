@@ -1,0 +1,24 @@
+Message-ID: <tunai-0001@bca.co.id>
+From: BCA <bca@bca.co.id>
+To: budi.santoso@example.com
+Subject: Cash Withdrawal Successful
+Date: Sat, 16 May 2026 13:09:00 +0700 (WIB)
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<html><body>
+<p>Hello BUDI SANTOSO,<br>You just made a transaction through myBCA.<br>Here are the details of your transaction :</p>
+<table>
+<tr><td>Status</td><td>:</td><td>Successful</td></tr>
+<tr><td>Transaction Date</td><td>:</td><td>16 May 2026 13:08:54</td></tr>
+<tr><td>Transfer Type</td><td>:</td><td>Cardless - Withdraw Cash</td></tr>
+<tr><td>Source of Fund</td><td>:</td><td>1234xxxx56</td></tr>
+<tr><td>Amount</td><td>:</td><td>IDR 500,000.00</td></tr>
+<tr><td>Phone No.</td><td>:</td><td>0800xxxxxx00</td></tr>
+<tr><td>Reference No.</td><td>:</td><td>00000000-0000-0000-0000-000000000003</td></tr>
+<tr><td>ATM Code</td><td>:</td><td>WSID Z0000</td></tr>
+</table>
+<p>Please save this email as your transaction reference.<br>If you do not recognize this transaction, immediately contact Halo BCA at 1500888.</p>
+<p>Best Regards,</p><p>PT Bank Central Asia Tbk</p>
+</body></html>

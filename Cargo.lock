@@ -2629,8 +2629,11 @@ dependencies = [
  "mail-parser",
  "nabungo-core",
  "native-tls",
+ "regex",
  "sha2",
  "time",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

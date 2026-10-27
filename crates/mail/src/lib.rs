@@ -2,4 +2,6 @@
 //! murni, dan sumber IMAP. Satu-satunya crate dengan kode jaringan; app tidak memanggilnya
 //! sampai user mengonfigurasi email.
 
+pub mod defaults;
 pub mod message;
+pub mod rule;
