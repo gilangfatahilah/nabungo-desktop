@@ -24,3 +24,7 @@ ui/playwright-report/
 
 # Git worktree lokal
 .worktrees/
+
+# Credential lokal (mis. App Password IMAP untuk uji manual) — jangan pernah di-commit
+.env
+.env.*

@@ -607,6 +607,7 @@ export default {
     attachment_too_large: 'Files can be at most 10 MB',
     attachment_missing: 'Attachment file not found in the data folder',
     occurrence_stale: 'This occurrence was already handled. The list has been reloaded.',
+    capture_not_pending: 'This email transaction has already been processed.',
     recurrence_interval: 'Interval must be 1–99.',
     recurrence_until: "End date can't be before the start date.",
     file_io: 'Could not read or write the file. Check the location and disk space.',

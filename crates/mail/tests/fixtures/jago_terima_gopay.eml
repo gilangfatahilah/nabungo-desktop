@@ -1,0 +1,15 @@
+Message-ID: <gopay-0001@jago.com>
+From: "Jago" <noreply@jago.com>
+To: budi.santoso@example.com
+Subject: Kamu telah menerima uang di Jago dari GoPay
+Date: Mon, 01 Jun 2026 02:00:00 GMT
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html><body>
+<p><a href="https://r.mail.jago.example/tr/cl/abc"><img alt="Jago" src="https://jago.example/logo.png"></a></p>
+<p>Halo BUDI SANTOSO,</p>
+<p>Kamu telah menerima Rp100.000 dari akun Gopay.</p>
+<p>Kamu bisa melihat riwayat transaksi di Rincian Kantong melalui aplikasi Jago.</p>
+</body></html>

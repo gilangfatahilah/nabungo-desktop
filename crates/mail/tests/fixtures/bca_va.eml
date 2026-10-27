@@ -1,0 +1,28 @@
+Message-ID: <va-0001@bca.co.id>
+From: BCA <bca@bca.co.id>
+To: budi.santoso@example.com
+Subject: Internet Transaction Journal
+Date: Fri, 03 Apr 2026 15:12:20 +0700 (WIB)
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+<html><body>
+<p>Hello BUDI SANTOSO,<br>You just made a transaction through myBCA.<br>Here are the details of your transaction :</p>
+<table>
+<tr><td>Status</td><td>:</td><td>Successful</td></tr>
+<tr><td>Transaction Date</td><td>:</td><td>03 Apr 2026 15:12:14</td></tr>
+<tr><td>Transfer Type</td><td>:</td><td>Transfer to BCA Virtual Account</td></tr>
+<tr><td>Source of Fund</td><td>:</td><td>1234xxxx56</td></tr>
+<tr><td>BCA Virtual Account No.</td><td>:</td><td>80777000000000001</td></tr>
+<tr><td>Name</td><td>:</td><td>TTSbyTokopedia</td></tr>
+<tr><td>Company/Product Name</td><td>:</td><td>PT TOKOPEDIA / TOKOPEDIA</td></tr>
+<tr><td>billdesc</td><td>:</td><td>IDR 33,300.00</td></tr>
+<tr><td>Bill Total</td><td>:</td><td>IDR 33,300.00</td></tr>
+<tr><td>Total Payment</td><td>:</td><td>IDR 33,300.00</td></tr>
+<tr><td>Description</td><td>:</td><td></td></tr>
+<tr><td>Reference No.</td><td>:</td><td>00000000-0000-0000-0000-000000000002</td></tr>
+</table>
+<p>Please save this email as your transaction reference.<br>If you do not recognize this transaction, immediately contact Halo BCA at 1500888.</p>
+<p>Best Regards,</p><p>PT Bank Central Asia Tbk</p>
+</body></html>

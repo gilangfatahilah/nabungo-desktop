@@ -1,0 +1,25 @@
+[package]
+name = "nabungo-mail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nabungo-core = { version = "0.2.0", path = "../core" }
+imap = "2.4.1"
+native-tls = "0.2"
+mail-parser = { version = "1.0", features = ["full_encoding"] }
+html2text = "0.17"
+sha2 = "0.10"
+time = "0.3.55"
+regex = "1"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+uuid = "1.28.0"
+
+[dev-dependencies]
+time = { version = "0.3.55", features = ["macros"] }

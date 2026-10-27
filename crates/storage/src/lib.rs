@@ -12,6 +12,7 @@ pub mod attachment;
 pub mod budget;
 pub mod category;
 pub mod contact;
+pub mod email;
 pub mod export;
 mod file;
 mod key;
@@ -135,6 +136,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0008_bucket_target_amount.sql"),
     include_str!("../migrations/0009_perf_indexes.sql"),
     include_str!("../migrations/0010_reconciled_index.sql"),
+    include_str!("../migrations/0011_email_capture.sql"),
 ];
 
 /// Versi skema terbaru (`user_version` setelah semua migrasi).

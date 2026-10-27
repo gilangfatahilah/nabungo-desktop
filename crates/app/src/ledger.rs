@@ -104,6 +104,9 @@ pub enum AppError {
     OccurrenceStale,
     #[error(transparent)]
     Recurrence(#[from] RecurrenceError),
+    /// Capture email sudah dikonfirmasi/diabaikan.
+    #[error("email capture was already processed")]
+    CaptureNotPending,
 }
 
 impl From<StorageError> for AppError {
