@@ -22,8 +22,13 @@ mod budget_alerts;
 mod capture;
 mod categories;
 mod defaults;
+mod email_sync;
 mod export;
 pub mod fixture;
+/// Sumber IMAP untuk alat CLI dan sync berkala (9b).
+pub mod mail {
+    pub use nabungo_mail::source::ImapSource;
+}
 mod ledger;
 mod onboarding;
 mod payee;
@@ -51,6 +56,9 @@ pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
 pub use capture::{CaptureDraft, IngestOutcome};
 pub use categories::CategoryFields;
+pub use email_sync::{
+    Fetched, MailSource, SYNC_BATCH, SourceError, SyncError, SyncSummary, sync_mailbox,
+};
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
 pub use nabungo_core::date::{format_date, parse_date};
