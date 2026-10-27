@@ -18,12 +18,17 @@ pub struct MailMessage {
     pub text: String,
 }
 
+/// ID pengganti `Message-ID`: `sha256:<hex>` dari raw.
+pub fn raw_message_id(raw: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(raw))
+}
+
 /// `None` bila raw bukan email yang bisa dibaca.
 pub fn parse_message(raw: &[u8]) -> Option<MailMessage> {
     let msg = MessageParser::new().parse(raw)?;
     let message_id = match msg.message_id().map(str::trim).filter(|s| !s.is_empty()) {
         Some(id) => id.to_owned(),
-        None => format!("sha256:{:x}", Sha256::digest(raw)),
+        None => raw_message_id(raw),
     };
     let from = msg
         .from()

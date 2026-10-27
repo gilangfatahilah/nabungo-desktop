@@ -1,8 +1,8 @@
 use nabungo_core::amount::AmountParseError;
 use nabungo_mail::defaults::default_rules;
-use nabungo_mail::message::{MailMessage, parse_message};
+use nabungo_mail::message::{MailMessage, parse_message, raw_message_id};
 use nabungo_mail::rule::{
-    Captured, Outcome, Rule, RuleKind, apply_rules, normalize_amount, parse_date,
+    Captured, CompiledRules, Outcome, Rule, RuleKind, apply_rules, normalize_amount, parse_date,
 };
 use time::UtcOffset;
 use time::macros::{date, offset};
@@ -268,4 +268,22 @@ fn normalize_amount_handles_id_and_en_formats() {
     assert!(normalize_amount("1,500").is_err());
     assert!(normalize_amount("20.5").is_err());
     assert_eq!(normalize_amount("Rp"), Err(AmountParseError::Empty));
+}
+
+#[test]
+fn compiled_rules_expose_source_rule() {
+    let rules = default_rules();
+    let compiled = CompiledRules::new(&rules);
+    match compiled.apply(&fixture("bca_tarik_tunai.eml"), WIB) {
+        Outcome::Parsed { rule, .. } => assert_eq!(compiled.rule(rule), &rules[rule]),
+        Outcome::Unparsed => panic!("unparsed"),
+    }
+}
+
+#[test]
+fn raw_message_id_is_hash_of_raw() {
+    let id = raw_message_id(b"bukan email");
+    assert!(id.starts_with("sha256:"), "{id}");
+    assert_eq!(id, raw_message_id(b"bukan email"));
+    assert_ne!(id, raw_message_id(b"lain"));
 }

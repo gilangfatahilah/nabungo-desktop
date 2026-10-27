@@ -72,7 +72,8 @@ struct Compiled {
 /// Rule yang regex-nya sudah di-compile, untuk memproses banyak email.
 pub struct CompiledRules {
     /// `None` = rule tidak valid (regex rusak / sender kosong), dilewati.
-    rules: Vec<Option<Compiled>>,
+    compiled: Vec<Option<Compiled>>,
+    source: Vec<Rule>,
 }
 
 fn regex(pattern: &str) -> Result<Regex, regex::Error> {
@@ -98,7 +99,7 @@ fn compile(rule: &Rule) -> Result<Compiled, regex::Error> {
 
 impl CompiledRules {
     pub fn new(rules: &[Rule]) -> Self {
-        let rules = rules
+        let compiled = rules
             .iter()
             .map(|r| match compile(r) {
                 Ok(c) if !c.sender.is_empty() => Some(c),
@@ -112,12 +113,20 @@ impl CompiledRules {
                 }
             })
             .collect();
-        Self { rules }
+        Self {
+            compiled,
+            source: rules.to_vec(),
+        }
+    }
+
+    /// Rule asal untuk indeks [`Outcome::Parsed::rule`].
+    pub fn rule(&self, idx: usize) -> &Rule {
+        &self.source[idx]
     }
 
     pub fn apply(&self, msg: &MailMessage, local_offset: UtcOffset) -> Outcome {
         let from = msg.from.to_lowercase();
-        for (i, rule) in self.rules.iter().enumerate() {
+        for (i, rule) in self.compiled.iter().enumerate() {
             let Some(rule) = rule else { continue };
             if !from.contains(&rule.sender) {
                 continue;

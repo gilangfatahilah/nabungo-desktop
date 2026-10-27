@@ -19,6 +19,7 @@ mod attachments;
 mod backup;
 mod budget;
 mod budget_alerts;
+mod capture;
 mod categories;
 mod defaults;
 mod export;
@@ -48,6 +49,7 @@ pub use backup::{
 };
 pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
+pub use capture::{CaptureDraft, IngestOutcome};
 pub use categories::CategoryFields;
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
@@ -59,12 +61,14 @@ pub use nabungo_core::{
     FormBody, MoneyError, NetWorth, PeriodError, PeriodStartDay, SiblingWarning, SplitLine, Target,
     TxnError, TxnKind, Unallocated, parse_amount,
 };
+pub use nabungo_mail::rule::CompiledRules;
 pub use nabungo_storage::DbKey;
 pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;
 pub use nabungo_storage::allocation::BucketRow;
 pub use nabungo_storage::category::CategoryRow;
 pub use nabungo_storage::contact::ContactRow;
+pub use nabungo_storage::email::{CaptureRecord, CaptureStatus, Cursor, UnparsedRecord};
 pub use nabungo_storage::format_utc as format_timestamp;
 pub use nabungo_storage::payee::PayeeUsage;
 pub use nabungo_storage::tag::TagUsage;

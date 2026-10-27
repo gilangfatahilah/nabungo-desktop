@@ -430,6 +430,41 @@ pub fn list_unparsed(conn: &Connection) -> Result<Vec<UnparsedRecord>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// Transaksi aktif `kind` bernominal `amount` (absolut; transfer = sisi masuk) dengan tanggal
+/// ±1 hari dari `date`, opsional hanya yang menyentuh `account_id`. Urut selisih tanggal.
+pub fn find_duplicate_txns(
+    conn: &Connection,
+    kind: &str,
+    amount: i64,
+    date: Date,
+    account_id: Option<Uuid>,
+    limit: u32,
+) -> Result<Vec<Uuid>> {
+    let mut stmt = conn.prepare(
+        "SELECT t.id FROM txn t
+         WHERE t.deleted_at IS NULL AND t.status = 'posted' AND t.kind = ?1
+           AND t.date BETWEEN date(?2, '-1 day') AND date(?2, '+1 day')
+           AND ABS(CASE WHEN t.kind = 'transfer'
+                 THEN (SELECT MAX(amount) FROM posting WHERE txn_id = t.id AND category_id IS NULL)
+                 ELSE (SELECT SUM(amount) FROM posting WHERE txn_id = t.id) END) = ?3
+           AND (?4 IS NULL OR EXISTS
+                 (SELECT 1 FROM posting p WHERE p.txn_id = t.id AND p.account_id = ?4))
+         ORDER BY ABS(julianday(t.date) - julianday(?2)), t.date, t.id
+         LIMIT ?5",
+    )?;
+    let ids = stmt.query_map(
+        params![
+            kind,
+            format_date(date),
+            amount,
+            account_id.map(|u| u.to_string()),
+            limit
+        ],
+        |r| r.get::<_, String>(0),
+    )?;
+    ids.map(|id| parse_uuid("txn", &id?)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

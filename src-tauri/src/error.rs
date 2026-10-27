@@ -75,6 +75,7 @@ pub enum ErrorCode {
     AttachmentTooLarge,
     AttachmentMissing,
     OccurrenceStale,
+    CaptureNotPending,
     RecurrenceInterval,
     RecurrenceUntil,
     FileIo,
@@ -231,6 +232,7 @@ impl From<AppError> for IpcError {
             AppError::AttachmentTooLarge => Self::code(ErrorCode::AttachmentTooLarge),
             AppError::AttachmentMissing => Self::code(ErrorCode::AttachmentMissing),
             AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
+            AppError::CaptureNotPending => Self::code(ErrorCode::CaptureNotPending),
             AppError::Recurrence(err) => Self::code(match err {
                 RecurrenceError::Interval => ErrorCode::RecurrenceInterval,
                 RecurrenceError::UntilBeforeStart => ErrorCode::RecurrenceUntil,
@@ -329,6 +331,13 @@ mod tests {
             assert_eq!(IpcError::from(err).code, code);
             assert_eq!(serde_json::to_value(code).unwrap(), wire);
         }
+    }
+
+    #[test]
+    fn capture_not_pending_maps_to_code() {
+        let e = IpcError::from(AppError::CaptureNotPending);
+        assert_eq!(e.code, ErrorCode::CaptureNotPending);
+        assert_eq!(serde_json::to_value(e.code).unwrap(), "capture_not_pending");
     }
 
     #[test]
