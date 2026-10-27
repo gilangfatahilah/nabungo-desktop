@@ -353,8 +353,10 @@ CREATE TABLE email_rule (
   payee_regex         TEXT,
   date_regex          TEXT,
   date_format         TEXT,
-  kind                TEXT NOT NULL CHECK (kind IN ('income','expense','transfer')),
-  account_id          TEXT REFERENCES account(id),
+  kind                TEXT NOT NULL
+                        CHECK (kind IN ('income','expense','transfer_out','transfer_in')),
+  account_id          TEXT REFERENCES account(id),  -- akun bank pengirim email
+  counter_account_id  TEXT REFERENCES account(id),  -- lawan transfer: tujuan (transfer_out) / asal (transfer_in)
   default_category_id TEXT REFERENCES category(id),
   priority            INTEGER NOT NULL DEFAULT 0,
   enabled             INTEGER NOT NULL DEFAULT 1,

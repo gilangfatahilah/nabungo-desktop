@@ -56,6 +56,19 @@
 | K12 | **Kind rule** di 9a hanya `income`/`expense` (CHECK di migrasi tetap mengizinkan `transfer` untuk 9c). | Transfer butuh akun tujuan; review UI belum ada. |
 | K13 | **Snippet**: `raw_snippet` = teks body hasil normalisasi, dipotong 4000 karakter (batas char, bukan byte). Header lengkap & lampiran tidak disimpan. | Cukup untuk debug & membuat rule; DB tetap kecil. Isi terenkripsi bila SQLCipher aktif. |
 
+### Revisi setelah sampel email asli (27 Okt 2026)
+
+Sampel body asli BCA (myBCA) & Jago, plus spike ke Gmail user, mengubah beberapa asumsi di atas. Revisi ini mengalahkan baris K yang dirujuk.
+
+| # | Revisi | Alasan |
+|---|---|---|
+| R1 | **Normalisasi nominal** (ganti K6): `normalize_amount` di `nabungo-mail` menerima format Indonesia (`Rp 21.000`, `Rp500`, `25.000,50`) **dan** Inggris (`IDR 41,700.00`). Bila `.` dan `,` sama-sama ada, pemisah terakhir adalah desimal; bila hanya ada satu `.` yang tidak diikuti tepat 3 digit, `.` adalah desimal. Hasilnya diubah ke format Indonesia lalu `parse_amount`. Desimal bukan nol → unparsed; `1,500` (ambigu) dibaca sebagai desimal → unparsed, tidak pernah salah nominal. | BCA memakai format Inggris; Jago format Indonesia. |
+| R2 | **Kind rule** (ganti K12): `income`, `expense`, `transfer_out` (dari `account_id` ke `counter_account_id`), `transfer_in` (dari `counter_account_id` ke `account_id`). Kolom baru `email_rule.counter_account_id` (FK `account`, nullable); PRD §6 diperbarui. | Sampel berisi tarik tunai BCA → Cash dan terima uang GoPay → Jago. |
+| R3 | **`payee_regex`** dicoba di body, lalu di subject. | Jago menaruh merchant hanya di subject ("Kamu telah membayar ke X💸"). |
+| R4 | **Tanggal** (perluas K5): `date_format` `dd mmm yyyy` boleh diikuti jam (`09 May 2026 11:14:28`, `15 May 2026, 22:25 WIB`); hanya prefiks tanggal yang dibaca. Jago debit/terima/refund tanpa tanggal di body → fallback header `Date`. | Format asli. |
+| R5 | **Rule bawaan** (ganti K8 fixture sintetis): BCA QRIS, transfer, VA, tarik tunai; Jago bayar, kartu debit, terima GoPay, refund. `amount_regex` di-anchor ke label (`Total Payment`, `Transfer Amount`, `Jumlah` di baris sendiri, dst.) agar nominal yang diulang (VA: `billdesc`/`Bill Total`/`Total Payment`) tidak jadi beberapa item. Fixture dibuat dari sampel asli yang disensor (nama, nomor rekening, referensi diganti). | Sampel asli tersedia. |
+| R6 | **Credential CLI**: `NABUNGO_IMAP_USER` + `GOOGLE_APP_PASSWORD` (nama variabel di `.env` user); label default tetap `Finance` (spike: label user saat ini `notion-synced`). | Menyesuaikan setup user. |
+
 ## Global Constraints
 
 - Arah dependensi: `ui → src-tauri → nabungo-app → (nabungo-core, nabungo-storage, nabungo-mail)`, `nabungo-mail → nabungo-core`, `nabungo-storage → nabungo-core`. `nabungo-core` tidak mendapat dependensi baru.
