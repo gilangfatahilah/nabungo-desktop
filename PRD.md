@@ -10,7 +10,7 @@ Aplikasi desktop offline untuk mencatat seluruh keuangan pribadi — transaksi, 
 
 **Prinsip produk**
 
-- **Offline-first, local-only.** Tidak ada akun, login, atau network call wajib. App berjalan penuh tanpa internet.
+- **Offline-first, local-only.** Tidak ada akun, login, atau network call wajib. App berjalan penuh tanpa internet. Fitur yang butuh jaringan (mis. auto-capture email, D13) hanya opt-in, mati secara default, dan tidak pernah jadi syarat app berjalan.
 - **Data milik user.** Satu file `.db` yang bisa di-backup, dipindah, dan dibuka dengan tool SQLite apa pun; export CSV/JSON selalu tersedia.
 - **Saldo selalu benar.** Saldo diturunkan dari transaksi (bukan diketik manual), dan setiap transfer tercatat sebagai satu kejadian yang seimbang.
 - **Cepat untuk input harian.** Mencatat satu transaksi < 10 detik dengan keyboard saja.
@@ -28,7 +28,7 @@ Aplikasi desktop offline untuk mencatat seluruh keuangan pribadi — transaksi, 
 **Non-goals v1**
 
 - Sinkronisasi cloud / multi-device dan aplikasi mobile.
-- Koneksi otomatis ke bank (open banking, scraping mutasi).
+- Koneksi otomatis ke bank (open banking, scraping mutasi). Auto-capture dari email notifikasi transaksi (IMAP, opt-in, `EML-01`–`EML-04`, D13) bukan termasuk ini dan direncanakan di v2.
 - Tracking harga pasar realtime untuk saham/reksa dana/kripto (nilai investasi di-update manual).
 - Multi-user / shared household dengan permission.
 - Fitur pajak dan pelaporan SPT.
@@ -51,7 +51,7 @@ Aplikasi desktop offline untuk mencatat seluruh keuangan pribadi — transaksi, 
 
 ## 3. Keputusan yang perlu dikonfirmasi
 
-**D1 dan D6 sudah diputuskan**: Tauri 2 + Vue 3 + shadcn-vue, dan capital allocation sebagai tracker porsi modal saja. Semua keputusan D1–D12 sudah dikonfirmasi.
+**D1 dan D6 sudah diputuskan**: Tauri 2 + Vue 3 + shadcn-vue, dan capital allocation sebagai tracker porsi modal saja. Semua keputusan D1–D13 sudah dikonfirmasi.
 
 | #   | Keputusan                 | Opsi                                                                                                                                                                                                                         | Rekomendasi                                                                                                                                                                       | Status             |
 | --- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
@@ -67,6 +67,7 @@ Aplikasi desktop offline untuk mencatat seluruh keuangan pribadi — transaksi, 
 | D10 | Hutang/piutang            | (a) cukup akun liability (kartu kredit, paylater); (b) + modul utang-piutang ke orang                                                                                                                                        | (a) di MVP; (b) di v1 sebagai tipe akun "Piutang/Hutang" dengan kontak                                                                                                            | Setuju rekomendasi |
 | D11 | Import data lama          | (a) tidak ada; (b) CSV dengan column mapping; (c) importer khusus (Notion export, mutasi bank)                                                                                                                               | (b) di v1; (c) per sumber bila dibutuhkan                                                                                                                                         | Setuju rekomendasi |
 | D12 | Bahasa UI                 | Indonesia, Inggris, keduanya                                                                                                                                                                                                 | Keduanya via i18n; default Indonesia, format angka `Rp 1.250.000`                                                                                                                 | Setuju rekomendasi |
+| D13 | Auto-capture transaksi    | (a) tidak ada; (b) IMAP + App Password Gmail + rule engine lokal + review queue; (c) Gmail API + OAuth; (d) parsing berbasis ML/LLM                                                                                          | (b) di v2, opt-in dan mati default: credential hanya di OS keychain, rule tersimpan di DB, tidak ada transaksi tercatat tanpa konfirmasi user. Brief: `docs/plans/Brief Auto-Capture Transaksi via IMAP.md` | Setuju rekomendasi |
 
 ## 4. Konsep inti dan model domain
 
@@ -170,6 +171,10 @@ MVP berisi 18 requirement yang cukup untuk menggantikan tracker spreadsheet: aku
 | DAT-03 | Data               | Import CSV dengan column mapping, preview, dan deteksi duplikat                                                     | v2    |
 | SEC-01 | Security           | Kunci app dengan password + enkripsi DB (SQLCipher), auto-lock saat idle                                            | v1    |
 | SET-01 | Settings           | Base currency, format tanggal/angka, tanggal awal bulan budget (mis. tanggal gajian 25), tema, bahasa               | v2    |
+| EML-01 | Email capture      | Sync IMAP opt-in dari satu label/folder; credential hanya di OS keychain; read-only (`BODY.PEEK[]`); dedup Message-ID + index | v2    |
+| EML-02 | Email capture      | Rule parsing tersimpan di DB (pola sender/subject/nominal/payee/tanggal, akun & kategori default); email yang tidak cocok masuk log unparsed | v2    |
+| EML-03 | Email capture      | Review queue: confirm / edit lalu confirm / ignore; tidak ada transaksi tercatat tanpa konfirmasi; duplicate hint vs transaksi manual (nominal sama, ±1 hari) | v2    |
+| EML-04 | Email capture      | Rule editor di UI + buat rule dari email unparsed                                                                   | v2    |
 
 ### Acceptance criteria inti
 
@@ -180,6 +185,8 @@ MVP berisi 18 requirement yang cukup untuk menggantikan tracker spreadsheet: aku
 - **Hapus aman.** Hapus transaksi bisa di-undo; menghapus akun/kategori yang terpakai diblokir dan menawarkan arsip/merge.
 - **Backup bisa dipulihkan.** File backup bisa di-restore ke instalasi baru dan menghasilkan saldo identik.
 - **Periode budget custom.** Jika awal bulan budget = tanggal 25, transaksi tanggal 26 Oktober masuk periode "November".
+- **Capture idempoten (v2).** Sync email ulang atau reset cursor karena UIDVALIDITY berubah tidak membuat entri review dobel; email yang di-ignore tidak muncul lagi.
+- **Tanpa jaringan secara default.** Tanpa konfigurasi email, app tidak membuka koneksi jaringan apa pun (firewall test).
 
 ## 6. Skema data SQLite
 
@@ -325,6 +332,62 @@ CREATE INDEX idx_posting_cat     ON posting(category_id);
 CREATE INDEX idx_posting_txn     ON posting(txn_id);
 ```
 
+**Tabel email capture (v2, `EML-01`–`EML-04`)**
+
+Credential email (App Password) **tidak pernah** disimpan di DB, file config, atau log; hanya di OS keychain.
+
+```sql
+CREATE TABLE email_sync_cursor (
+  mailbox        TEXT PRIMARY KEY,           -- label Gmail, mis. "Finance"
+  uid_validity   INTEGER NOT NULL,
+  last_uid       INTEGER NOT NULL DEFAULT 0, -- di-update per email, bukan per batch
+  last_synced_at TEXT
+) STRICT;
+
+CREATE TABLE email_rule (
+  id                  TEXT PRIMARY KEY,
+  name                TEXT NOT NULL,         -- "BCA Debit"
+  sender_pattern      TEXT NOT NULL,         -- "@bca.co.id"
+  subject_regex       TEXT,
+  amount_regex        TEXT NOT NULL,
+  payee_regex         TEXT,
+  date_regex          TEXT,
+  date_format         TEXT,
+  kind                TEXT NOT NULL CHECK (kind IN ('income','expense','transfer')),
+  account_id          TEXT REFERENCES account(id),
+  default_category_id TEXT REFERENCES category(id),
+  priority            INTEGER NOT NULL DEFAULT 0,
+  enabled             INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT
+) STRICT;
+
+CREATE TABLE email_capture (                 -- review queue
+  id          TEXT PRIMARY KEY,
+  message_id  TEXT NOT NULL,
+  idx         INTEGER NOT NULL DEFAULT 0,    -- urutan transaksi dalam satu email
+  rule_id     TEXT REFERENCES email_rule(id),
+  date        TEXT NOT NULL,                 -- YYYY-MM-DD dari body email, bukan header Date
+  amount      INTEGER NOT NULL,              -- satuan minor, selalu positif
+  currency    TEXT NOT NULL,
+  payee       TEXT,
+  raw_snippet TEXT,
+  status      TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','confirmed','ignored')),
+  txn_id      TEXT REFERENCES txn(id),       -- terisi saat confirmed
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE (message_id, idx)                   -- kunci idempotency sync
+) STRICT;
+
+CREATE TABLE email_unparsed (
+  message_id  TEXT PRIMARY KEY,
+  sender      TEXT,
+  subject     TEXT,
+  received_at TEXT,
+  raw_snippet TEXT,
+  created_at  TEXT NOT NULL
+) STRICT;
+```
+
 **Invariant yang dijaga di layer domain (Rust), bukan trigger SQL**
 
 1. `income` / `expense`: setiap posting ke akun wajib punya `category_id` dengan `kind` yang sesuai.
@@ -369,6 +432,7 @@ kasku/
 | CSV          | `csv`                                                           | Import/export                                                     |
 | Lokasi data  | `directories`                                                   | Linux: `~/.local/share/kasku/`, Windows: `%APPDATA%\kasku\`       |
 | Logging      | `tracing`, `tracing-appender`                                   | Log lokal berputar, tanpa telemetry                               |
+| Email (v2)   | client IMAP + `mail-parser`, `html2text`, `regex`, `keyring`    | Hanya untuk `EML-*`; TLS lewat OpenSSL yang sudah dibundel untuk SQLCipher. Rule engine murni boleh di `nabungo-core`; IMAP & keyring di `nabungo-app` (atau crate terpisah), tidak di core |
 
 **Pola akses database**
 
@@ -389,7 +453,7 @@ kasku/
 
 | Area          | Requirement                                                                                                        | Target                                               |
 | ------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| Offline       | Tidak ada network call saat runtime; CSP Tauri memblokir semua origin eksternal                                    | 0 request keluar (diverifikasi dengan firewall test) |
+| Offline       | Tidak ada network call saat runtime kecuali fitur opt-in (auto-capture email `EML-*`, cek update); CSP Tauri tetap memblokir semua origin eksternal (koneksi IMAP dari Rust, bukan webview) | 0 request keluar dengan konfigurasi default (diverifikasi dengan firewall test) |
 | Performa      | Startup sampai dashboard tampil                                                                                    | < 1,5 detik dengan 50.000 transaksi                  |
 | Performa      | Simpan transaksi / buka daftar transaksi (paginasi)                                                                | < 100 ms / < 200 ms                                  |
 | Performa      | Laporan 12 bulan & net worth over time                                                                             | < 500 ms dengan 50.000 transaksi                     |
@@ -399,6 +463,7 @@ kasku/
 | Keamanan      | Opsi SQLCipher + master password (Argon2id untuk derivasi key); auto-lock idle 5 menit (bisa diatur)               | Tanpa password, file DB tidak terbaca                |
 | Keamanan      | Tidak ada password recovery: tampilkan peringatan jelas + opsi recovery key yang dicetak                           | —                                                    |
 | Privasi       | Tidak ada telemetry/analytics; crash log hanya lokal                                                               | —                                                    |
+| Privasi       | Credential email (`EML-01`) hanya di OS keychain, tidak di DB/config/log; akses mailbox read-only (`BODY.PEEK[]`)  | —                                                    |
 | Portabilitas  | Mode portable: folder data di samping executable (opsional)                                                        | Pindah laptop = copy satu folder                     |
 | Aksesibilitas | Navigasi penuh dengan keyboard, kontras WCAG AA, ukuran font bisa diubah                                           | —                                                    |
 | i18n          | Bahasa ID/EN; format angka & tanggal mengikuti locale (`Rp 1.250.000`, `12 Okt 2026`)                              | —                                                    |
@@ -422,7 +487,8 @@ Layout dua kolom: sidebar kiri berisi navigasi + daftar akun per group dengan sa
 | Alokasi modal  | Donut porsi aktual, tabel target vs aktual vs selisih, riwayat porsi bulanan; kelola bucket dan mapping akun                 | `G A`                    |
 | Laporan        | Income vs expense, breakdown kategori, tren, net worth over time; filter periode                                             | `G R`                    |
 | Terjadwal      | Daftar recurring rule dan transaksi jatuh tempo (konfirmasi / lewati / edit)                                                 | —                        |
-| Pengaturan     | Umum, keamanan, backup & restore, import/export, tampilan                                                                    | `Ctrl+,`                 |
+| Inbox (v2)     | Hasil auto-capture email: tab Pending (confirm / edit / ignore, duplicate hint) dan Unparsed (buat rule dari email)          | —                        |
+| Pengaturan     | Umum, keamanan, backup & restore, import/export, tampilan, email capture (v2: akun, label, rule, sync)                         | `Ctrl+,`                 |
 
 **Detail interaksi penting**
 
@@ -466,3 +532,7 @@ Satu hal yang disarankan: pakai MVP sendiri secara paralel dengan tracker lama s
 | Scope creep (holdings, sync, bank import)            | MVP tidak pernah selesai                         | Non-goals eksplisit; gate per fase                             |
 | WebView berbeda per OS (WebKitGTK vs WebView2)       | Bug tampilan khusus Linux                        | Uji UI di Fedora & Windows di CI sejak MVP                     |
 | Definisi periode budget custom (tgl gajian)          | Angka budget membingungkan                       | Satu fungsi `period_of(date)` di `core` dengan test tabel      |
+| Format email bank berubah tanpa pemberitahuan (v2)   | Transaksi tidak ter-capture                      | Log `email_unparsed` + `raw_snippet`, rule bisa diedit di UI   |
+| Google membatasi App Password / IMAP (v2)            | Auto-capture berhenti                            | Error login yang jelas; fallback import CSV (DAT-03)           |
+| OS keychain tidak tersedia (Linux minimal) (v2)      | Credential tidak bisa disimpan                   | Error jelas; tidak ada fallback simpan ke DB/file              |
+| Dependensi IMAP/TLS menambah ukuran installer (v2)   | Melewati batas < 15 MB                           | Ukur di spike; pakai OpenSSL yang sudah dibundel               |
