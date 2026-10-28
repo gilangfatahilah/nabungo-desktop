@@ -458,6 +458,7 @@ Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. La
 - Badge `Mungkin duplikat` (garis warning) adalah tombol yang membuka dialog duplikat.
 - `Catat` (utama, kecil) hanya bila draft siap dicatat sekali klik: akun & kategori/tujuan aktif dan tanpa kandidat duplikat. `Tinjau` (outline, kecil) selalu ada. `⋯` berisi `Abaikan`, plus `Hubungkan ke transaksi…` bila ada duplikat.
 - Abaikan (satu maupun massal) memunculkan toast dengan aksi `Urungkan`.
+- `Tinjau` membuka sheet kanan "Tinjau transaksi" berisi form transaksi yang sama (§7.4), terisi dari draft. Di atas form: kotak warning "Mirip dengan transaksi yang sudah ada" berisi kandidat (tanggal, payee, akun, nominal, `Hubungkan`) bila ada, lalu "Email asli" yang tertutup secara default. Isian form tidak tertimpa saat daftar dimuat ulang. Badge duplikat membuka dialog "Kemungkinan duplikat" dengan daftar kandidat yang sama.
 - Tab Gagal dibaca: baris subjek ("(tanpa subjek)" bila kosong) + pengirim + waktu terima; klik membuka cuplikan isi. Hanya dibaca.
 - Email capture belum aktif dan tidak ada item: empty state dengan link `Buka Pengaturan`. Item sidebar dan palet perintah hanya muncul bila email aktif atau masih ada item.
 

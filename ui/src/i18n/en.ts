@@ -196,6 +196,12 @@ export default {
     notConfiguredTitle: 'Email capture is off',
     notConfiguredAction: 'Open Settings',
     unparsedEmpty: 'No unreadable emails',
+    reviewTitle: 'Review transaction',
+    originalEmail: 'Original email',
+    duplicatesHint: 'Similar to an existing transaction',
+    duplicatesTitle: 'Possible duplicates',
+    link: 'Link',
+    linked: 'Linked to the existing transaction',
     noSubject: '(no subject)',
   },
   palette: {

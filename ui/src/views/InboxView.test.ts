@@ -8,6 +8,7 @@ import id from '@/i18n/id'
 import * as ipc from '@/ipc'
 import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import { routes } from '@/router'
+import { useInboxStore } from '@/stores/inbox'
 import InboxView from './InboxView.vue'
 
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
@@ -22,7 +23,7 @@ const row = (captureId: string) => $(`[data-testid="capture-row"][data-capture-i
 let acc = ''
 let cat = ''
 
-const seed = (cid: string, over: { date?: string; payee?: string | null; categoryId?: string | null } = {}) => ({
+const seed = (cid: string, over: { date?: string; payee?: string | null; categoryId?: string | null; amount?: number } = {}) => ({
   id: cid, kind: 'expense' as const, date: '2026-05-09', amount: 41_700, payee: `Toko ${cid}`, accountId: acc,
   toAccountId: null, categoryId: cat, ruleName: 'BCA QRIS', snippet: null, ...over,
 })
@@ -172,5 +173,33 @@ describe('InboxView', () => {
     const link = [...document.body.querySelectorAll('a')].find((a) => a.textContent?.trim() === id.inbox.notConfiguredAction)!
     expect(link.getAttribute('href')).toContain('/settings')
     expect($('[role="tablist"]')).toBeNull()
+  })
+
+  it('reload_keeps_open_sheet', async () => {
+    __seedEmailInbox({ captures: [seed('k-1', { amount: 5_555 })] })
+    await mountView()
+    ;(row('k-1')!.querySelector('[data-testid="capture-review"]') as HTMLElement).click()
+    await flushPromises()
+    await flushPromises()
+    const payee = $('#txn-payee') as HTMLInputElement
+    payee.value = 'Edit baru'
+    payee.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    await useInboxStore().reload()
+    await flushPromises()
+    expect(($('#txn-payee') as HTMLInputElement).value).toBe('Edit baru')
+    expect(document.body.textContent).toContain(id.inbox.reviewTitle)
+  })
+
+  it('duplicate_badge_opens_dialog', async () => {
+    await ipc.createTxn({ kind: 'expense', date: '2026-03-03', accountId: acc, toAccountId: null, amount: 66_000,
+      splits: [{ categoryId: cat, amount: 66_000, memo: null }], fee: null, payee: 'Warung IV', note: null, tags: [] })
+    __seedEmailInbox({ captures: [seed('d-1', { amount: 66_000, date: '2026-03-03' })] })
+    await mountView()
+    expect(row('d-1')!.querySelector('[data-testid="capture-record"]')).toBeNull()
+    ;(row('d-1')!.querySelector('[data-testid="capture-duplicates"]') as HTMLElement).click()
+    await flushPromises()
+    expect($('[role="dialog"]')!.textContent).toContain(id.inbox.duplicatesTitle)
+    expect($('[data-testid="duplicate-row"]')!.textContent).toContain('Warung IV')
   })
 })

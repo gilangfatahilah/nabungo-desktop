@@ -196,6 +196,12 @@ export default {
     notConfiguredTitle: 'Email capture belum aktif',
     notConfiguredAction: 'Buka Pengaturan',
     unparsedEmpty: 'Tidak ada email yang gagal dibaca',
+    reviewTitle: 'Tinjau transaksi',
+    originalEmail: 'Email asli',
+    duplicatesHint: 'Mirip dengan transaksi yang sudah ada',
+    duplicatesTitle: 'Kemungkinan duplikat',
+    link: 'Hubungkan',
+    linked: 'Dihubungkan ke transaksi yang ada',
     noSubject: '(tanpa subjek)',
   },
   palette: {

@@ -6,6 +6,8 @@ import { toast } from 'vue-sonner'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import CaptureRow from '@/components/inbox/CaptureRow.vue'
+import CaptureSheet from '@/components/inbox/CaptureSheet.vue'
+import DuplicateDialog from '@/components/inbox/DuplicateDialog.vue'
 import IgnoreUntilDialog from '@/components/inbox/IgnoreUntilDialog.vue'
 import UnparsedList from '@/components/inbox/UnparsedList.vue'
 import { Button } from '@/components/ui/button'
@@ -32,7 +34,6 @@ const tab = ref<'pending' | 'unparsed'>('pending')
 const busy = ref<string | null>(null)
 const syncing = ref(false)
 const ignoreUntilOpen = ref(false)
-// Diisi Task 5 (CaptureSheet / DuplicateDialog).
 const reviewing = ref<CaptureDto | null>(null)
 const dupOf = ref<CaptureDto | null>(null)
 
@@ -165,4 +166,6 @@ async function syncNow() {
   </template>
 
   <IgnoreUntilDialog v-model:open="ignoreUntilOpen" :captures="store.pending" @submit="ignoreUntil" />
+  <CaptureSheet :capture="reviewing" @close="reviewing = null" />
+  <DuplicateDialog :capture="dupOf" @close="dupOf = null" />
 </template>
