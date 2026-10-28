@@ -7,7 +7,9 @@ use time::{OffsetDateTime, UtcOffset};
 
 use crate::email_sync::{LedgerAccess, MailSource, SourceError, SyncError, SyncProgress};
 use crate::secret::SecretStore;
-use crate::{AppError, SyncSummary, normalize_address, normalize_mailbox, sync_mailbox_shared};
+use crate::{
+    AppError, Ledger, SyncSummary, normalize_address, normalize_mailbox, sync_mailbox_shared,
+};
 
 /// Membuka sumber email untuk `(address, password)`; di app = `ImapSource::connect` ke Gmail.
 pub type Connect<'a> = &'a dyn Fn(&str, &str) -> Result<Box<dyn MailSource>, SourceError>;
@@ -86,8 +88,13 @@ pub fn run_email_sync<L: LedgerAccess>(
     };
     let password = secrets.get(&address)?.ok_or(AppError::EmailNotConfigured)?;
     let mut source = connect(&address, &password)?;
+    let ledger = SameAccount {
+        inner: ledger,
+        address: &address,
+        mailbox: &settings.mailbox,
+    };
     let summary = sync_mailbox_shared(
-        ledger,
+        &ledger,
         source.as_mut(),
         &settings.mailbox,
         local_offset,
@@ -97,8 +104,33 @@ pub fn run_email_sync<L: LedgerAccess>(
     Ok(summary)
 }
 
+/// Ledger yang menghentikan sync (`Interrupted`) begitu akun diputus atau diganti di tengah
+/// putaran; diperiksa di bawah lock yang sama dengan tulisan berikutnya.
+struct SameAccount<'a, L> {
+    inner: &'a L,
+    address: &'a str,
+    mailbox: &'a str,
+}
+
+impl<L: LedgerAccess> LedgerAccess for SameAccount<'_, L> {
+    fn with_ledger<R>(
+        &self,
+        f: impl FnOnce(&mut Ledger) -> Result<R, AppError>,
+    ) -> Result<R, SyncError> {
+        self.inner
+            .with_ledger(|l| {
+                let s = l.email_settings()?;
+                let same = s.enabled
+                    && s.address.as_deref() == Some(self.address)
+                    && s.mailbox == self.mailbox;
+                if same { f(l).map(Some) } else { Ok(None) }
+            })?
+            .ok_or(SyncError::Interrupted)
+    }
+}
+
 /// Kapan sync otomatis berikutnya jatuh tempo. Login gagal menjeda sync otomatis sampai
-/// `reset` (connect ulang), agar Google tidak memblokir akun karena login gagal berulang.
+/// `resume` (connect ulang) atau sync manual berhasil, agar Google tidak memblokir akun karena login gagal berulang.
 #[derive(Debug, Default)]
 pub struct SyncSchedule {
     last_attempt: Option<Instant>,
@@ -115,13 +147,20 @@ impl SyncSchedule {
 
     pub fn record(&mut self, now: Instant, result: &Result<SyncSummary, SyncError>) {
         self.last_attempt = Some(now);
-        if matches!(result, Err(SyncError::Source(SourceError::Auth))) {
-            self.paused = true;
+        match result {
+            Ok(_) => self.paused = false,
+            Err(SyncError::Source(SourceError::Auth)) => self.paused = true,
+            Err(_) => {}
         }
     }
 
-    /// Putaran berikutnya segera (unlock, restore, connect).
+    /// Putaran berikutnya segera (unlock, restore); jeda karena login gagal tetap (K8).
     pub fn reset(&mut self) {
+        self.last_attempt = None;
+    }
+
+    /// Akun disimpan ulang atau diputus: jeda dicabut, putaran berikutnya segera.
+    pub fn resume(&mut self) {
         *self = Self::default();
     }
 }
@@ -148,12 +187,16 @@ mod tests {
         l.with_ledger(|l| l.email_settings()).unwrap()
     }
 
+    type FetchHook = Box<dyn FnMut(usize)>;
+
     /// Fake `Connect`: mencatat password yang diterima; `fail` dipakai sebagai error.
     struct FakeConnect {
         calls: Cell<u32>,
         passwords: RefCell<Vec<String>>,
         fail: RefCell<Option<SourceError>>,
         messages: u32,
+        /// Dipasang sebagai `FakeSource::on_fetch` pada koneksi berikutnya.
+        hook: RefCell<Option<FetchHook>>,
     }
 
     impl FakeConnect {
@@ -163,6 +206,7 @@ mod tests {
                 passwords: RefCell::new(vec![]),
                 fail: RefCell::new(None),
                 messages,
+                hook: RefCell::new(None),
             }
         }
 
@@ -171,7 +215,11 @@ mod tests {
             self.passwords.borrow_mut().push(password.to_owned());
             match self.fail.borrow_mut().take() {
                 Some(e) => Err(e),
-                None => Ok(Box::new(FakeSource::new(self.messages))),
+                None => {
+                    let mut src = FakeSource::new(self.messages);
+                    src.on_fetch = self.hook.borrow_mut().take();
+                    Ok(Box::new(src))
+                }
             }
         }
     }
@@ -304,6 +352,47 @@ mod tests {
     }
 
     #[test]
+    fn changing_address_resets_cursor() {
+        let (l, s, fc) = (ledger(), MemorySecretStore::default(), FakeConnect::new(2));
+        connect_ok(&l, &s, &fc);
+        run_email_sync(&l, &s, &|a, p| fc.call(a, p), WIB, &mut |_| {}).unwrap();
+        let cursor =
+            |l: &Mutex<Option<Ledger>>| l.with_ledger(|l| l.email_cursor("Finance")).unwrap();
+        assert!(cursor(&l).is_some());
+
+        // Alamat sama (ganti label lalu kembali): cursor tetap.
+        connect_email(&l, &s, &|a, p| fc.call(a, p), ADDR, "Finance", None).unwrap();
+        assert!(cursor(&l).is_some());
+
+        // Akun lain dengan label sama: UIDVALIDITY bisa kebetulan sama, jadi cursor dibuang.
+        let other = "lain@gmail.com";
+        connect_email(&l, &s, &|a, p| fc.call(a, p), other, "Finance", Some("pw2")).unwrap();
+        assert_eq!(cursor(&l), None);
+        let sum = run_email_sync(&l, &s, &|a, p| fc.call(a, p), WIB, &mut |_| {}).unwrap();
+        assert_eq!((sum.new_items, sum.seen), (0, 2));
+    }
+
+    #[test]
+    fn disconnect_mid_sync_stops_without_marking() {
+        let l = std::sync::Arc::new(ledger());
+        let (s, fc) = (MemorySecretStore::default(), FakeConnect::new(120));
+        connect_ok(&l, &s, &fc);
+        let shared = l.clone();
+        *fc.hook.borrow_mut() = Some(Box::new(move |i| {
+            if i == 1 {
+                shared.with_ledger(|l| l.disable_email()).unwrap();
+            }
+        }));
+        let err = run_email_sync(&*l, &s, &|a, p| fc.call(a, p), WIB, &mut |_| {}).unwrap_err();
+        assert!(matches!(err, SyncError::Interrupted), "{err:?}");
+        let pending = l
+            .with_ledger(|l| l.list_captures(CaptureStatus::Pending))
+            .unwrap();
+        assert_eq!(pending.len(), 50);
+        assert_eq!(settings(&l).last_sync_at, None);
+    }
+
+    #[test]
     fn disconnect_removes_secret_keeps_data() {
         let (l, s, fc) = (ledger(), MemorySecretStore::default(), FakeConnect::new(2));
         connect_ok(&l, &s, &fc);
@@ -383,7 +472,11 @@ mod tests {
         sch.record(t0, &Err(SyncError::Source(SourceError::Auth)));
         assert!(sch.paused);
         assert!(!sch.due(t0 + SYNC_INTERVAL * 100));
+        // Unlock/restore tidak mencoba ulang password yang ditolak (K8).
         sch.reset();
+        assert!(sch.paused);
+        assert!(!sch.due(t0));
+        sch.resume();
         assert!(sch.due(t0));
 
         sch.record(
@@ -392,6 +485,16 @@ mod tests {
         );
         assert!(!sch.paused);
         assert!(!sch.due(t0 + Duration::from_secs(60)));
+        assert!(sch.due(t0 + SYNC_INTERVAL));
+    }
+
+    #[test]
+    fn manual_success_clears_pause() {
+        let t0 = Instant::now();
+        let mut sch = SyncSchedule::default();
+        sch.record(t0, &Err(SyncError::Source(SourceError::Auth)));
+        sch.record(t0, &Ok(SyncSummary::default()));
+        assert!(!sch.paused);
         assert!(sch.due(t0 + SYNC_INTERVAL));
     }
 

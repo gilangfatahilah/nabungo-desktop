@@ -1,7 +1,7 @@
 //! State yang di-manage Tauri.
 
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
@@ -39,6 +39,8 @@ pub struct EmailRuntime {
     /// Dibaca sekali di awal `run()` (K10).
     pub local_offset: UtcOffset,
     pub thread_started: AtomicBool,
+    /// Naik setiap connect/disconnect; hasil sync yang dimulai sebelumnya tidak dicatat.
+    pub generation: AtomicU64,
 }
 
 impl EmailRuntime {
@@ -49,6 +51,7 @@ impl EmailRuntime {
             last_error: Mutex::new(None),
             local_offset,
             thread_started: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
         }
     }
 }

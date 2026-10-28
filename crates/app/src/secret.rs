@@ -22,8 +22,8 @@ impl KeyringStore {
     /// Memasang store OS sebagai default `keyring_core` sekali per proses. Hanya dipanggil
     /// saat email dikonfigurasi/di-sync, tidak saat startup (koneksi D-Bus tidak dibuka).
     pub fn new() -> Result<Self, AppError> {
-        static INIT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let ok = *INIT.get_or_init(|| match native_store() {
+        static INSTALLED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+        let ok = install_once(&INSTALLED, || match native_store() {
             Ok(store) => {
                 keyring_core::set_default_store(store);
                 true
@@ -43,6 +43,16 @@ impl KeyringStore {
     fn entry(&self, account: &str) -> Result<keyring_core::Entry, AppError> {
         keyring_core::Entry::new(SERVICE, account).map_err(keychain_error)
     }
+}
+
+/// Menjalankan `install` sampai berhasil sekali; kegagalan tidak disimpan, jadi keyring daemon
+/// yang baru dijalankan user terpakai tanpa restart app.
+fn install_once(installed: &std::sync::Mutex<bool>, install: impl FnOnce() -> bool) -> bool {
+    let mut done = installed.lock().unwrap_or_else(|e| e.into_inner());
+    if !*done {
+        *done = install();
+    }
+    *done
 }
 
 #[cfg(target_os = "linux")]
@@ -139,6 +149,25 @@ impl SecretStore for MemorySecretStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_install_is_retried_until_success() {
+        let installed = std::sync::Mutex::new(false);
+        let mut calls = 0;
+        assert!(!install_once(&installed, || {
+            calls += 1;
+            false
+        }));
+        assert!(install_once(&installed, || {
+            calls += 1;
+            true
+        }));
+        assert!(install_once(&installed, || {
+            calls += 1;
+            false
+        }));
+        assert_eq!(calls, 2);
+    }
 
     #[test]
     fn get_missing_is_none() {

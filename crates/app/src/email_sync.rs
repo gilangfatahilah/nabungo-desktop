@@ -158,7 +158,7 @@ pub(crate) mod tests {
         validity: u32,
         messages: Vec<Fetched>,
         /// Dipanggil di awal tiap `fetch_after` dengan indeks panggilan (0 = pertama).
-        on_fetch: Option<Box<dyn FnMut(usize)>>,
+        pub(crate) on_fetch: Option<Box<dyn FnMut(usize)>>,
         /// Gagal setelah sejumlah pesan terkirim (total sejak dibuat).
         fail_after: Option<usize>,
         delivered: usize,

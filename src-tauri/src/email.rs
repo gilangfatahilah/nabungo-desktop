@@ -14,7 +14,7 @@ use tauri_specta::Event;
 use crate::dto::{EmailSyncDone, EmailSyncProgress};
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::{FIRST_TICK_MAX_WAIT, READY_POLL, wait_until_ready};
-use crate::state::AppState;
+use crate::state::{AppState, EmailRuntime};
 
 const IMAP_HOST: &str = "imap.gmail.com";
 const IMAP_PORT: u16 = 993;
@@ -75,6 +75,7 @@ pub fn run_sync(app: &AppHandle) -> Result<SyncSummary, IpcError> {
     let state = app.state::<AppState>();
     let rt = &state.email;
     let _running = RunningGuard::acquire(&rt.running)?;
+    let started = rt.generation.load(Ordering::SeqCst);
     let result = email_runner::run_email_sync(
         &state.ledger,
         &LazyKeyring,
@@ -82,17 +83,7 @@ pub fn run_sync(app: &AppHandle) -> Result<SyncSummary, IpcError> {
         rt.local_offset,
         &mut |p| emit(app, EmailSyncProgress::from(p)),
     );
-    rt.schedule
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .record(Instant::now(), &result);
-    // Terkunci di tengah sync bukan kegagalan sync; status sebelumnya dipertahankan.
-    let locked = matches!(result, Err(SyncError::Locked));
-    let result = result.map_err(IpcError::from);
-    if !locked {
-        *rt.last_error.lock().unwrap_or_else(|e| e.into_inner()) =
-            result.as_ref().err().map(|e| e.code);
-    }
+    let result = record_outcome(rt, started, Instant::now(), result);
     match &result {
         Ok(summary) => tracing::info!(
             new_items = summary.new_items,
@@ -108,6 +99,31 @@ pub fn run_sync(app: &AppHandle) -> Result<SyncSummary, IpcError> {
             error: result.as_ref().err().cloned(),
         },
     );
+    result
+}
+
+/// Mencatat hasil ke jadwal dan `last_error`, kecuali akun diganti/diputus selama sync
+/// berjalan (`started` ≠ generasi sekarang).
+fn record_outcome(
+    rt: &EmailRuntime,
+    started: u64,
+    now: Instant,
+    result: Result<SyncSummary, SyncError>,
+) -> Result<SyncSummary, IpcError> {
+    if rt.generation.load(Ordering::SeqCst) != started {
+        return result.map_err(IpcError::from);
+    }
+    rt.schedule
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .record(now, &result);
+    // Terkunci di tengah sync bukan kegagalan sync; status sebelumnya dipertahankan.
+    let locked = matches!(result, Err(SyncError::Locked));
+    let result = result.map_err(IpcError::from);
+    if !locked {
+        *rt.last_error.lock().unwrap_or_else(|e| e.into_inner()) =
+            result.as_ref().err().map(|e| e.code);
+    }
     result
 }
 
@@ -141,17 +157,16 @@ pub fn disconnect(app: &AppHandle) -> Result<(), IpcError> {
 }
 
 fn reset_status(state: &AppState) {
-    state
-        .email
-        .schedule
+    account_changed(&state.email);
+}
+
+fn account_changed(rt: &EmailRuntime) {
+    rt.generation.fetch_add(1, Ordering::SeqCst);
+    rt.schedule
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .reset();
-    *state
-        .email
-        .last_error
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = None;
+        .resume();
+    *rt.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 /// DB baru terbuka (startup, unlock, restore): putaran segera, thread dijalankan sekali.
@@ -238,6 +253,25 @@ mod tests {
         assert!(!tick_should_run(true, true, true, false, true));
         assert!(!tick_should_run(true, true, false, true, true));
         assert!(!tick_should_run(true, true, false, false, false));
+    }
+
+    #[test]
+    fn stale_sync_does_not_overwrite_status_after_connect() {
+        let rt = EmailRuntime::new(nabungo_app::UtcOffset::UTC);
+        let auth = || Err(SyncError::Source(SourceError::Auth));
+        let started = rt.generation.load(Ordering::SeqCst);
+        account_changed(&rt);
+        let _ = record_outcome(&rt, started, Instant::now(), auth());
+        assert!(!rt.schedule.lock().unwrap().paused);
+        assert_eq!(*rt.last_error.lock().unwrap(), None);
+
+        let current = rt.generation.load(Ordering::SeqCst);
+        let _ = record_outcome(&rt, current, Instant::now(), auth());
+        assert!(rt.schedule.lock().unwrap().paused);
+        assert_eq!(
+            *rt.last_error.lock().unwrap(),
+            Some(ErrorCode::EmailAuthFailed)
+        );
     }
 
     #[test]

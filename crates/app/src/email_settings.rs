@@ -1,7 +1,7 @@
 //! Setting akun email capture (EML-01). Hanya alamat, label, dan status; App Password ada di
 //! OS keychain (`crate::secret`), tidak pernah di tabel `setting`.
 
-use nabungo_storage::setting;
+use nabungo_storage::{email, setting};
 use time::OffsetDateTime;
 
 use crate::{AppError, Ledger};
@@ -60,6 +60,10 @@ impl Ledger {
     /// Menyimpan akun dan mengaktifkan sync; input sudah dinormalisasi.
     pub fn save_email_account(&mut self, address: &str, mailbox: &str) -> Result<(), AppError> {
         let tx = self.conn.transaction()?;
+        // Cursor milik akun lain tidak berlaku: UIDVALIDITY Gmail bisa kebetulan sama.
+        if setting::get_setting(&tx, KEY_ADDRESS)?.is_some_and(|old| old != address) {
+            email::clear_cursors(&tx)?;
+        }
         setting::set_setting(&tx, KEY_ADDRESS, address)?;
         setting::set_setting(&tx, KEY_MAILBOX, mailbox)?;
         setting::set_setting(&tx, KEY_ENABLED, "1")?;
