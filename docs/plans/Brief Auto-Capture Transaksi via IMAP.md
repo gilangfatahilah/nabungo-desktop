@@ -117,6 +117,8 @@ Dikerjakan bertahap, dan tiap tahap bisa dipakai sendiri sebelum lanjut ke tahap
 
 **Status (2026-10-27):** milestone 1–3 selesai di Fase 9a (`docs/plans/2026-10-27-fase-9a-email-capture-backend.md`): crate `nabungo-mail`, rule bawaan BCA + Jago (diuji pada 348 email asli: 0 unparsed), tabel `email_*`, review queue di `nabungo-app`, CLI `capture_sync`. Milestone 4 → 9b, 5–6 → 9c.
 
+**Status (2026-10-28):** milestone 4 selesai di Fase 9b (`docs/plans/2026-10-28-fase-9b-email-capture-tauri.md`): App Password di OS keychain, `connect_email`/`disconnect_email`/`sync_email`, sync saat app dibuka lalu tiap 15 menit (thread `email-sync`), kartu Email di Settings. Inbox review tetap di 9c.
+
 1. **Spike IMAP**: CLI kecil di Rust yang login, `SELECT "Finance"`, dan mencetak subject 10 email terakhir.
 2. **Parser satu bank**: satu rule hardcoded untuk bank yang paling sering dipakai, diuji dengan contoh email asli yang sudah disensor.
 3. **Schema + rule engine**: tabel di atas, rule dibaca dari DB, dedup via Message-ID, log unparsed.
@@ -128,4 +130,4 @@ Dikerjakan bertahap, dan tiap tahap bisa dipakai sendiri sebelum lanjut ke tahap
 
 - [x] Bank dan e-money mana saja yang dipakai dan mengirim email per transaksi? → BCA dan Jago (9a).
 - [x] Rule editor perlu UI di v1, atau cukup seed SQL dulu? → seed dulu, editor nanti (EML-04).
-- [ ] Interval sync berkala berapa menit saat app terbuka?
+- [x] Interval sync berkala berapa menit saat app terbuka? → 15 menit, plus sekali saat app dibuka/di-unlock (9b).
