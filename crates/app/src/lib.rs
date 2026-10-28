@@ -22,6 +22,7 @@ mod budget_alerts;
 mod capture;
 mod categories;
 mod defaults;
+mod email_settings;
 mod email_sync;
 mod export;
 pub mod fixture;
@@ -57,6 +58,7 @@ pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
 pub use capture::{CaptureDraft, IngestOutcome};
 pub use categories::CategoryFields;
+pub use email_settings::{DEFAULT_MAILBOX, EmailSettings, normalize_address, normalize_mailbox};
 pub use email_sync::{
     Fetched, MailSource, SYNC_BATCH, SourceError, SyncError, SyncSummary, sync_mailbox,
 };

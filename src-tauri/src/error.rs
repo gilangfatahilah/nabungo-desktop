@@ -77,6 +77,9 @@ pub enum ErrorCode {
     OccurrenceStale,
     CaptureNotPending,
     KeychainUnavailable,
+    EmailAddressInvalid,
+    EmailMailboxEmpty,
+    EmailNotConfigured,
     RecurrenceInterval,
     RecurrenceUntil,
     FileIo,
@@ -235,6 +238,9 @@ impl From<AppError> for IpcError {
             AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
             AppError::CaptureNotPending => Self::code(ErrorCode::CaptureNotPending),
             AppError::KeychainUnavailable => Self::code(ErrorCode::KeychainUnavailable),
+            AppError::EmailAddressInvalid => Self::code(ErrorCode::EmailAddressInvalid),
+            AppError::EmailMailboxEmpty => Self::code(ErrorCode::EmailMailboxEmpty),
+            AppError::EmailNotConfigured => Self::code(ErrorCode::EmailNotConfigured),
             AppError::Recurrence(err) => Self::code(match err {
                 RecurrenceError::Interval => ErrorCode::RecurrenceInterval,
                 RecurrenceError::UntilBeforeStart => ErrorCode::RecurrenceUntil,
@@ -343,12 +349,16 @@ mod tests {
     }
 
     #[test]
-    fn keychain_unavailable_maps_to_code() {
-        let e = IpcError::from(AppError::KeychainUnavailable);
-        assert_eq!(
-            serde_json::to_value(e.code).unwrap(),
-            "keychain_unavailable"
-        );
+    fn email_app_errors_map_to_codes() {
+        for (e, code) in [
+            (AppError::KeychainUnavailable, "keychain_unavailable"),
+            (AppError::EmailAddressInvalid, "email_address_invalid"),
+            (AppError::EmailMailboxEmpty, "email_mailbox_empty"),
+            (AppError::EmailNotConfigured, "email_not_configured"),
+        ] {
+            let e = IpcError::from(e);
+            assert_eq!(serde_json::to_value(e.code).unwrap(), code);
+        }
     }
 
     #[test]

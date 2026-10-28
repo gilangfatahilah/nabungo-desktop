@@ -110,6 +110,13 @@ pub enum AppError {
     /// OS keychain (Secret Service / Credential Manager) tidak bisa dipakai.
     #[error("system keychain unavailable")]
     KeychainUnavailable,
+    #[error("invalid email address")]
+    EmailAddressInvalid,
+    #[error("email label is empty")]
+    EmailMailboxEmpty,
+    /// Email capture belum dihubungkan (atau App Password tidak ada di keychain).
+    #[error("email capture is not configured")]
+    EmailNotConfigured,
 }
 
 impl From<StorageError> for AppError {
