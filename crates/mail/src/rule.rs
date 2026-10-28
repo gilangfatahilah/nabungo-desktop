@@ -71,6 +71,8 @@ pub enum RuleField {
     Payee,
     Date,
     DateFormat,
+    /// Akun lawan diisi pada rule non-transfer (diperiksa `nabungo-app`, bukan [`validate`]).
+    CounterAccount,
 }
 
 /// Format yang dikenali [`parse_date`].

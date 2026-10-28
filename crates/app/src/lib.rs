@@ -22,6 +22,7 @@ mod budget_alerts;
 mod capture;
 mod categories;
 mod defaults;
+mod email_rules;
 pub mod email_runner;
 mod email_settings;
 mod email_sync;
@@ -59,6 +60,9 @@ pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
 pub use capture::{CaptureDraft, CaptureItem, DuplicateTxn, InboxSummary, IngestOutcome};
 pub use categories::CategoryFields;
+pub use email_rules::{
+    EmailRuleInput, EmailRuleItem, ReparseSummary, RuleSample, RuleSaved, RuleTest,
+};
 pub use email_settings::{DEFAULT_MAILBOX, EmailSettings, normalize_address, normalize_mailbox};
 pub use email_sync::{
     Fetched, LedgerAccess, MailSource, SYNC_BATCH, SourceError, SyncError, SyncProgress,
@@ -74,7 +78,9 @@ pub use nabungo_core::{
     FormBody, MoneyError, NetWorth, PeriodError, PeriodStartDay, SiblingWarning, SplitLine, Target,
     TxnError, TxnKind, Unallocated, parse_amount,
 };
-pub use nabungo_mail::rule::CompiledRules;
+pub use nabungo_mail::rule::{
+    Captured, CompiledRules, DATE_FORMATS, Rule, RuleField, RuleKind, RuleTrace, TraceFail,
+};
 pub use nabungo_storage::DbKey;
 pub use nabungo_storage::account::{AccountRow, Opening};
 pub use nabungo_storage::account_group::AccountGroupRow;

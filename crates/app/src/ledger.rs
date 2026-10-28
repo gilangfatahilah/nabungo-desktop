@@ -107,6 +107,9 @@ pub enum AppError {
     /// Capture email sudah dikonfirmasi/diabaikan.
     #[error("email capture was already processed")]
     CaptureNotPending,
+    /// Rule email tidak valid; field yang salah untuk ditandai di form (K3).
+    #[error("email rule field {0:?} is invalid")]
+    EmailRuleInvalid(nabungo_mail::rule::RuleField),
     /// Batal-abaikan untuk capture yang sudah tidak berstatus ignored.
     #[error("email capture is not ignored")]
     CaptureNotIgnored,

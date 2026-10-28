@@ -670,6 +670,7 @@ export default {
     occurrence_stale: 'This occurrence was already handled. The list has been reloaded.',
     capture_not_pending: 'This email transaction has already been processed.',
     capture_not_ignored: 'This item can no longer be restored because it was already processed.',
+    email_rule_invalid: 'Some rule fields are not valid. Check the highlighted field.',
     keychain_unavailable: 'System keychain unavailable; the App Password cannot be saved.',
     email_address_invalid: 'Invalid email address.',
     email_mailbox_empty: 'Label is required.',

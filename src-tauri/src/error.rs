@@ -4,7 +4,7 @@ use nabungo_app::{
     AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, RecurrenceError,
     TxnError,
 };
-use nabungo_app::{AppError, SourceError, SyncError};
+use nabungo_app::{AppError, RuleField, SourceError, SyncError};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
@@ -77,6 +77,8 @@ pub enum ErrorCode {
     OccurrenceStale,
     CaptureNotPending,
     CaptureNotIgnored,
+    /// `entity` = field rule yang salah (`name`, `sender`, `amount`, ...).
+    EmailRuleInvalid,
     KeychainUnavailable,
     EmailAddressInvalid,
     EmailMailboxEmpty,
@@ -205,6 +207,20 @@ impl From<AllocationError> for ErrorCode {
     }
 }
 
+/// Nama field rule di form (snake_case, sama dengan `entity` di UI).
+fn rule_field(field: RuleField) -> &'static str {
+    match field {
+        RuleField::Name => "name",
+        RuleField::Sender => "sender",
+        RuleField::Subject => "subject",
+        RuleField::Amount => "amount",
+        RuleField::Payee => "payee",
+        RuleField::Date => "date",
+        RuleField::DateFormat => "date_format",
+        RuleField::CounterAccount => "counter_account",
+    }
+}
+
 impl From<AppError> for IpcError {
     fn from(e: AppError) -> Self {
         match e {
@@ -244,6 +260,9 @@ impl From<AppError> for IpcError {
             AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
             AppError::CaptureNotPending => Self::code(ErrorCode::CaptureNotPending),
             AppError::CaptureNotIgnored => Self::code(ErrorCode::CaptureNotIgnored),
+            AppError::EmailRuleInvalid(field) => {
+                Self::with_entity(ErrorCode::EmailRuleInvalid, rule_field(field))
+            }
             AppError::KeychainUnavailable => Self::code(ErrorCode::KeychainUnavailable),
             AppError::EmailAddressInvalid => Self::code(ErrorCode::EmailAddressInvalid),
             AppError::EmailMailboxEmpty => Self::code(ErrorCode::EmailMailboxEmpty),
@@ -362,6 +381,14 @@ mod tests {
             assert_eq!(IpcError::from(err).code, code);
             assert_eq!(serde_json::to_value(code).unwrap(), wire);
         }
+    }
+
+    #[test]
+    fn email_rule_invalid_carries_field() {
+        let e = IpcError::from(AppError::EmailRuleInvalid(RuleField::DateFormat));
+        assert_eq!(e.code, ErrorCode::EmailRuleInvalid);
+        assert_eq!(e.entity.as_deref(), Some("date_format"));
+        assert_eq!(serde_json::to_value(e.code).unwrap(), "email_rule_invalid");
     }
 
     #[test]

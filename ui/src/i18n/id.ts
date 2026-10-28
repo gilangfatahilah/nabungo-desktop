@@ -670,6 +670,7 @@ export default {
     occurrence_stale: 'Kejadian ini sudah ditangani. Daftar dimuat ulang.',
     capture_not_pending: 'Transaksi email ini sudah diproses.',
     capture_not_ignored: 'Item ini sudah tidak bisa dikembalikan karena sudah diproses.',
+    email_rule_invalid: 'Isian rule belum benar. Periksa field yang ditandai.',
     keychain_unavailable: 'Keychain sistem tidak tersedia, App Password tidak bisa disimpan.',
     email_address_invalid: 'Alamat email tidak valid.',
     email_mailbox_empty: 'Label wajib diisi.',
