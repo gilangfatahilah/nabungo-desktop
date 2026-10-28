@@ -61,6 +61,59 @@ pub enum Outcome {
     Unparsed,
 }
 
+/// Field rule yang tidak valid (lihat [`validate`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleField {
+    Name,
+    Sender,
+    Subject,
+    Amount,
+    Payee,
+    Date,
+    DateFormat,
+}
+
+/// Format yang dikenali [`parse_date`].
+pub const DATE_FORMATS: [&str; 3] = ["dd/mm/yyyy", "dd-mm-yyyy", "dd mmm yyyy"];
+
+/// Langkah pertama yang gagal saat satu rule dicocokkan ke email. `Sender`, `Subject`, dan
+/// `NoAmount` berarti rule dilewati (rule berikutnya dicoba); sisanya membuat email unparsed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraceFail {
+    Sender,
+    Subject,
+    NoAmount,
+    /// Teks grup nominal yang tidak terbaca (atau nol).
+    AmountInvalid(String),
+    /// Tanggal tidak ada di body dan email tanpa header `Date`.
+    NoDate,
+    /// Teks grup tanggal tidak terbaca dan email tanpa header `Date`.
+    DateInvalid(String),
+}
+
+impl TraceFail {
+    /// Rule dilewati, bukan email gagal dibaca.
+    fn skips(&self) -> bool {
+        matches!(self, Self::Sender | Self::Subject | Self::NoAmount)
+    }
+}
+
+/// Hasil langkah demi langkah satu rule pada satu email (pratinjau rule editor).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuleTrace {
+    pub sender_ok: bool,
+    /// `None` = rule tanpa `subject_regex`.
+    pub subject_ok: Option<bool>,
+    /// Teks grup 1 `amount_regex` apa adanya.
+    pub amounts: Vec<String>,
+    pub payee: Option<String>,
+    /// Teks grup 1 `date_regex`.
+    pub date_text: Option<String>,
+    /// Tanggal diambil dari header `Date` (body tidak punya tanggal yang terbaca).
+    pub date_from_header: bool,
+    pub result: Result<Vec<Captured>, TraceFail>,
+}
+
 struct Compiled {
     sender: String,
     subject: Option<Regex>,
@@ -97,6 +150,131 @@ fn compile(rule: &Rule) -> Result<Compiled, regex::Error> {
     })
 }
 
+/// Rule bisa disimpan: nama & pengirim terisi, regex valid dan punya grup tangkap, pola &
+/// format tanggal berpasangan. Akun/kategori diperiksa pemanggil.
+pub fn validate(rule: &Rule) -> Result<(), RuleField> {
+    let with_group = |p: &str, field| match regex(p) {
+        Ok(re) if re.captures_len() >= 2 => Ok(()),
+        _ => Err(field),
+    };
+    if rule.name.trim().is_empty() {
+        return Err(RuleField::Name);
+    }
+    if rule.sender_pattern.trim().is_empty() {
+        return Err(RuleField::Sender);
+    }
+    if let Some(p) = &rule.subject_regex {
+        regex(p).map_err(|_| RuleField::Subject)?;
+    }
+    with_group(&rule.amount_regex, RuleField::Amount)?;
+    if let Some(p) = &rule.payee_regex {
+        with_group(p, RuleField::Payee)?;
+    }
+    match (&rule.date_regex, &rule.date_format) {
+        (Some(p), Some(f)) => {
+            with_group(p, RuleField::Date)?;
+            if !DATE_FORMATS.contains(&f.as_str()) {
+                return Err(RuleField::DateFormat);
+            }
+        }
+        (Some(_), None) => return Err(RuleField::DateFormat),
+        (None, Some(_)) => return Err(RuleField::Date),
+        (None, None) => {}
+    }
+    Ok(())
+}
+
+/// Cocokkan satu rule ke email dan jelaskan langkah yang gagal. Satu jalur dengan
+/// [`CompiledRules::apply`]: hasilnya sama dengan yang dicatat sync.
+pub fn trace(
+    rule: &Rule,
+    msg: &MailMessage,
+    local_offset: UtcOffset,
+) -> Result<RuleTrace, RuleField> {
+    validate(rule)?;
+    let compiled = compile(rule).map_err(|_| RuleField::Amount)?;
+    Ok(run(&compiled, &msg.from.to_lowercase(), msg, local_offset))
+}
+
+/// `from` = alamat pengirim lowercase (dihitung sekali per email oleh `apply`).
+fn run(rule: &Compiled, from: &str, msg: &MailMessage, local_offset: UtcOffset) -> RuleTrace {
+    let sender_ok = from.contains(&rule.sender);
+    let subject_ok = rule.subject.as_ref().map(|re| re.is_match(&msg.subject));
+    let mut t = RuleTrace {
+        sender_ok,
+        subject_ok,
+        amounts: Vec::new(),
+        payee: None,
+        date_text: None,
+        date_from_header: false,
+        result: Err(TraceFail::Sender),
+    };
+    if !sender_ok {
+        return t;
+    }
+    if subject_ok == Some(false) {
+        t.result = Err(TraceFail::Subject);
+        return t;
+    }
+    t.amounts = rule
+        .amount
+        .captures_iter(&msg.text)
+        .filter_map(|c| c.get(1))
+        .map(|m| m.as_str().to_owned())
+        .collect();
+    if t.amounts.is_empty() {
+        t.result = Err(TraceFail::NoAmount);
+        return t;
+    }
+    t.payee = rule
+        .payee
+        .as_ref()
+        .and_then(|re| re.captures(&msg.text)?.get(1))
+        .map(|m| m.as_str().trim().to_owned())
+        .filter(|p| !p.is_empty());
+    let mut body_date = None;
+    if let Some((re, fmt)) = &rule.date {
+        t.date_text = re
+            .captures(&msg.text)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().to_owned());
+        body_date = t.date_text.as_deref().and_then(|d| parse_date(d, fmt));
+    }
+    let header_date = msg.sent_at.map(|s| s.to_offset(local_offset).date());
+    let date = match (body_date, header_date) {
+        (Some(d), _) => d,
+        (None, Some(d)) => {
+            t.date_from_header = true;
+            d
+        }
+        (None, None) => {
+            t.result = Err(match &t.date_text {
+                Some(text) => TraceFail::DateInvalid(text.clone()),
+                None => TraceFail::NoDate,
+            });
+            return t;
+        }
+    };
+    t.result = t
+        .amounts
+        .iter()
+        .enumerate()
+        .map(|(idx, raw)| {
+            let amount = normalize_amount(raw)
+                .ok()
+                .filter(|a| *a > 0)
+                .ok_or_else(|| TraceFail::AmountInvalid(raw.clone()))?;
+            Ok(Captured {
+                idx: u32::try_from(idx).map_err(|_| TraceFail::AmountInvalid(raw.clone()))?,
+                amount,
+                payee: t.payee.clone(),
+                date,
+            })
+        })
+        .collect();
+    t
+}
+
 impl CompiledRules {
     pub fn new(rules: &[Rule]) -> Self {
         let compiled = rules
@@ -128,64 +306,14 @@ impl CompiledRules {
         let from = msg.from.to_lowercase();
         for (i, rule) in self.compiled.iter().enumerate() {
             let Some(rule) = rule else { continue };
-            if !from.contains(&rule.sender) {
-                continue;
+            match run(rule, &from, msg, local_offset).result {
+                Ok(items) => return Outcome::Parsed { rule: i, items },
+                Err(fail) if fail.skips() => continue,
+                Err(_) => return Outcome::Unparsed,
             }
-            if rule
-                .subject
-                .as_ref()
-                .is_some_and(|re| !re.is_match(&msg.subject))
-            {
-                continue;
-            }
-            let amounts: Vec<&str> = rule
-                .amount
-                .captures_iter(&msg.text)
-                .filter_map(|c| c.get(1))
-                .map(|m| m.as_str())
-                .collect();
-            if amounts.is_empty() {
-                continue;
-            }
-            return match capture(rule, msg, &amounts, local_offset) {
-                Some(items) => Outcome::Parsed { rule: i, items },
-                None => Outcome::Unparsed,
-            };
         }
         Outcome::Unparsed
     }
-}
-
-fn capture(
-    rule: &Compiled,
-    msg: &MailMessage,
-    amounts: &[&str],
-    local_offset: UtcOffset,
-) -> Option<Vec<Captured>> {
-    let body_date = rule.date.as_ref().and_then(|(re, fmt)| {
-        let text = re.captures(&msg.text)?.get(1)?.as_str();
-        parse_date(text, fmt)
-    });
-    let date = body_date.or_else(|| msg.sent_at.map(|t| t.to_offset(local_offset).date()))?;
-    let payee = rule
-        .payee
-        .as_ref()
-        .and_then(|re| re.captures(&msg.text)?.get(1))
-        .map(|m| m.as_str().trim().to_owned())
-        .filter(|p| !p.is_empty());
-    amounts
-        .iter()
-        .enumerate()
-        .map(|(idx, raw)| {
-            let amount = normalize_amount(raw).ok().filter(|a| *a > 0)?;
-            Some(Captured {
-                idx: u32::try_from(idx).ok()?,
-                amount,
-                payee: payee.clone(),
-                date,
-            })
-        })
-        .collect()
 }
 
 /// [`CompiledRules::apply`] untuk satu email.

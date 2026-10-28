@@ -1,0 +1,503 @@
+{
+  "_comment": "Kasus paritas rule engine: dibaca crates/mail/tests/rule_cases.rs dan ui/src/ipc/browser-rule.test.ts. Offset lokal +07:00. Hanya sintaks regex yang sama di Rust dan JS.",
+  "cases": [
+    {
+      "name": "pengirim tidak cocok",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "a@lain.example",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Total Rp 5.000"
+      },
+      "expect": {
+        "senderOk": false,
+        "subjectOk": null,
+        "amounts": [],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": false,
+        "fail": "sender",
+        "failText": null,
+        "items": []
+      }
+    },
+    {
+      "name": "subjek tidak cocok",
+      "rule": {
+        "sender": "example.com",
+        "subject": "^Transaksi$",
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Promo",
+        "sentAt": 1793000000,
+        "text": "Total Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": false,
+        "amounts": [],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": false,
+        "fail": "subject",
+        "failText": null,
+        "items": []
+      }
+    },
+    {
+      "name": "tanpa nominal",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Halo"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": false,
+        "fail": "no_amount",
+        "failText": null,
+        "items": []
+      }
+    },
+    {
+      "name": "nominal ambigu",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Total Rp 25,000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "25,000"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": "amount_invalid",
+        "failText": "25,000",
+        "items": []
+      }
+    },
+    {
+      "name": "nominal nol",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Total Rp 0"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "0"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": "amount_invalid",
+        "failText": "0",
+        "items": []
+      }
+    },
+    {
+      "name": "tanpa tanggal dan header",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": null,
+        "text": "Total Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": false,
+        "fail": "no_date",
+        "failText": null,
+        "items": []
+      }
+    },
+    {
+      "name": "tanggal rusak tanpa header",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": "^Tanggal (.+)$",
+        "dateFormat": "dd mmm yyyy"
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": null,
+        "text": "Tanggal 32 Okt 2026\nTotal Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": "32 Okt 2026",
+        "dateFromHeader": false,
+        "fail": "date_invalid",
+        "failText": "32 Okt 2026",
+        "items": []
+      }
+    },
+    {
+      "name": "tanggal rusak pakai header",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": "^Tanggal (.+)$",
+        "dateFormat": "dd mmm yyyy"
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Tanggal 32 Okt 2026\nTotal Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": "32 Okt 2026",
+        "dateFromHeader": true,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-10-26",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "tanpa pola tanggal pakai header",
+      "rule": {
+        "sender": "example.com",
+        "subject": "^transaksi$",
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Total Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": true,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-10-26",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "beberapa nominal",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Debet Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Debet Rp 10.000\nDebet Rp 2.500"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "10.000",
+          "2.500"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 10000,
+            "date": "2026-10-26",
+            "payee": null
+          },
+          {
+            "amount": 2500,
+            "date": "2026-10-26",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "format dd/mm/yyyy",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": "^Tgl (\\d+/\\d+/\\d+)",
+        "dateFormat": "dd/mm/yyyy"
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Tgl 03/05/2026 10:00\nTotal Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": "03/05/2026",
+        "dateFromHeader": false,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-05-03",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "format dd-mm-yyyy",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": "^Tgl (\\d+-\\d+-\\d+)",
+        "dateFormat": "dd-mm-yyyy"
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Tgl 27-10-2026\nTotal Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": "27-10-2026",
+        "dateFromHeader": false,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-10-27",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "nama bulan Indonesia lengkap",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Total Rp ([\\d.,]+)$",
+        "payee": null,
+        "date": "^Tanggal (\\d{1,2} \\w+ \\d{4})",
+        "dateFormat": "dd mmm yyyy"
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Tanggal 17 Agustus 2026, 10:00 WIB\nTotal Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": "17 Agustus 2026",
+        "dateFromHeader": false,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-08-17",
+            "payee": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "nominal format Inggris dan payee di-trim",
+      "rule": {
+        "sender": "example.com",
+        "subject": null,
+        "amount": "^Amount : IDR ([\\d.,]+)$",
+        "payee": "^To : (.*)$",
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "To :   Warung Bu Sri  \nAmount : IDR 1,250,000.00"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "1,250,000.00"
+        ],
+        "payee": "Warung Bu Sri",
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 1250000,
+            "date": "2026-10-26",
+            "payee": "Warung Bu Sri"
+          }
+        ]
+      }
+    },
+    {
+      "name": "huruf besar kecil diabaikan",
+      "rule": {
+        "sender": "EXAMPLE.com",
+        "subject": null,
+        "amount": "^total rp ([\\d.,]+)$",
+        "payee": null,
+        "date": null,
+        "dateFormat": null
+      },
+      "email": {
+        "from": "notif@example.com",
+        "subject": "Transaksi",
+        "sentAt": 1793000000,
+        "text": "Total Rp 5.000"
+      },
+      "expect": {
+        "senderOk": true,
+        "subjectOk": null,
+        "amounts": [
+          "5.000"
+        ],
+        "payee": null,
+        "dateText": null,
+        "dateFromHeader": true,
+        "fail": null,
+        "failText": null,
+        "items": [
+          {
+            "amount": 5000,
+            "date": "2026-10-26",
+            "payee": null
+          }
+        ]
+      }
+    }
+  ]
+}
