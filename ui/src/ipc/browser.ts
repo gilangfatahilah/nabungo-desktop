@@ -1,6 +1,7 @@
 // Implementasi pengganti saat UI dijalankan di browser biasa (tanpa backend Tauri).
 import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
+import { browserEmail } from './browser-email'
 import { __enterRecovery, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
 import { isFontScale } from '@/lib/fontScale'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
@@ -42,6 +43,10 @@ export const browserCommands = lockGuard({
   ...browserLedger,
   ...browserSecurity,
   ...browserRecovery,
+  emailStatus: browserEmail.emailStatus,
+  connectEmail: browserEmail.connectEmail,
+  disconnectEmail: browserEmail.disconnectEmail,
+  syncEmail: browserEmail.syncEmail,
   appInfo: async (): Promise<AppInfo> => ({ version: 'browser-dev', dataDir: '', portable: false }),
   getUiSettings: async () => ok({ ...settings }),
   setTheme: async (theme: UiSettingsDto['theme']) => {
