@@ -9,9 +9,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-nabungo-core = { version = "0.2.0", path = "../core" }
-nabungo-storage = { version = "0.2.0", path = "../storage" }
-nabungo-mail = { version = "0.2.0", path = "../mail" }
+nabungo-core = { version = "0.3.0", path = "../core" }
+nabungo-storage = { version = "0.3.0", path = "../storage" }
+nabungo-mail = { version = "0.3.0", path = "../mail" }
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["formatting", "local-offset", "macros", "parsing"] }
 csv = "1.4.0"

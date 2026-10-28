@@ -1,5 +1,7 @@
 Nabungo adalah aplikasi keuangan pribadi desktop yang berjalan sepenuhnya offline: transaksi, saldo akun, budget, dan alokasi modal tersimpan di satu file SQLite milik Anda. Tidak ada akun, tidak ada telemetry, tidak ada koneksi internet saat aplikasi berjalan.
 
+Baru: **Email capture** (opsional, mati secara default). Nabungo membaca email notifikasi bank dari satu label Gmail secara read-only lewat App Password yang disimpan di keychain sistem, lalu menyiapkan transaksi di Inbox untuk ditinjau. Rule pembacaan bisa diubah, dan rule baru bisa dibuat dari email yang gagal dibaca. Hanya fitur ini yang memakai internet, dan hanya setelah Anda mengaktifkannya.
+
 ## Unduhan
 
 | Sistem | File |

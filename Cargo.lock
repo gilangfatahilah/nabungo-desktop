@@ -2596,7 +2596,7 @@ checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "nabungo-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "argon2",
  "base32",
@@ -2624,7 +2624,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "serde",
@@ -2636,7 +2636,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-desktop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "directories",
@@ -2658,7 +2658,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-mail"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "html2text",
  "imap",
@@ -2677,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "nabungo-storage"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "getrandom 0.3.4",
  "nabungo-core",

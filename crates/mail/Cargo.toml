@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-nabungo-core = { version = "0.2.0", path = "../core" }
+nabungo-core = { version = "0.3.0", path = "../core" }
 imap = "2.4.1"
 native-tls = "0.2"
 mail-parser = { version = "1.0", features = ["full_encoding"] }
