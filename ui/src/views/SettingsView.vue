@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BackupSection from '@/components/settings/BackupSection.vue'
+import EmailSection from '@/components/settings/EmailSection.vue'
 import ExportSection from '@/components/settings/ExportSection.vue'
 import SecuritySection from '@/components/settings/SecuritySection.vue'
 import { Separator } from '@/components/ui/separator'
@@ -89,6 +90,11 @@ function onDay(v: unknown) {
   <section aria-labelledby="settings-security">
     <h2 id="settings-security" class="mb-4 text-heading">{{ t('settings.sections.security') }}</h2>
     <SecuritySection />
+  </section>
+  <Separator class="my-8" />
+  <section aria-labelledby="settings-email">
+    <h2 id="settings-email" class="mb-4 text-heading">{{ t('settings.sections.email') }}</h2>
+    <EmailSection />
   </section>
   <Separator class="my-8" />
   <section aria-labelledby="settings-backup">

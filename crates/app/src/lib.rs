@@ -22,6 +22,8 @@ mod budget_alerts;
 mod capture;
 mod categories;
 mod defaults;
+pub mod email_runner;
+mod email_settings;
 mod email_sync;
 mod export;
 pub mod fixture;
@@ -37,6 +39,7 @@ mod reconcile;
 pub mod recovery;
 mod recurring;
 mod reports;
+pub mod secret;
 pub mod security;
 mod settings;
 mod tags;
@@ -56,8 +59,10 @@ pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
 pub use capture::{CaptureDraft, IngestOutcome};
 pub use categories::CategoryFields;
+pub use email_settings::{DEFAULT_MAILBOX, EmailSettings, normalize_address, normalize_mailbox};
 pub use email_sync::{
-    Fetched, MailSource, SYNC_BATCH, SourceError, SyncError, SyncSummary, sync_mailbox,
+    Fetched, LedgerAccess, MailSource, SYNC_BATCH, SourceError, SyncError, SyncProgress,
+    SyncSummary, sync_mailbox, sync_mailbox_shared,
 };
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
@@ -89,7 +94,7 @@ pub use reconcile::Reconciliation;
 pub use recurring::{MAX_CATCH_UP, RuleInput, RuleRow};
 pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
 pub use settings::{AUTO_LOCK_CHOICES, Locale, Theme, UiSettings};
-pub use time::{Date, OffsetDateTime};
+pub use time::{Date, OffsetDateTime, UtcOffset};
 pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;
 pub use valuation::ValuationPoint;

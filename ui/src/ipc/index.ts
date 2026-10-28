@@ -2,6 +2,9 @@
 import { isTauri } from '@tauri-apps/api/core'
 import {
   commands,
+  events,
+  type EmailStatusDto,
+  type SyncSummaryDto,
   type RecurrenceDto,
   type RuleDto,
   type RuleInputDto,
@@ -48,6 +51,7 @@ import {
   type ReconciliationDto,
 } from './bindings'
 import { browserCommands } from './browser'
+import { browserEmail, type EmailSyncHandlers } from './browser-email'
 
 export type {
   AccountDto,
@@ -75,6 +79,9 @@ export type {
   BudgetOverviewDto,
   CashflowPointDto,
   CategoryAmountDto,
+  EmailStatusDto,
+  EmailSyncDone,
+  EmailSyncProgress,
   MappingDto,
   SavedTxnDto,
   NetWorthPointDto,
@@ -104,6 +111,7 @@ export type {
   PostingDto,
   SecurityStatusDto,
   SplitDto,
+  SyncSummaryDto,
   StartupReportDto,
   TagUsageDto,
   FeeDto,
@@ -610,4 +618,33 @@ export async function changePassword(oldPassword: string, newPassword: string): 
 
 export async function setAutoLockMinutes(minutes: number): Promise<void> {
   await unwrap(api().setAutoLockMinutes(minutes))
+}
+
+// --- Email capture (EML-01) ---
+
+export function emailStatus(): Promise<EmailStatusDto> {
+  return unwrap(api().emailStatus())
+}
+
+/** `password: null` (atau kosong) = pakai App Password tersimpan. */
+export async function connectEmail(address: string, mailbox: string, password: string | null): Promise<void> {
+  await unwrap(api().connectEmail(address, mailbox, password))
+}
+
+export async function disconnectEmail(): Promise<void> {
+  await unwrap(api().disconnectEmail())
+}
+
+export function syncEmail(): Promise<SyncSummaryDto> {
+  return unwrap(api().syncEmail())
+}
+
+/** Kemajuan & akhir sync (manual maupun terjadwal). Mengembalikan fungsi berhenti mendengar. */
+export async function onEmailSync(h: EmailSyncHandlers): Promise<() => void> {
+  if (!isTauri()) return browserEmail.subscribe(h)
+  const offs = await Promise.all([
+    events.emailSyncProgress.listen((e) => h.progress?.(e.payload)),
+    events.emailSyncDone.listen((e) => h.done?.(e.payload)),
+  ])
+  return () => offs.forEach((off) => off())
 }

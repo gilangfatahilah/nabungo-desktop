@@ -41,6 +41,12 @@ pub fn set_cursor(tx: &Transaction, mailbox: &str, c: Cursor) -> Result<()> {
     Ok(())
 }
 
+/// Buang semua cursor: sync berikutnya memindai ulang dari awal (dedup lewat Message-ID).
+pub fn clear_cursors(tx: &Transaction) -> Result<()> {
+    tx.execute("DELETE FROM email_sync_cursor", [])?;
+    Ok(())
+}
+
 /// `kind` = `income` | `expense` | `transfer_out` | `transfer_in` (dijaga CHECK).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuleWrite<'a> {

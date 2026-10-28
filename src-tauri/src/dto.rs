@@ -2028,3 +2028,63 @@ impl From<BackupInfo> for BackupDto {
         }
     }
 }
+
+// --- Email capture ---
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailStatusDto {
+    pub enabled: bool,
+    pub address: Option<String>,
+    pub mailbox: String,
+    pub last_sync_at: Option<String>,
+    pub running: bool,
+    pub last_error: Option<ErrorCode>,
+    /// Sync otomatis dijeda karena login gagal (K8).
+    pub paused: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncSummaryDto {
+    pub new_items: u32,
+    pub unparsed: u32,
+    pub seen: u32,
+}
+
+impl From<nabungo_app::SyncSummary> for SyncSummaryDto {
+    fn from(s: nabungo_app::SyncSummary) -> Self {
+        Self {
+            new_items: s.new_items,
+            unparsed: s.unparsed,
+            seen: s.seen,
+        }
+    }
+}
+
+/// Kemajuan kumulatif sync, dikirim setelah tiap batch.
+#[derive(Debug, Clone, Copy, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSyncProgress {
+    pub processed: u32,
+    pub new_items: u32,
+    pub unparsed: u32,
+}
+
+impl From<nabungo_app::SyncProgress> for EmailSyncProgress {
+    fn from(p: nabungo_app::SyncProgress) -> Self {
+        Self {
+            processed: p.processed,
+            new_items: p.new_items,
+            unparsed: p.unparsed,
+        }
+    }
+}
+
+/// Akhir satu putaran sync (manual maupun terjadwal).
+#[derive(Debug, Clone, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailSyncDone {
+    pub summary: Option<SyncSummaryDto>,
+    pub error: Option<IpcError>,
+}
