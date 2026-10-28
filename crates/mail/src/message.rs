@@ -54,6 +54,18 @@ pub fn parse_message(raw: &[u8]) -> Option<MailMessage> {
     })
 }
 
+/// Email yang ditempel user (uji rule): dinormalisasi sama seperti [`parse_message`] agar hasil
+/// uji sama dengan yang dicatat sync.
+pub fn pasted(from: &str, subject: &str, text: &str, sent_at: OffsetDateTime) -> MailMessage {
+    MailMessage {
+        message_id: String::new(),
+        from: from.trim().to_lowercase(),
+        subject: collapse_line(subject),
+        sent_at: Some(sent_at),
+        text: normalize(text),
+    }
+}
+
 /// HTML → teks tanpa border tabel & footnote link; sel satu baris tabel tetap di satu baris.
 fn html_to_text(html: &str) -> Option<String> {
     html2text::config::plain_no_decorate()

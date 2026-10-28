@@ -15,7 +15,7 @@ import type {
   CaptureDto, DuplicateTxnDto, InboxSummaryDto, UnparsedEmailDto,
   EmailRuleDto, EmailRuleInputDto, ReparseSummaryDto, RuleSampleDto, RuleSavedDto, RuleTestDto,
 } from './bindings'
-import { DEFAULT_RULES, apply, suggest, trace, validate, type Mail } from './browser-rule'
+import { DEFAULT_RULES, apply, pasted, suggest, trace, validate, type Mail, type RulePatterns } from './browser-rule'
 import { keepDay, nextAfter, occurrences } from './browser-recurrence'
 import { todayIso } from '@/lib/date'
 import { countsAsLiability, isLiability } from '@/lib/accounts'
@@ -1632,7 +1632,7 @@ export const browserLedger = {
     return ok({ id: i, reparsed: reparse() })
   },
   /** Uji tanpa menulis apa pun; email tempelan dianggap baru diterima (K5, K13). */
-  testEmailRule: async (input: EmailRuleInputDto, sample: RuleSampleDto): Promise<Result<RuleTestDto>> => {
+  testEmailRule: async (input: EmailRuleInputDto, ruleId: string | null, sample: RuleSampleDto): Promise<Result<RuleTestDto>> => {
     const r = normalizedRule(input)
     const field = validate(r)
     if (field !== null) return fail('email_rule_invalid', field)
@@ -1642,15 +1642,19 @@ export const browserLedger = {
       if (m.status === 'error') return m
       msg = m.data
     } else {
-      msg = { from: sample.sender.trim(), subject: sample.subject.trim(), sentAt: Math.floor(Date.now() / 1000), text: sample.text }
+      msg = pasted(sample.sender, sample.subject, sample.text, Math.floor(Date.now() / 1000))
     }
     const t = trace(r, msg, localOffset())
     if (typeof t === 'string') return fail('email_rule_invalid', t)
+    // Sama dengan re-parse saat disimpan: rule aktif lain (urutan prioritas) bisa lebih dulu menangkap
+    // atau menahan email. Rule ini dihitung seolah aktif.
+    const rules: (RulePatterns & Pick<EmailRuleInputDto, 'name' | 'priority'>)[] = activeEmailRules().filter((x) => x.id !== ruleId)
+    let at = rules.findIndex((x) => x.priority < r.priority || (x.priority === r.priority && r.name < x.name))
+    if (at < 0) at = rules.length
+    rules.splice(at, 0, r)
     const unparsedMatches = state.unparsed.filter((u) => {
       const m = storedMessage(u)
-      if (m === null) return false
-      const other = trace(r, m, localOffset())
-      return typeof other !== 'string' && other.fail === null
+      return m !== null && apply(rules, m, localOffset())?.rule === at
     }).length
     return ok({ ...t, unparsedMatches })
   },

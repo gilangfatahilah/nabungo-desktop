@@ -265,7 +265,7 @@ const describedBy = (field: string, hint?: string) =>
             <p id="er-priority-hint" class="col-span-2 text-meta text-muted-foreground">{{ t('emailRules.priorityHint') }}</p>
           </div>
 
-          <RuleTestPanel :key="session" :input="testInput" :unparsed="inbox.unparsed" :initial-message-id="seed?.sampleMessageId ?? null" />
+          <RuleTestPanel :key="session" :input="testInput" :rule-id="rule?.id ?? null" :unparsed="inbox.unparsed" :initial-message-id="seed?.sampleMessageId ?? null" />
         </div>
 
         <div class="flex justify-end gap-2 border-t px-4 py-3">

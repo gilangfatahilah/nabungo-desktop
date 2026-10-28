@@ -17,7 +17,7 @@ import { useSettingsStore } from '@/stores/settings'
 
 // Uji rule terhadap satu email (EML-04, K5): langkah yang lolos/gagal, lalu hasilnya. Tidak menulis apa pun;
 // teks yang ditempel hanya dikirim ke `test_email_rule` dan tidak disimpan.
-const props = defineProps<{ input: EmailRuleInputDto; unparsed: UnparsedEmailDto[]; initialMessageId?: string | null }>()
+const props = defineProps<{ input: EmailRuleInputDto; ruleId?: string | null; unparsed: UnparsedEmailDto[]; initialMessageId?: string | null }>()
 
 const { t } = useI18n()
 const settings = useSettingsStore()
@@ -44,7 +44,7 @@ async function run() {
   running.value = true
   error.value = null
   try {
-    result.value = await ipc.testEmailRule(props.input, sample())
+    result.value = await ipc.testEmailRule(props.input, props.ruleId ?? null, sample())
   } catch (e) {
     result.value = null
     const code = e instanceof ipc.IpcFailure ? e.error : null

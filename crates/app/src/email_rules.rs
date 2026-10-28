@@ -4,7 +4,7 @@
 //! Subjek, pengirim, dan teks email tidak pernah masuk log (K13).
 
 use nabungo_core::{CategoryKind, TxnError};
-use nabungo_mail::message::MailMessage;
+use nabungo_mail::message::{self, MailMessage};
 use nabungo_mail::rule::{CompiledRules, Outcome, Rule, RuleField, RuleKind, RuleTrace, trace};
 use nabungo_mail::suggest::suggest;
 use nabungo_storage::email::{self as repo, CaptureWrite, RuleWrite, UnparsedRecord};
@@ -316,10 +316,12 @@ impl Ledger {
         Ok(RuleSaved { id, reparsed })
     }
 
-    /// Uji rule (K5) tanpa menulis apa pun. Email tempelan dianggap baru diterima.
+    /// Uji rule (K5) tanpa menulis apa pun. Email tempelan dianggap baru diterima. `rule_id` =
+    /// rule yang sedang diubah (versi tersimpannya tidak ikut dihitung).
     pub fn test_email_rule(
         &self,
         input: &EmailRuleInput,
+        rule_id: Option<Uuid>,
         sample: &RuleSample,
         off: UtcOffset,
     ) -> Result<RuleTest, AppError> {
@@ -333,21 +335,28 @@ impl Ledger {
                 sender,
                 subject,
                 text,
-            } => MailMessage {
-                message_id: String::new(),
-                from: sender.trim().to_owned(),
-                subject: subject.trim().to_owned(),
-                sent_at: Some(OffsetDateTime::now_utc()),
-                text: text.clone(),
-            },
+            } => message::pasted(sender, subject, text, OffsetDateTime::now_utc()),
         };
         let trace = trace(&rule, &msg, off).map_err(invalid)?;
+        // Sama dengan re-parse saat disimpan: rule aktif lain (urutan prioritas) bisa lebih dulu
+        // menangkap atau menahan email. Rule ini dihitung seolah aktif.
+        let mut rules = repo::list_active_rules(&self.conn)?
+            .into_iter()
+            .filter(|r| Some(r.id) != rule_id)
+            .map(to_rule)
+            .collect::<Result<Vec<_>, _>>()?;
+        let at = rules
+            .iter()
+            .position(|r| (r.priority, &rule.name) < (rule.priority, &r.name))
+            .unwrap_or(rules.len());
+        rules.insert(at, rule);
+        let rules = CompiledRules::new(&rules);
         let mut unparsed_matches = 0;
         for other in repo::list_unparsed(&self.conn)?
             .into_iter()
             .filter_map(stored_message)
         {
-            if trace_ok(&rule, &other, off)? {
+            if matches!(rules.apply(&other, off), Outcome::Parsed { rule, .. } if rule == at) {
                 unparsed_matches += 1;
             }
         }
@@ -372,10 +381,6 @@ impl Ledger {
         tx.commit()?;
         Ok(summary)
     }
-}
-
-fn trace_ok(rule: &Rule, msg: &MailMessage, off: UtcOffset) -> Result<bool, AppError> {
-    Ok(trace(rule, msg, off).map_err(invalid)?.result.is_ok())
 }
 
 #[cfg(test)]
@@ -770,6 +775,7 @@ mod tests {
             .ledger
             .test_email_rule(
                 &input("Toko"),
+                None,
                 &RuleSample::Unparsed("promo-0001@toko.example".into()),
                 WIB,
             )
@@ -786,12 +792,42 @@ mod tests {
     }
 
     #[test]
+    fn test_rule_count_follows_rule_order() {
+        let mut kit = kit();
+        ingest(&mut kit, 1, UNKNOWN);
+        ingest(&mut kit, 2, &renamed(UNKNOWN, "promo-0002@toko.example"));
+        // Rule prioritas lebih tinggi untuk pengirim yang sama gagal di nominal → email tetap gagal dibaca.
+        let mut blocker = input("Blok");
+        blocker.priority = 50;
+        blocker.amount_regex = r"Total (Payment)".into();
+        let blocker_id = kit.ledger.create_email_rule(&blocker, WIB).unwrap().id;
+        let sample = RuleSample::Unparsed("promo-0001@toko.example".into());
+        let count = |kit: &crate::testkit::Kit, rule: &EmailRuleInput, id| {
+            kit.ledger
+                .test_email_rule(rule, id, &sample, WIB)
+                .unwrap()
+                .unparsed_matches
+        };
+        assert_eq!(count(&kit, &input("Toko"), None), 0);
+        let mut above = input("Toko");
+        above.priority = 60;
+        assert_eq!(count(&kit, &above, None), 2);
+        // Mengubah rule penghalang itu sendiri: versi lama tidak ikut dihitung.
+        assert_eq!(count(&kit, &input("Blok"), Some(blocker_id)), 2);
+        // Rule nonaktif dihitung seolah aktif (pratinjau isi rule).
+        let mut off = input("Blok");
+        off.enabled = false;
+        assert_eq!(count(&kit, &off, Some(blocker_id)), 2);
+    }
+
+    #[test]
     fn test_rule_with_pasted_email() {
         let kit = kit();
         let result = kit
             .ledger
             .test_email_rule(
                 &input("Toko"),
+                None,
                 &RuleSample::Pasted {
                     sender: "promo@toko.example".into(),
                     subject: "Bayar".into(),
@@ -806,14 +842,37 @@ mod tests {
         bad.amount_regex = "(".into();
         assert!(matches!(
             kit.ledger
-                .test_email_rule(&bad, &RuleSample::Unparsed("x".into()), WIB),
+                .test_email_rule(&bad, None, &RuleSample::Unparsed("x".into()), WIB),
             Err(AppError::EmailRuleInvalid(RuleField::Amount))
         ));
         assert!(matches!(
             kit.ledger
-                .test_email_rule(&input("x"), &RuleSample::Unparsed("x".into()), WIB),
+                .test_email_rule(&input("x"), None, &RuleSample::Unparsed("x".into()), WIB),
             Err(AppError::NotFound("email"))
         ));
+    }
+
+    #[test]
+    fn test_rule_pasted_email_normalized_like_sync() {
+        let kit = kit();
+        let mut rule = input("Toko");
+        rule.subject_regex = Some("^Bayar Toko$".into());
+        // Tempelan dari klien email: spasi ganda, tab, NBSP, CRLF, alamat huruf besar.
+        let result = kit
+            .ledger
+            .test_email_rule(
+                &rule,
+                None,
+                &RuleSample::Pasted {
+                    sender: " Promo@TOKO.example ".into(),
+                    subject: "  Bayar   Toko ".into(),
+                    text: "Halo\r\n\r\n\r\n  Total   Payment\u{a0}:\tIDR 12,500.00  \r\n".into(),
+                },
+                WIB,
+            )
+            .unwrap();
+        assert_eq!(result.trace.subject_ok, Some(true));
+        assert_eq!(result.trace.result.unwrap()[0].amount, 12_500);
     }
 
     #[test]

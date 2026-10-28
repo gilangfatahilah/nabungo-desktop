@@ -172,8 +172,8 @@ export const commands = {
 	setEmailRuleEnabled: (id: string, enabled: boolean) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("set_email_rule_enabled", { id, enabled })),
 	deleteEmailRule: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_email_rule", { id })),
 	restoreEmailRule: (id: string) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("restore_email_rule", { id })),
-	/**  Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan). */
-	testEmailRule: (input: EmailRuleInputDto, sample: RuleSampleDto) => typedError<RuleTestDto, IpcError>(__TAURI_INVOKE("test_email_rule", { input, sample })),
+	/**  Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan). `rule_id` = rule yang diubah. */
+	testEmailRule: (input: EmailRuleInputDto, ruleId: string | null, sample: RuleSampleDto) => typedError<RuleTestDto, IpcError>(__TAURI_INVOKE("test_email_rule", { input, ruleId, sample })),
 	suggestEmailRule: (messageId: string) => typedError<EmailRuleInputDto, IpcError>(__TAURI_INVOKE("suggest_email_rule", { messageId })),
 	reparseUnparsed: () => typedError<ReparseSummaryDto, IpcError>(__TAURI_INVOKE("reparse_unparsed")),
 };

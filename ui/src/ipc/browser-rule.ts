@@ -131,6 +131,29 @@ export function apply(rules: RulePatterns[], msg: Mail, offsetMinutes: number): 
   return null
 }
 
+const collapseLine = (line: string) => line.split(/\s+/u).filter((w) => w !== '').join(' ')
+
+/** `normalize` (`crates/mail/src/message.rs`): spasi beruntun → satu, baris di-trim, baris kosong beruntun → satu. */
+function normalizeText(text: string): string {
+  let out = ''
+  let blank = false
+  for (const line of text.split('\n').map((l) => collapseLine(l.replace(/\r$/u, '')))) {
+    if (line === '') {
+      blank = out !== ''
+      continue
+    }
+    if (out !== '') out += blank ? '\n\n' : '\n'
+    blank = false
+    out += line
+  }
+  return out
+}
+
+/** `message::pasted`: email tempelan dinormalisasi seperti hasil parse sync. */
+export function pasted(from: string, subject: string, text: string, sentAt: number): Mail {
+  return { from: from.trim().toLowerCase(), subject: collapseLine(subject), sentAt, text: normalizeText(text) }
+}
+
 /** `normalize_amount`: format Indonesia maupun Inggris; koma tunggal 3 digit ambigu → ditolak. */
 export function normalizeAmount(raw: string): { ok: number } | { err: ErrorCode } {
   const s = raw.replace(/[^0-9.,]/g, '').replace(/^[.,]+|[.,]+$/g, '')

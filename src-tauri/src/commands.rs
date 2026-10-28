@@ -1544,18 +1544,20 @@ pub fn restore_email_rule(
     Ok(ledger(&state)?.restore_email_rule(id, off)?.into())
 }
 
-/// Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan).
+/// Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan). `rule_id` = rule yang diubah.
 #[tauri::command]
 #[specta::specta]
 pub fn test_email_rule(
     state: State<'_, AppState>,
     input: EmailRuleInputDto,
+    rule_id: Option<String>,
     sample: RuleSampleDto,
 ) -> Result<RuleTestDto, IpcError> {
     let input = input.try_into()?;
+    let rule_id = parse_opt_id(rule_id, "email rule")?;
     let off = state.email.local_offset;
     Ok(ledger(&state)?
-        .test_email_rule(&input, &sample.into(), off)?
+        .test_email_rule(&input, rule_id, &sample.into(), off)?
         .into())
 }
 

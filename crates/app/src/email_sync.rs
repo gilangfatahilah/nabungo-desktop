@@ -101,6 +101,11 @@ pub fn sync_mailbox_shared<L: LedgerAccess>(
     loop {
         let batch = source.fetch_after(last_uid, SYNC_BATCH)?;
         if batch.is_empty() {
+            // Rule disimpan selama putaran (snapshot `rules` basi) → baca ulang email gagal dibaca
+            // dengan rule aktif terbaru. Lokal, tanpa jaringan.
+            let reparsed = ledger.with_ledger(|l| l.reparse_unparsed(local_offset))?;
+            summary.new_items += reparsed.items;
+            summary.unparsed = summary.unparsed.saturating_sub(reparsed.emails);
             return Ok(summary);
         }
         for msg in batch {
@@ -390,6 +395,58 @@ pub(crate) mod tests {
         assert_eq!(sum.new_items, 70);
         assert_eq!(src.calls[0], 149);
         assert_eq!(pending_shared(&shared), 120);
+    }
+
+    /// Email toko tanpa rule bawaan ber-UID `100 + i`.
+    fn shop_mail(i: u32) -> Fetched {
+        let raw = format!(
+            "Message-ID: <t{i}@toko.example>\r\nFrom: Toko <notif@toko.example>\r\n\
+             Subject: Struk\r\nDate: Mon, 26 Oct 2026 10:00:00 +0700\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\nTotal Payment : IDR {},000.00\r\n",
+            i + 1
+        );
+        Fetched {
+            uid: 100 + i,
+            raw: raw.into_bytes(),
+        }
+    }
+
+    #[test]
+    fn rule_created_mid_sync_catches_rest_of_round() {
+        let shared = shared(Ledger::open_in_memory().unwrap());
+        let mut src = FakeSource::new(0);
+        src.messages = (0..120).map(shop_mail).collect();
+        let s = shared.clone();
+        // Rule dibuat user setelah batch pertama (50 email sudah masuk Gagal dibaca).
+        src.on_fetch = Some(Box::new(move |i| {
+            if i == 1 {
+                let mut guard = s.lock().unwrap();
+                let input = crate::EmailRuleInput {
+                    name: "Toko".into(),
+                    sender_pattern: "toko.example".into(),
+                    subject_regex: None,
+                    amount_regex: r"^Total Payment : IDR ([\d.,]+)$".into(),
+                    payee_regex: None,
+                    date_regex: None,
+                    date_format: None,
+                    kind: nabungo_mail::rule::RuleKind::Expense,
+                    account_id: None,
+                    counter_account_id: None,
+                    default_category_id: None,
+                    priority: 10,
+                    enabled: true,
+                };
+                guard
+                    .as_mut()
+                    .unwrap()
+                    .create_email_rule(&input, WIB)
+                    .unwrap();
+            }
+        }));
+        sync_mailbox_shared(&*shared, &mut src, MAILBOX, WIB, &mut |_| {}).unwrap();
+        assert_eq!(pending_shared(&shared), 120);
+        let guard = shared.lock().unwrap();
+        assert!(guard.as_ref().unwrap().list_unparsed().unwrap().is_empty());
     }
 
     #[test]

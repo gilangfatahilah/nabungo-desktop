@@ -735,8 +735,9 @@ export function restoreEmailRule(id: string): Promise<RuleSavedDto> {
 }
 
 /** Uji rule tanpa menyimpan apa pun. */
-export function testEmailRule(input: EmailRuleInputDto, sample: RuleSampleDto): Promise<RuleTestDto> {
-  return unwrap(api().testEmailRule(input, sample))
+/** `ruleId` = rule yang sedang diubah: versi tersimpannya tidak ikut dihitung di `unparsedMatches`. */
+export function testEmailRule(input: EmailRuleInputDto, ruleId: string | null, sample: RuleSampleDto): Promise<RuleTestDto> {
+  return unwrap(api().testEmailRule(input, ruleId, sample))
 }
 
 export function suggestEmailRule(messageId: string): Promise<EmailRuleInputDto> {
