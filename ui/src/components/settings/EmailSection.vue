@@ -141,7 +141,7 @@ async function disconnect() {
         <Button variant="outline" @click="startEdit">{{ t('email.edit') }}</Button>
         <Button variant="outline" @click="disconnectOpen = true">{{ t('email.disconnect') }}</Button>
       </div>
-      <p class="text-meta text-muted-foreground">{{ t('email.reviewSoon') }}</p>
+      <RouterLink to="/inbox" class="text-meta text-primary underline-offset-4 hover:underline">{{ t('email.reviewInInbox') }}</RouterLink>
     </div>
 
     <template v-if="showForm">

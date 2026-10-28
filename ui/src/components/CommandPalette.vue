@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   CommandDialog,
@@ -9,13 +10,15 @@ import {
   CommandList,
   CommandShortcut,
 } from '@/components/ui/command'
+import { useInboxStore } from '@/stores/inbox'
 import { useUiStore } from '@/stores/ui'
 import type { RouteName } from '@/router'
 
 const ui = useUiStore()
 const router = useRouter()
 
-const nav: { name: RouteName; keys: string }[] = [
+const inbox = useInboxStore()
+const nav = computed<{ name: RouteName; keys: string }[]>(() => [
   { name: 'dashboard', keys: 'G D' },
   { name: 'transactions', keys: 'G T' },
   { name: 'budget', keys: 'G B' },
@@ -24,8 +27,9 @@ const nav: { name: RouteName; keys: string }[] = [
   { name: 'accounts', keys: '' },
   { name: 'categories', keys: '' },
   { name: 'scheduled', keys: '' },
+  ...(inbox.showNav ? [{ name: 'inbox' as const, keys: '' }] : []),
   { name: 'settings', keys: 'Ctrl+,' },
-]
+])
 
 function go(name: RouteName) {
   ui.paletteOpen = false

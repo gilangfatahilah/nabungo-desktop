@@ -6,7 +6,7 @@ import en from '@/i18n/en'
 
 const NAMES: RouteName[] = [
   'dashboard', 'transactions', 'budget', 'allocation', 'reports',
-  'accounts', 'categories', 'labels', 'scheduled', 'settings', 'onboarding', 'unlock', 'recovery',
+  'accounts', 'categories', 'labels', 'scheduled', 'inbox', 'settings', 'onboarding', 'unlock', 'recovery',
 ]
 
 describe('router', () => {

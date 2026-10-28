@@ -11,6 +11,7 @@ export type RouteName =
   | 'categories'
   | 'labels'
   | 'scheduled'
+  | 'inbox'
   | 'settings'
   | 'onboarding'
   | 'unlock'
@@ -28,6 +29,7 @@ export const routes: NamedRoute[] = [
   { path: '/categories', name: 'categories', component: () => import('@/views/CategoriesView.vue') },
   { path: '/labels', name: 'labels', component: () => import('@/views/LabelsView.vue') },
   { path: '/scheduled', name: 'scheduled', component: () => import('@/views/ScheduledView.vue') },
+  { path: '/inbox', name: 'inbox', component: () => import('@/views/InboxView.vue') },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
   // `bare`: tanpa sidebar, palette, sheet, dan shortcut global.
   { path: '/onboarding', name: 'onboarding', component: () => import('@/views/OnboardingView.vue'), meta: { bare: true } },

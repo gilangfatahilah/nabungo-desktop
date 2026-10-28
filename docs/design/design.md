@@ -157,6 +157,7 @@ Huruf N berfaset yang naik ke kanan dengan koin lime yang jatuh masuk ("menabung
  ▣ Kategori
  ▣ Tag & Payee
  ▣ Terjadwal                   2  ← SidebarMenuBadge jumlah jatuh tempo (sembunyi saat 0)
+ ▣ Inbox                       5  ← hanya bila email capture aktif / ada item; badge = perlu ditinjau
 
  ▣ Pengaturan             Ctrl ,  ← NavSecondary, menempel di bawah (mt-auto)
  ──────────────────────────────
@@ -438,6 +439,27 @@ Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Ter
 ### 8.9 Onboarding & Kunci
 
 Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. Langkah bernomor boleh dipakai di Onboarding. `Select` untuk bahasa dan tanggal periode ("Tanggal 25 setiap bulan"). Tombol utama tetap aktif; validasi muncul di field.
+
+### 8.10 Inbox (email capture)
+
+```
+ Inbox                                   [Sync sekarang] [⋯]   ← ⋯: Abaikan sampai tanggal…
+ [ Perlu ditinjau  12 | Gagal dibaca  2 ]                      ← Tabs
+ 9 Mei 2026
+ [✉] IDM INDOMARET D                  −Rp 41.700  [Catat] [Tinjau] ⋯
+     BCA Pembayaran (QRIS/VA)   BCA   Makan & Minum
+ [✉] MUHAMMAD NUR  (Mungkin duplikat)   −Rp 10.000          [Tinjau] ⋯
+     BCA Transfer   BCA   Pilih kategori                       ← field kosong: teks warning
+```
+
+- Judul halaman di SiteHeader; PageHeader hanya berisi aksi (`Sync sekarang` outline bila email aktif, `⋯` dengan "Abaikan sampai tanggal…").
+- Baris dikelompokkan per tanggal (header 32px, pola §7.5); tile ikon amplop 28px di latar Kanvas. Baris 1: payee, atau nama rule bila payee kosong. Baris 2 `text-meta`: nama rule, akun, kategori/akun tujuan. Referensi kosong/arsip ditulis "Pilih akun"/"Pilih kategori" berwarna warning.
+- Nominal bertanda dan berwarna semantik; transfer netral.
+- Badge `Mungkin duplikat` (garis warning) adalah tombol yang membuka dialog duplikat.
+- `Catat` (utama, kecil) hanya bila draft siap dicatat sekali klik: akun & kategori/tujuan aktif dan tanpa kandidat duplikat. `Tinjau` (outline, kecil) selalu ada. `⋯` berisi `Abaikan`, plus `Hubungkan ke transaksi…` bila ada duplikat.
+- Abaikan (satu maupun massal) memunculkan toast dengan aksi `Urungkan`.
+- Tab Gagal dibaca: baris subjek ("(tanpa subjek)" bila kosong) + pengirim + waktu terima; klik membuka cuplikan isi. Hanya dibaca.
+- Email capture belum aktif dan tidak ada item: empty state dengan link `Buka Pengaturan`. Item sidebar dan palet perintah hanya muncul bila email aktif atau masih ada item.
 
 ## 9. Gerak
 

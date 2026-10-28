@@ -8,6 +8,7 @@ import { SidebarProvider } from '@/components/ui/sidebar'
 import { i18n } from '@/i18n'
 import { routes } from '@/router'
 import * as ipc from '@/ipc'
+import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import { useAccountsStore } from '@/stores/accounts'
 import { useSecurityStore } from '@/stores/security'
 
@@ -89,5 +90,16 @@ describe('AppSidebar', () => {
       recurrence: { freq: 'monthly', interval: 1, until: null }, autoPost: false })
     w = await mountSidebar('/')
     expect(w.find('[data-testid="nav-scheduled-badge"]').text()).toBe('3')
+  })
+
+  it('item Inbox tersembunyi tanpa email capture, tampil dengan badge jumlah pending', async () => {
+    let w = await mountSidebar('/')
+    expect(w.find('a[href$="/inbox"]').exists()).toBe(false)
+    w.unmount()
+    __seedEmailInbox({ captures: [1, 2].map((n) => ({ id: `sb-${n}`, kind: 'expense' as const, date: '2026-05-09',
+      amount: 1000, payee: null, accountId: null, toAccountId: null, categoryId: null, ruleName: 'R', snippet: null })) })
+    w = await mountSidebar('/')
+    expect(w.find('a[href$="/inbox"]').text()).toContain('Inbox')
+    expect(w.find('[data-testid="nav-inbox-badge"]').text()).toBe('2')
   })
 })
