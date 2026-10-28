@@ -48,6 +48,31 @@ pub struct CaptureDraft {
     pub note: Option<String>,
 }
 
+/// Transaksi yang mungkin sama dengan capture. Transfer: nominal = sisi masuk,
+/// akun = sisi keluar (K4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateTxn {
+    pub id: Uuid,
+    pub date: Date,
+    pub payee: Option<String>,
+    pub amount: i64,
+    pub account_id: Uuid,
+}
+
+/// Satu baris Inbox: draft, snippet email, dan kandidat duplikat.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureItem {
+    pub draft: CaptureDraft,
+    pub snippet: Option<String>,
+    pub duplicates: Vec<DuplicateTxn>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InboxSummary {
+    pub pending: u32,
+    pub unparsed: u32,
+}
+
 fn kind_str(kind: RuleKind) -> &'static str {
     match kind {
         RuleKind::Income => "income",
@@ -229,6 +254,10 @@ impl Ledger {
     pub fn capture_draft(&self, id: Uuid) -> Result<CaptureDraft, AppError> {
         let capture =
             repo::get_capture(&self.conn, id)?.ok_or(AppError::NotFound("email capture"))?;
+        self.draft_of(capture)
+    }
+
+    fn draft_of(&self, capture: CaptureRecord) -> Result<CaptureDraft, AppError> {
         let rule = match capture.rule_id {
             Some(rule_id) => repo::get_rule(&self.conn, rule_id)?
                 .map(to_rule)
@@ -305,7 +334,10 @@ impl Ledger {
 
     /// Transaksi sejenis bernominal sama, ±1 hari, di akun draft bila diketahui (K11).
     pub fn duplicate_candidates(&self, id: Uuid) -> Result<Vec<Uuid>, AppError> {
-        let draft = self.capture_draft(id)?;
+        self.duplicate_ids(&self.capture_draft(id)?)
+    }
+
+    fn duplicate_ids(&self, draft: &CaptureDraft) -> Result<Vec<Uuid>, AppError> {
         Ok(repo::find_duplicate_txns(
             &self.conn,
             draft.kind.as_str(),
@@ -314,6 +346,84 @@ impl Ledger {
             draft.account_id,
             MAX_DUPLICATES,
         )?)
+    }
+
+    fn duplicate_txn(&self, id: Uuid) -> Result<DuplicateTxn, AppError> {
+        let t = self.get_txn(id)?;
+        let (amount, account) = if t.kind == TxnKind::Transfer {
+            let legs = || t.postings.iter().filter(|p| p.category_id.is_none());
+            (
+                legs().map(|p| p.amount).max(),
+                legs().find(|p| p.amount < 0).map(|p| p.account_id),
+            )
+        } else {
+            (
+                Some(t.postings.iter().map(|p| p.amount).sum::<i64>().abs()),
+                t.postings.first().map(|p| p.account_id),
+            )
+        };
+        Ok(DuplicateTxn {
+            id,
+            date: t.date,
+            payee: t.payee,
+            amount: amount.unwrap_or_default(),
+            account_id: account.ok_or(AppError::NotFound("posting"))?,
+        })
+    }
+
+    /// Isi tab Inbox "Perlu ditinjau", terbaru di atas (K3).
+    pub fn pending_captures(&self) -> Result<Vec<CaptureItem>, AppError> {
+        repo::list_captures(&self.conn, CaptureStatus::Pending)?
+            .into_iter()
+            .map(|c| {
+                let snippet = c.raw_snippet.clone();
+                let draft = self.draft_of(c)?;
+                let duplicates = self
+                    .duplicate_ids(&draft)?
+                    .into_iter()
+                    .map(|id| self.duplicate_txn(id))
+                    .collect::<Result<_, _>>()?;
+                Ok(CaptureItem {
+                    draft,
+                    snippet,
+                    duplicates,
+                })
+            })
+            .collect()
+    }
+
+    pub fn inbox_summary(&self) -> Result<InboxSummary, AppError> {
+        Ok(InboxSummary {
+            pending: repo::count_captures(&self.conn, CaptureStatus::Pending)?,
+            unparsed: repo::count_unparsed(&self.conn)?,
+        })
+    }
+
+    /// Abaikan semua capture pending bertanggal `<= until` (K7); mengembalikan id-nya untuk undo.
+    pub fn ignore_captures_until(&mut self, until: Date) -> Result<Vec<Uuid>, AppError> {
+        let tx = self.conn.transaction()?;
+        let ids = repo::pending_ids_until(&tx, until)?;
+        for &id in &ids {
+            repo::set_capture_status(&tx, id, CaptureStatus::Ignored, None)?;
+        }
+        tx.commit()?;
+        Ok(ids)
+    }
+
+    /// Undo abaikan: semua harus `ignored`, kalau tidak tidak ada yang berubah (K8).
+    pub fn unignore_captures(&mut self, ids: &[Uuid]) -> Result<(), AppError> {
+        let tx = self.conn.transaction()?;
+        for &id in ids {
+            match repo::get_capture(&tx, id)? {
+                None => return Err(AppError::NotFound("email capture")),
+                Some(c) if c.status != CaptureStatus::Ignored => {
+                    return Err(AppError::CaptureNotIgnored);
+                }
+                Some(_) => repo::set_capture_status(&tx, id, CaptureStatus::Pending, None)?,
+            }
+        }
+        tx.commit()?;
+        Ok(())
     }
 }
 
@@ -616,5 +726,125 @@ mod tests {
         let err = kit.ledger.confirm_capture(id, &form).unwrap_err();
         assert!(matches!(err, AppError::Archived(_)), "{err:?}");
         assert_eq!(pending(&kit).len(), 1);
+    }
+    #[test]
+    fn pending_captures_include_draft_and_duplicates() {
+        let mut kit = kit();
+        let near = kit
+            .ledger
+            .create_txn(&expense(&kit, kit.bca, date!(2026 - 05 - 10), QRIS_AMOUNT))
+            .unwrap();
+        qris_capture(&mut kit);
+        let items = kit.ledger.pending_captures().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].draft.amount, QRIS_AMOUNT);
+        assert!(items[0].snippet.is_some());
+        assert_eq!(
+            items[0].duplicates,
+            vec![DuplicateTxn {
+                id: near,
+                date: date!(2026 - 05 - 10),
+                payee: Some("IDM INDOMARET D".into()),
+                amount: QRIS_AMOUNT,
+                account_id: kit.bca,
+            }]
+        );
+    }
+
+    #[test]
+    fn pending_captures_exclude_confirmed_and_ignored() {
+        let mut kit = kit();
+        let id = qris_capture(&mut kit);
+        assert_eq!(ingest(&mut kit, 11, TARIK), IngestOutcome::Captured(1));
+        kit.ledger.ignore_capture(id).unwrap();
+        let tarik = kit.ledger.pending_captures().unwrap();
+        assert_eq!(tarik.len(), 1);
+        let form = expense(&kit, kit.bca, QRIS_DATE, QRIS_AMOUNT);
+        kit.ledger
+            .confirm_capture(tarik[0].draft.capture_id, &form)
+            .unwrap();
+        assert!(kit.ledger.pending_captures().unwrap().is_empty());
+    }
+
+    #[test]
+    fn transfer_duplicate_uses_source_account() {
+        let mut kit = kit();
+        kit.ledger
+            .conn
+            .execute(
+                "UPDATE email_rule SET account_id = ?1 WHERE name = 'BCA Tarik Tunai'",
+                [kit.bca.to_string()],
+            )
+            .unwrap();
+        assert_eq!(ingest(&mut kit, 1, TARIK), IngestOutcome::Captured(1));
+        let cap = pending(&kit)[0].clone();
+        let manual = kit.transfer(cap.date, cap.amount, Some(2_500));
+        let items = kit.ledger.pending_captures().unwrap();
+        assert_eq!(
+            items[0].duplicates,
+            vec![DuplicateTxn {
+                id: manual,
+                date: cap.date,
+                payee: None,
+                amount: cap.amount,
+                account_id: kit.bca,
+            }]
+        );
+    }
+
+    #[test]
+    fn inbox_summary_counts() {
+        let mut kit = kit();
+        qris_capture(&mut kit);
+        assert_eq!(ingest(&mut kit, 11, UNKNOWN), IngestOutcome::Unparsed);
+        assert_eq!(
+            kit.ledger.inbox_summary().unwrap(),
+            InboxSummary {
+                pending: 1,
+                unparsed: 1
+            }
+        );
+    }
+
+    #[test]
+    fn ignore_until_only_pending_on_or_before() {
+        let mut kit = kit();
+        let id = qris_capture(&mut kit);
+        let before = QRIS_DATE.previous_day().unwrap();
+        assert!(kit.ledger.ignore_captures_until(before).unwrap().is_empty());
+        assert_eq!(
+            kit.ledger.ignore_captures_until(QRIS_DATE).unwrap(),
+            vec![id]
+        );
+        assert!(pending(&kit).is_empty());
+        let ignored = kit.ledger.list_captures(CaptureStatus::Ignored).unwrap();
+        assert_eq!(ignored[0].id, id);
+    }
+
+    #[test]
+    fn unignore_restores_pending() {
+        let mut kit = kit();
+        let id = qris_capture(&mut kit);
+        kit.ledger.ignore_capture(id).unwrap();
+        kit.ledger.unignore_captures(&[id]).unwrap();
+        let items = kit.ledger.pending_captures().unwrap();
+        assert_eq!(items[0].draft.capture_id, id);
+        assert_eq!(pending(&kit)[0].txn_id, None);
+    }
+
+    #[test]
+    fn unignore_non_ignored_rolls_back() {
+        let mut kit = kit();
+        let ignored = qris_capture(&mut kit);
+        assert_eq!(ingest(&mut kit, 11, TARIK), IngestOutcome::Captured(1));
+        kit.ledger.ignore_capture(ignored).unwrap();
+        let still_pending = pending(&kit)[0].id;
+        let err = kit
+            .ledger
+            .unignore_captures(&[ignored, still_pending])
+            .unwrap_err();
+        assert!(matches!(err, AppError::CaptureNotIgnored), "{err:?}");
+        let list = kit.ledger.list_captures(CaptureStatus::Ignored).unwrap();
+        assert_eq!(list[0].id, ignored);
     }
 }

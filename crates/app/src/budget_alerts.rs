@@ -44,6 +44,17 @@ impl Ledger {
         Ok((id, self.alerts_after_save(&periods, before)))
     }
 
+    pub fn confirm_capture_with_alerts(
+        &mut self,
+        id: Uuid,
+        form: &TxnForm,
+    ) -> Result<(Uuid, Vec<BudgetAlert>), AppError> {
+        let periods = vec![self.period_of(form.date)?];
+        let before = self.budget_levels(&periods, form_categories(form));
+        let txn = self.confirm_capture(id, form)?;
+        Ok((txn, self.alerts_after_save(&periods, before)))
+    }
+
     /// Periode = tanggal form (bila diedit) atau tanggal kejadian.
     pub fn confirm_occurrence_with_alerts(
         &mut self,
@@ -478,5 +489,31 @@ mod tests {
         assert!(k.ledger.get_txn(id).is_ok());
         let edit = expense(&k, date!(2026 - 10 - 11), "Makan & Minum", 95_000);
         assert_eq!(k.ledger.update_txn_with_alerts(id, &edit).unwrap(), vec![]);
+    }
+
+    #[test]
+    fn confirm_capture_reports_alert() {
+        use crate::CaptureStatus;
+        let mut k = Kit::new(1, date!(2026 - 05 - 01));
+        k.ledger
+            .set_budget(k.cat("Makan & Minum"), period("2026-05"), Some(10_000))
+            .unwrap();
+        k.ledger.seed_email_rules().unwrap();
+        let rules = k.ledger.email_rules().unwrap();
+        let raw = include_bytes!("../../mail/tests/fixtures/bca_qris.eml");
+        let cursor = crate::Cursor {
+            uid_validity: 1,
+            last_uid: 1,
+        };
+        let wib = time::UtcOffset::from_hms(7, 0, 0).unwrap();
+        k.ledger
+            .ingest_email("INBOX", cursor, raw, &rules, wib)
+            .unwrap();
+        let id = k.ledger.list_captures(CaptureStatus::Pending).unwrap()[0].id;
+        let form = expense(&k, date!(2026 - 05 - 09), "Makan & Minum", 41_700);
+        let (txn, alerts) = k.ledger.confirm_capture_with_alerts(id, &form).unwrap();
+        assert_eq!(k.ledger.get_txn(txn).unwrap().date, date!(2026 - 05 - 09));
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].level, BudgetLevel::Exceeded);
     }
 }

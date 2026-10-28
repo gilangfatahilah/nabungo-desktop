@@ -107,6 +107,9 @@ pub enum AppError {
     /// Capture email sudah dikonfirmasi/diabaikan.
     #[error("email capture was already processed")]
     CaptureNotPending,
+    /// Batal-abaikan untuk capture yang sudah tidak berstatus ignored.
+    #[error("email capture is not ignored")]
+    CaptureNotIgnored,
     /// OS keychain (Secret Service / Credential Manager) tidak bisa dipakai.
     #[error("system keychain unavailable")]
     KeychainUnavailable,
