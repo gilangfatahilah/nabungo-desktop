@@ -157,6 +157,15 @@ export const commands = {
 	connectEmail: (address: string, mailbox: string, password: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("connect_email", { address, mailbox, password })),
 	disconnectEmail: () => typedError<null, IpcError>(__TAURI_INVOKE("disconnect_email")),
 	syncEmail: () => typedError<SyncSummaryDto, IpcError>(__TAURI_INVOKE("sync_email")),
+	inboxSummary: () => typedError<InboxSummaryDto, IpcError>(__TAURI_INVOKE("inbox_summary")),
+	listPendingCaptures: () => typedError<CaptureDto[], IpcError>(__TAURI_INVOKE("list_pending_captures")),
+	listUnparsedEmails: () => typedError<UnparsedEmailDto[], IpcError>(__TAURI_INVOKE("list_unparsed_emails")),
+	confirmCapture: (id: string, form: TxnFormDto) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("confirm_capture", { id, form })),
+	linkCapture: (id: string, txnId: string) => typedError<null, IpcError>(__TAURI_INVOKE("link_capture", { id, txnId })),
+	ignoreCapture: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("ignore_capture", { id })),
+	/**  Abaikan massal capture pending sampai `date` (inklusif); id dikembalikan untuk undo. */
+	ignoreCapturesUntil: (date: string) => typedError<string[], IpcError>(__TAURI_INVOKE("ignore_captures_until", { date })),
+	unignoreCaptures: (ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("unignore_captures", { ids })),
 };
 
 /** Events */
@@ -372,6 +381,24 @@ export type BudgetTotalDto = {
 	perDay: number | null,
 };
 
+/**
+ *  Satu baris Inbox (EML-03): draft form + kandidat duplikat.
+ *  Transfer: `account_id` = asal, `to_account_id` = tujuan.
+ */
+export type CaptureDto = {
+	id: string,
+	kind: TxnFormKindDto,
+	date: string,
+	amount: number,
+	payee: string | null,
+	accountId: string | null,
+	toAccountId: string | null,
+	categoryId: string | null,
+	ruleName: string | null,
+	snippet: string | null,
+	duplicates: DuplicateTxnDto[],
+};
+
 export type CashflowPointDto = {
 	period: string,
 	from: string,
@@ -415,6 +442,14 @@ export type ContactDto = {
 	name: string,
 };
 
+export type DuplicateTxnDto = {
+	id: string,
+	date: string,
+	payee: string | null,
+	amount: number,
+	accountId: string,
+};
+
 export type EmailStatusDto = {
 	enabled: boolean,
 	address: string | null,
@@ -452,6 +487,12 @@ export type FeeDto = {
 };
 
 export type FreqDto = "daily" | "weekly" | "monthly" | "yearly";
+
+export type InboxSummaryDto = {
+	pending: number,
+	unparsed: number,
+	emailEnabled: boolean,
+};
 
 export type IntegrityStatusDto = "skipped" | "ok" | "failed";
 
@@ -694,6 +735,15 @@ export type UnallocatedDto = {
 	accountId: string,
 	remainingBp: number,
 	amount: number,
+};
+
+export type UnparsedEmailDto = {
+	messageId: string,
+	sender: string,
+	subject: string,
+	/**  ISO-8601 UTC. */
+	receivedAt: string | null,
+	snippet: string,
 };
 
 /**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */

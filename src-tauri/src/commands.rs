@@ -13,13 +13,14 @@ use tauri_plugin_opener::OpenerExt;
 use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BackupSecretDto, BackupSourceDto,
-    BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CashflowPointDto,
-    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, ContactDto, EmailStatusDto,
-    LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto,
-    ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, RuleDto, RuleInputDto,
-    SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto, SyncSummaryDto, TagUsageDto,
-    ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
-    ValuationPointDto, parse_day, parse_id, parse_period,
+    BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CaptureDto,
+    CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
+    ContactDto, EmailStatusDto, InboxSummaryDto, LocaleDto, NetWorthPointDto, OnboardingDto,
+    PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto,
+    RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto, SecurityStatusDto, ShareDto,
+    StartupReportDto, SyncSummaryDto, TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto,
+    TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, UnparsedEmailDto, ValuationPointDto,
+    parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::RecoveryReason;
@@ -1391,6 +1392,89 @@ pub fn email_status(state: State<'_, AppState>) -> Result<EmailStatusDto, IpcErr
         last_error: *rt.last_error.lock().unwrap_or_else(|e| e.into_inner()),
         paused: rt.schedule.lock().unwrap_or_else(|e| e.into_inner()).paused,
     })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn inbox_summary(state: State<'_, AppState>) -> Result<InboxSummaryDto, IpcError> {
+    let l = ledger(&state)?;
+    let s = l.inbox_summary()?;
+    Ok(InboxSummaryDto {
+        pending: s.pending,
+        unparsed: s.unparsed,
+        email_enabled: l.email_settings()?.enabled,
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_pending_captures(state: State<'_, AppState>) -> Result<Vec<CaptureDto>, IpcError> {
+    let items = ledger(&state)?.pending_captures()?;
+    Ok(items.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_unparsed_emails(state: State<'_, AppState>) -> Result<Vec<UnparsedEmailDto>, IpcError> {
+    let rows = ledger(&state)?.list_unparsed()?;
+    Ok(rows.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn confirm_capture(
+    state: State<'_, AppState>,
+    id: String,
+    form: TxnFormDto,
+) -> Result<SavedTxnDto, IpcError> {
+    let id = parse_id(&id, "email capture")?;
+    let form = form.try_into()?;
+    let (txn, alerts) = ledger(&state)?.confirm_capture_with_alerts(id, &form)?;
+    Ok(SavedTxnDto {
+        id: txn.to_string(),
+        alerts: alerts.into_iter().map(Into::into).collect(),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn link_capture(
+    state: State<'_, AppState>,
+    id: String,
+    txn_id: String,
+) -> Result<(), IpcError> {
+    let id = parse_id(&id, "email capture")?;
+    let txn_id = parse_id(&txn_id, "transaction")?;
+    Ok(ledger(&state)?.link_capture(id, txn_id)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn ignore_capture(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "email capture")?;
+    Ok(ledger(&state)?.ignore_capture(id)?)
+}
+
+/// Abaikan massal capture pending sampai `date` (inklusif); id dikembalikan untuk undo.
+#[tauri::command]
+#[specta::specta]
+pub fn ignore_captures_until(
+    state: State<'_, AppState>,
+    date: String,
+) -> Result<Vec<String>, IpcError> {
+    let until = parse_day(&date)?;
+    let ids = ledger(&state)?.ignore_captures_until(until)?;
+    Ok(ids.into_iter().map(|u| u.to_string()).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn unignore_captures(state: State<'_, AppState>, ids: Vec<String>) -> Result<(), IpcError> {
+    let ids = ids
+        .iter()
+        .map(|s| parse_id(s, "email capture"))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ledger(&state)?.unignore_captures(&ids)?)
 }
 
 /// Login IMAP + cek label dulu; baru App Password disimpan ke keychain dan akun ke setting.

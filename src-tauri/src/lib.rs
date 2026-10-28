@@ -118,6 +118,14 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::connect_email,
             commands::disconnect_email,
             commands::sync_email,
+            commands::inbox_summary,
+            commands::list_pending_captures,
+            commands::list_unparsed_emails,
+            commands::confirm_capture,
+            commands::link_capture,
+            commands::ignore_capture,
+            commands::ignore_captures_until,
+            commands::unignore_captures,
         ])
         .events(tauri_specta::collect_events![
             dto::EmailSyncProgress,
