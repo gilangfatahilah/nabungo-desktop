@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BudgetOverviewDto, TxnFormDto } from './bindings'
-import { __enterRecovery, __leaveRecovery, browserLedger as L } from './browser-ledger'
+import { __enterRecovery, __leaveRecovery, __seedEmailInbox, browserLedger as L } from './browser-ledger'
 import { browserCommands } from './browser'
 
 async function data<T>(p: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: unknown }>): Promise<T> {
@@ -891,5 +891,76 @@ describe('browser ledger mode pemulihan (P11)', () => {
     await data(C.recoveryStartFresh())
     expect((await C.recoveryStatus()).active).toBe(false)
     expect(await data(C.getOnboardingStatus())).toBe(false)
+  })
+})
+
+describe('browser ledger email inbox (paritas Rust)', () => {
+  const seed = (id: string, accountId: string, categoryId: string, over: Record<string, unknown> = {}) => ({
+    id, kind: 'expense' as const, date: '2026-05-09', amount: 25_000, payee: 'Kopi', accountId,
+    toAccountId: null, categoryId, ruleName: 'BCA QRIS', snippet: 'Rp 25.000', ...over,
+  })
+  const pendingIds = async () => (await data(L.listPendingCaptures())).map((c) => c.id)
+
+  it('confirm mencatat transaksi; capture keluar dari pending; confirm kedua ditolak', async () => {
+    const a = await account('Inbox A')
+    const c = await category('expense', 'Inbox Makan')
+    __seedEmailInbox({ captures: [seed('cap-a', a, c)] })
+    const item = (await data(L.listPendingCaptures())).find((x) => x.id === 'cap-a')!
+    expect(item).toMatchObject({ amount: 25_000, ruleName: 'BCA QRIS', duplicates: [] })
+    const f = form({ date: '2026-05-09', accountId: a, amount: 25_000, splits: [{ categoryId: c, amount: 25_000, memo: null }] })
+    const saved = await data(L.confirmCapture('cap-a', f))
+    expect((await data(L.listTxns({ ...q, accountId: a }))).rows.map((r) => r.id)).toContain(saved.id)
+    expect(await pendingIds()).not.toContain('cap-a')
+    expect(await L.confirmCapture('cap-a', f)).toMatchObject({ status: 'error', error: { code: 'capture_not_pending' } })
+    expect(await L.ignoreCapture('nope')).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'email capture' } })
+  })
+
+  it('kandidat duplikat: jenis & nominal sama, ±1 hari, akun draft', async () => {
+    const a = await account('Inbox B')
+    const c = await category('expense', 'Inbox Belanja')
+    const exp = (date: string, amount: number) =>
+      data(L.createTxn(form({ date, accountId: a, amount, splits: [{ categoryId: c, amount, memo: null }] })))
+    const near = await exp('2026-05-10', 25_000)
+    await exp('2026-05-12', 25_000)
+    await exp('2026-05-09', 30_000)
+    __seedEmailInbox({ captures: [seed('cap-b', a, c)] })
+    const item = (await data(L.listPendingCaptures())).find((x) => x.id === 'cap-b')!
+    expect(item.duplicates).toEqual([{ id: near.id, date: '2026-05-10', payee: null, amount: 25_000, accountId: a }])
+    await data(L.linkCapture('cap-b', near.id))
+    expect(await pendingIds()).not.toContain('cap-b')
+  })
+
+  it('abaikan sampai tanggal + urungkan; urungkan id pending ditolak tanpa perubahan', async () => {
+    const a = await account('Inbox C')
+    const c = await category('expense', 'Inbox Lain')
+    __seedEmailInbox({
+      captures: [
+        seed('cap-c1', a, c, { date: '2026-04-01' }),
+        seed('cap-c2', a, c, { date: '2026-04-02' }),
+        seed('cap-c3', a, c, { date: '2026-04-03' }),
+      ],
+    })
+    const ids = await data(L.ignoreCapturesUntil('2026-04-02'))
+    expect(ids).toEqual(expect.arrayContaining(['cap-c1', 'cap-c2']))
+    expect(ids).not.toContain('cap-c3')
+    expect(await pendingIds()).not.toContain('cap-c1')
+    expect(await L.unignoreCaptures(['cap-c1', 'cap-c3'])).toMatchObject({ status: 'error', error: { code: 'capture_not_ignored' } })
+    expect(await pendingIds()).not.toContain('cap-c1')
+    await data(L.unignoreCaptures(['cap-c1', 'cap-c2']))
+    expect(await pendingIds()).toEqual(expect.arrayContaining(['cap-c1', 'cap-c2', 'cap-c3']))
+    await data(L.ignoreCapture('cap-c3'))
+    expect(await pendingIds()).not.toContain('cap-c3')
+  })
+
+  it('inboxSummary menghitung pending & unparsed', async () => {
+    const before = await data(browserCommands.inboxSummary())
+    __seedEmailInbox({
+      captures: [seed('cap-d', 'x', 'y')],
+      unparsed: [{ messageId: '<m1@x>', sender: 'bank@x', subject: 'Info', receivedAt: null, snippet: 'promo' }],
+    })
+    expect(await data(browserCommands.inboxSummary())).toEqual({
+      pending: before.pending + 1, unparsed: before.unparsed + 1, emailEnabled: false,
+    })
+    expect((await data(L.listUnparsedEmails())).map((u) => u.messageId)).toContain('<m1@x>')
   })
 })

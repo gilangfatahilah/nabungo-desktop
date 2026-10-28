@@ -3,8 +3,11 @@ import { isTauri } from '@tauri-apps/api/core'
 import {
   commands,
   events,
+  type CaptureDto,
   type EmailStatusDto,
+  type InboxSummaryDto,
   type SyncSummaryDto,
+  type UnparsedEmailDto,
   type RecurrenceDto,
   type RuleDto,
   type RuleInputDto,
@@ -54,6 +57,10 @@ import { browserCommands } from './browser'
 import { browserEmail, type EmailSyncHandlers } from './browser-email'
 
 export type {
+  CaptureDto,
+  DuplicateTxnDto,
+  InboxSummaryDto,
+  UnparsedEmailDto,
   AccountDto,
   AccountFieldsDto,
   AccountGroupDto,
@@ -647,4 +654,40 @@ export async function onEmailSync(h: EmailSyncHandlers): Promise<() => void> {
     events.emailSyncDone.listen((e) => h.done?.(e.payload)),
   ])
   return () => offs.forEach((off) => off())
+}
+
+// --- Inbox email capture (EML-03) ---
+
+export function inboxSummary(): Promise<InboxSummaryDto> {
+  return unwrap(api().inboxSummary())
+}
+
+export function listPendingCaptures(): Promise<CaptureDto[]> {
+  return unwrap(api().listPendingCaptures())
+}
+
+export function listUnparsedEmails(): Promise<UnparsedEmailDto[]> {
+  return unwrap(api().listUnparsedEmails())
+}
+
+export function confirmCapture(id: string, form: TxnFormDto): Promise<SavedTxnDto> {
+  return unwrap(api().confirmCapture(id, form))
+}
+
+/** Hubungkan ke transaksi yang sudah ada (duplikat) tanpa membuat transaksi baru. */
+export async function linkCapture(id: string, txnId: string): Promise<void> {
+  await unwrap(api().linkCapture(id, txnId))
+}
+
+export async function ignoreCapture(id: string): Promise<void> {
+  await unwrap(api().ignoreCapture(id))
+}
+
+/** Abaikan semua pending bertanggal ≤ `date`; id yang diabaikan dikembalikan untuk undo. */
+export function ignoreCapturesUntil(date: string): Promise<string[]> {
+  return unwrap(api().ignoreCapturesUntil(date))
+}
+
+export async function unignoreCaptures(ids: string[]): Promise<void> {
+  await unwrap(api().unignoreCaptures(ids))
 }
