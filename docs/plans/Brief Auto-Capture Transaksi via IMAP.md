@@ -94,6 +94,14 @@ Hasil parsing tampil sebagai inbox; tidak ada transaksi yang tercatat tanpa konf
 - **Duplicate hint**: jika ada transaksi manual dengan nominal sama dan selisih waktu ±1 hari, tawarkan *merge* alih-alih membuat transaksi baru.
 - **Unparsed**: tab terpisah berisi email yang gagal di-parse, dengan tombol untuk membuat rule baru dari email tersebut.
 
+Implementasi 9c (`docs/design/design.md` §8.10):
+
+- **Catat** hanya tampil untuk draft *siap* (akun aktif, kategori aktif sejenis atau akun tujuan untuk transfer, tanpa kandidat duplikat); selain itu aksi utama adalah **Tinjau**.
+- **Tinjau** membuka sheet berisi form transaksi biasa yang terisi dari draft, plus "Email asli" (snippet) yang tertutup default. Isian tidak tertimpa bila sync berjalan di latar; capture yang sudah diproses di tempat lain memunculkan error di form.
+- **Duplicate hint** berupa daftar kandidat dengan tombol **Hubungkan**: capture ditandai `confirmed` dengan `txn_id` transaksi yang ada, tanpa membuat transaksi baru.
+- **Abaikan** (satu atau massal sampai tanggal, untuk backlog sync pertama) selalu bisa di-undo lewat toast.
+- **Gagal dibaca** hanya menampilkan subjek, pengirim, waktu terima, dan snippet; tombol buat rule menyusul di 9d.
+
 Auto-kategori: pakai `Ledger::payee_suggestion` (`crates/app/src/payee.rs`), yang sudah mengisi kategori & akun dari transaksi terakhir payee yang sama.
 
 ## Risiko & edge case
@@ -118,6 +126,8 @@ Dikerjakan bertahap, dan tiap tahap bisa dipakai sendiri sebelum lanjut ke tahap
 **Status (2026-10-27):** milestone 1–3 selesai di Fase 9a (`docs/plans/2026-10-27-fase-9a-email-capture-backend.md`): crate `nabungo-mail`, rule bawaan BCA + Jago (diuji pada 348 email asli: 0 unparsed), tabel `email_*`, review queue di `nabungo-app`, CLI `capture_sync`. Milestone 4 → 9b, 5–6 → 9c.
 
 **Status (2026-10-28):** milestone 4 selesai di Fase 9b (`docs/plans/2026-10-28-fase-9b-email-capture-tauri.md`): App Password di OS keychain, `connect_email`/`disconnect_email`/`sync_email`, sync saat app dibuka lalu tiap 15 menit (thread `email-sync`), kartu Email di Settings. Inbox review tetap di 9c.
+
+**Status (2026-10-28):** milestone 5 dan sebagian 6 selesai di Fase 9c (`docs/plans/2026-10-28-fase-9c-email-inbox.md`): Inbox (`/inbox`) dengan Catat cepat, Tinjau (edit lalu confirm), Abaikan + Urungkan, abaikan massal sampai tanggal, hint duplikat dengan `Hubungkan` (link ke transaksi yang ada, bukan merge), dan tab Gagal dibaca (hanya baca). Rule editor + buat rule dari email unparsed → 9d.
 
 1. **Spike IMAP**: CLI kecil di Rust yang login, `SELECT "Finance"`, dan mencetak subject 10 email terakhir.
 2. **Parser satu bank**: satu rule hardcoded untuk bank yang paling sering dipakai, diuji dengan contoh email asli yang sudah disensor.
