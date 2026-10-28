@@ -489,8 +489,8 @@ Layout dua kolom: sidebar kiri berisi navigasi + daftar akun per group dengan sa
 | Alokasi modal  | Donut porsi aktual, tabel target vs aktual vs selisih, riwayat porsi bulanan; kelola bucket dan mapping akun                 | `G A`                    |
 | Laporan        | Income vs expense, breakdown kategori, tren, net worth over time; filter periode                                             | `G R`                    |
 | Terjadwal      | Daftar recurring rule dan transaksi jatuh tempo (konfirmasi / lewati / edit)                                                 | —                        |
-| Inbox (v2)     | Hasil auto-capture email: tab Pending (confirm / edit / ignore, duplicate hint) dan Unparsed (buat rule dari email)          | —                        |
-| Pengaturan     | Umum, keamanan, backup & restore, import/export, tampilan, email capture (v2: akun, label, rule, sync)                         | `Ctrl+,`                 |
+| Inbox (v2)     | Hasil auto-capture email: tab Pending (confirm / edit / ignore, duplicate hint), Unparsed (buat rule dari email), dan Rule (kelola + uji rule, re-parse lokal) | —                        |
+| Pengaturan     | Umum, keamanan, backup & restore, import/export, tampilan, email capture (v2: akun, label, sync; rule dikelola di tab Rule Inbox) | `Ctrl+,`                 |
 
 **Detail interaksi penting**
 

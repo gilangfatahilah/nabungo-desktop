@@ -964,3 +964,108 @@ describe('browser ledger email inbox (paritas Rust)', () => {
     expect((await data(L.listUnparsedEmails())).map((u) => u.messageId)).toContain('<m1@x>')
   })
 })
+
+describe('browser ledger rule email (paritas crates/app/src/email_rules.rs)', () => {
+  const unparsed = (messageId: string, snippet: string, sender = 'promo@toko.example') =>
+    ({ messageId, sender, subject: 'Bayar Toko', receivedAt: '2026-10-26T03:00:00Z', snippet })
+  const unparsedIds = async () => (await data(L.listUnparsedEmails())).map((u) => u.messageId)
+  const ruleOf = async (name: string) => (await data(L.listEmailRules())).find((r) => r.name === name)
+
+  it('rule tidak valid ditolak dengan field-nya', async () => {
+    const input = await data(L.suggestEmailRule('<none>')).catch(() => null)
+    expect(input).toBeNull()
+    expect(await L.suggestEmailRule('<none>')).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'email' } })
+    __seedEmailInbox({ unparsed: [unparsed('<r0@nol>', 'Total Payment : IDR 50.000', 'a@nol.example')] })
+    const s = await data(L.suggestEmailRule('<r0@nol>'))
+    const before = (await data(L.listEmailRules())).length
+    expect(await L.createEmailRule({ ...s, amountRegex: 'IDR [0-9]+' })).toEqual({
+      status: 'error', error: { code: 'email_rule_invalid', entity: 'amount' },
+    })
+    expect(await L.createEmailRule({ ...s, counterAccountId: await account('Rule Lawan') })).toEqual({
+      status: 'error', error: { code: 'email_rule_invalid', entity: 'counter_account' },
+    })
+    expect((await data(L.listEmailRules())).length).toBe(before)
+  })
+
+  it('simpan rule me-re-parse email gagal dibaca ke pending', async () => {
+    __seedEmailInbox({ unparsed: [unparsed('<r1@toko>', 'Total Payment : IDR 50.000'), unparsed('<r2@lain>', 'Halo', 'a@lain.example')] })
+    const s = await data(L.suggestEmailRule('<r1@toko>'))
+    const test = await data(L.testEmailRule(s, null, { kind: 'unparsed', messageId: '<r1@toko>' }))
+    expect(test).toMatchObject({ fail: null, items: [{ amount: 50_000, date: '2026-10-26' }], dateFromHeader: true })
+    expect(test.unparsedMatches).toBeGreaterThanOrEqual(1)
+    const saved = await data(L.createEmailRule({ ...s, name: 'Toko Rule' }))
+    expect(saved.reparsed.emails).toBeGreaterThanOrEqual(1)
+    expect(await unparsedIds()).not.toContain('<r1@toko>')
+    expect(await unparsedIds()).toContain('<r2@lain>')
+    const cap = (await data(L.listPendingCaptures())).find((c) => c.ruleName === 'Toko Rule')!
+    expect(cap).toMatchObject({ amount: 50_000, date: '2026-10-26', kind: 'expense', accountId: null })
+    expect(await data(L.reparseUnparsed())).toEqual({ emails: 0, items: 0 })
+    expect(await ruleOf('Toko Rule')).toMatchObject({ id: saved.id, pending: 1, enabled: true })
+
+    // Akun rule berubah → draft capture pending ikut berubah.
+    const a = await account('Rule Akun')
+    const r = (await ruleOf('Toko Rule'))!
+    const { id: _, pending: __, ...input } = r
+    await data(L.updateEmailRule(r.id, { ...input, accountId: a }))
+    expect((await data(L.listPendingCaptures())).find((c) => c.id === cap.id)!.accountId).toBe(a)
+    expect(await L.updateEmailRule('nope', input)).toMatchObject({ status: 'error', error: { code: 'not_found', entity: 'email rule' } })
+  })
+
+  it('nonaktifkan, hapus, pulihkan', async () => {
+    __seedEmailInbox({ unparsed: [unparsed('<r3@kedai>', 'Total : Rp 7.000', 'notif@kedai.example')] })
+    const s = await data(L.suggestEmailRule('<r3@kedai>'))
+    const saved = await data(L.createEmailRule({ ...s, name: 'Kedai', enabled: false }))
+    expect(saved.reparsed).toEqual({ emails: 0, items: 0 })
+    expect(await unparsedIds()).toContain('<r3@kedai>')
+    expect(await data(L.setEmailRuleEnabled(saved.id, true))).toMatchObject({ reparsed: { emails: 1, items: 1 } })
+    expect(await unparsedIds()).not.toContain('<r3@kedai>')
+    await data(L.deleteEmailRule(saved.id))
+    expect(await ruleOf('Kedai')).toBeUndefined()
+    // Capture lama tetap menampilkan nama rule yang dihapus.
+    expect((await data(L.listPendingCaptures())).some((c) => c.ruleName === 'Kedai')).toBe(true)
+    await data(L.restoreEmailRule(saved.id))
+    expect(await ruleOf('Kedai')).toMatchObject({ enabled: true })
+    expect(await L.restoreEmailRule(saved.id)).toMatchObject({ status: 'error', error: { code: 'not_found' } })
+  })
+
+  it('jumlah cocok mengikuti urutan rule aktif', async () => {
+    __seedEmailInbox({ unparsed: [unparsed('<o1@urut>', 'Total Payment : IDR 50.000', 'a@urut.example'),
+      unparsed('<o2@urut>', 'Total Payment : IDR 60.000', 'a@urut.example')] })
+    const s = { ...(await data(L.suggestEmailRule('<o1@urut>'))), amountRegex: String.raw`IDR ([\d.]+)`, priority: 10 }
+    // Rule prioritas lebih tinggi untuk pengirim yang sama gagal di nominal → email tetap gagal dibaca.
+    const blocker = await data(L.createEmailRule({ ...s, name: 'Blok', priority: 50, amountRegex: 'Total (Payment)' }))
+    const count = async (input: typeof s, id: string | null) =>
+      (await data(L.testEmailRule(input, id, { kind: 'unparsed', messageId: '<o1@urut>' }))).unparsedMatches
+    expect(await count({ ...s, name: 'Urut' }, null)).toBe(0)
+    expect(await count({ ...s, name: 'Urut', priority: 60 }, null)).toBe(2)
+    expect(await count({ ...s, name: 'Blok' }, blocker.id)).toBe(2)
+    expect(await count({ ...s, name: 'Blok', enabled: false }, blocker.id)).toBe(2)
+    await data(L.deleteEmailRule(blocker.id))
+  })
+
+  it('uji email tempelan memakai tanggal hari ini bila teks tanpa tanggal', async () => {
+    const s = { ...(await data(L.suggestEmailRule('<r2@lain>'))), amountRegex: String.raw`Rp ([\d.]+)` }
+    const t = await data(L.testEmailRule(s, null, { kind: 'pasted', sender: 'a@lain.example', subject: 'Bayar Toko', text: 'Bayar Rp 9.000' }))
+    expect(t).toMatchObject({ senderOk: true, fail: null, dateFromHeader: true, items: [{ amount: 9_000 }] })
+  })
+
+  it('email tempelan dinormalisasi seperti sync', async () => {
+    const s = { ...(await data(L.suggestEmailRule('<r2@lain>'))), subjectRegex: '^Bayar Toko$', amountRegex: String.raw`^Total Payment : IDR ([\d.,]+)$` }
+    const t = await data(L.testEmailRule(s, null, {
+      kind: 'pasted', sender: ' A@LAIN.example ', subject: '  Bayar   Toko ', text: 'Halo\r\n\r\n\r\n  Total   Payment\u00a0:\tIDR 12,500.00  \r\n',
+    }))
+    expect(t).toMatchObject({ senderOk: true, subjectOk: true, fail: null, items: [{ amount: 12_500 }] })
+  })
+
+  // Terakhir: mengubah status email browser (dibagikan antartest).
+  it('simpan akun email menyalin rule bawaan sekali', async () => {
+    await data(browserCommands.connectEmail('saya@gmail.com', 'Finance', 'abcd'))
+    const names = (await data(L.listEmailRules())).map((r) => r.name)
+    expect(names).toContain('BCA Pembayaran (QRIS/VA)')
+    const bca = (await ruleOf('BCA Transfer'))!
+    await data(L.deleteEmailRule(bca.id))
+    await data(browserCommands.connectEmail('saya@gmail.com', 'Finance', 'abcd'))
+    expect(await ruleOf('BCA Transfer')).toBeUndefined()
+    await data(browserCommands.disconnectEmail())
+  })
+})

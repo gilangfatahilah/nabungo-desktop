@@ -166,6 +166,16 @@ export const commands = {
 	/**  Abaikan massal capture pending sampai `date` (inklusif); id dikembalikan untuk undo. */
 	ignoreCapturesUntil: (date: string) => typedError<string[], IpcError>(__TAURI_INVOKE("ignore_captures_until", { date })),
 	unignoreCaptures: (ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("unignore_captures", { ids })),
+	listEmailRules: () => typedError<EmailRuleDto[], IpcError>(__TAURI_INVOKE("list_email_rules")),
+	createEmailRule: (input: EmailRuleInputDto) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("create_email_rule", { input })),
+	updateEmailRule: (id: string, input: EmailRuleInputDto) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("update_email_rule", { id, input })),
+	setEmailRuleEnabled: (id: string, enabled: boolean) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("set_email_rule_enabled", { id, enabled })),
+	deleteEmailRule: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_email_rule", { id })),
+	restoreEmailRule: (id: string) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("restore_email_rule", { id })),
+	/**  Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan). `rule_id` = rule yang diubah. */
+	testEmailRule: (input: EmailRuleInputDto, ruleId: string | null, sample: RuleSampleDto) => typedError<RuleTestDto, IpcError>(__TAURI_INVOKE("test_email_rule", { input, ruleId, sample })),
+	suggestEmailRule: (messageId: string) => typedError<EmailRuleInputDto, IpcError>(__TAURI_INVOKE("suggest_email_rule", { messageId })),
+	reparseUnparsed: () => typedError<ReparseSummaryDto, IpcError>(__TAURI_INVOKE("reparse_unparsed")),
 };
 
 /** Events */
@@ -450,6 +460,33 @@ export type DuplicateTxnDto = {
 	accountId: string,
 };
 
+export type EmailRuleDto = {
+	id: string,
+	/**  Capture pending dari rule ini. */
+	pending: number,
+} & EmailRuleInputDto;
+
+export type EmailRuleInputDto = {
+	name: string,
+	senderPattern: string,
+	subjectRegex: string | null,
+	amountRegex: string,
+	payeeRegex: string | null,
+	dateRegex: string | null,
+	/**  Salah satu `DATE_FORMATS` (`dd/mm/yyyy`, `dd-mm-yyyy`, `dd mmm yyyy`). */
+	dateFormat: string | null,
+	kind: EmailRuleKindDto,
+	accountId: string | null,
+	/**  Hanya untuk transfer. */
+	counterAccountId: string | null,
+	/**  Hanya untuk income/expense. */
+	defaultCategoryId: string | null,
+	priority: number,
+	enabled: boolean,
+};
+
+export type EmailRuleKindDto = "income" | "expense" | "transfer_out" | "transfer_in";
+
 export type EmailStatusDto = {
 	enabled: boolean,
 	address: string | null,
@@ -474,7 +511,9 @@ export type EmailSyncProgress = {
 	unparsed: number,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "capture_not_pending" | "capture_not_ignored" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "capture_not_pending" | "capture_not_ignored" | 
+/**  `entity` = field rule yang salah (`name`, `sender`, `amount`, ...). */
+"email_rule_invalid" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
 /**  DB gagal dibuka saat startup; pulihkan dari backup dulu (P1). */
 "recovery_required" | 
 /**  Command pemulihan dipanggil saat DB sedang terbuka. */
@@ -576,6 +615,11 @@ export type RecurrenceDto = {
 	until: string | null,
 };
 
+export type ReparseSummaryDto = {
+	emails: number,
+	items: number,
+};
+
 export type RuleDto = {
 	id: string,
 	/**  Template; `date` = kejadian berikutnya. */
@@ -592,6 +636,37 @@ export type RuleInputDto = {
 	form: TxnFormDto,
 	recurrence: RecurrenceDto,
 	autoPost: boolean,
+};
+
+/**  Email contoh untuk uji rule; teks tempelan tidak disimpan. */
+export type RuleSampleDto = { kind: "unparsed"; messageId: string } | { kind: "pasted"; sender: string; subject: string; text: string };
+
+export type RuleSavedDto = {
+	id: string,
+	reparsed: ReparseSummaryDto,
+};
+
+export type RuleTestDto = {
+	senderOk: boolean,
+	/**  `null` = rule tanpa pola subjek. */
+	subjectOk: boolean | null,
+	amounts: string[],
+	payee: string | null,
+	dateText: string | null,
+	/**  Tanggal diambil dari header email, bukan dari teks. */
+	dateFromHeader: boolean,
+	fail: TraceFailDto | null,
+	/**  Teks yang tidak terbaca untuk `amount_invalid`/`date_invalid`. */
+	failText: string | null,
+	items: RuleTestItemDto[],
+	/**  Email gagal dibaca yang akan terbaca oleh rule ini. */
+	unparsedMatches: number,
+};
+
+export type RuleTestItemDto = {
+	amount: number,
+	date: string,
+	payee: string | null,
 };
 
 /**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */
@@ -636,6 +711,9 @@ export type TagUsageDto = {
 };
 
 export type ThemeDto = "light" | "dark" | "system";
+
+/**  Langkah rule yang gagal. `sender`/`subject`/`no_amount` = rule dilewati. */
+export type TraceFailDto = "sender" | "subject" | "no_amount" | "amount_invalid" | "no_date" | "date_invalid";
 
 export type TxnDetailDto = {
 	id: string,

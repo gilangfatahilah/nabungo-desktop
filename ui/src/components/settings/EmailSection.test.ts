@@ -129,6 +129,12 @@ describe('EmailSection', () => {
     expect(link.getAttribute('href')).toContain('/inbox')
   })
 
+  it('terhubung → link Kelola rule ke tab Rule', async () => {
+    await mountSection(connected)
+    const link = [...document.body.querySelectorAll('a')].find((a) => a.textContent?.trim() === id.emailRules.manageRules)!
+    expect(link.getAttribute('href')).toContain('/inbox?tab=rules')
+  })
+
   it('status dijeda → badge dan pesan galat terakhir', async () => {
     const w = await mountSection({ ...connected, paused: true, lastError: 'email_auth_failed' })
     expect(w.text()).toContain(id.email.paused)

@@ -10,6 +10,10 @@ use nabungo_app::{
     TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings,
     Uuid, ValuationPoint, format_date, parse_date,
 };
+use nabungo_app::{
+    EmailRuleInput, EmailRuleItem, ReparseSummary, RuleKind, RuleSample, RuleSaved, RuleTest,
+    TraceFail,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{ErrorCode, IpcError};
@@ -2182,6 +2186,267 @@ pub struct EmailSyncDone {
     pub error: Option<IpcError>,
 }
 
+// --- Rule email capture (EML-04) ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum EmailRuleKindDto {
+    Income,
+    Expense,
+    TransferOut,
+    TransferIn,
+}
+
+impl From<RuleKind> for EmailRuleKindDto {
+    fn from(k: RuleKind) -> Self {
+        match k {
+            RuleKind::Income => Self::Income,
+            RuleKind::Expense => Self::Expense,
+            RuleKind::TransferOut => Self::TransferOut,
+            RuleKind::TransferIn => Self::TransferIn,
+        }
+    }
+}
+
+impl From<EmailRuleKindDto> for RuleKind {
+    fn from(k: EmailRuleKindDto) -> Self {
+        match k {
+            EmailRuleKindDto::Income => Self::Income,
+            EmailRuleKindDto::Expense => Self::Expense,
+            EmailRuleKindDto::TransferOut => Self::TransferOut,
+            EmailRuleKindDto::TransferIn => Self::TransferIn,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailRuleInputDto {
+    pub name: String,
+    pub sender_pattern: String,
+    pub subject_regex: Option<String>,
+    pub amount_regex: String,
+    pub payee_regex: Option<String>,
+    pub date_regex: Option<String>,
+    /// Salah satu `DATE_FORMATS` (`dd/mm/yyyy`, `dd-mm-yyyy`, `dd mmm yyyy`).
+    pub date_format: Option<String>,
+    pub kind: EmailRuleKindDto,
+    pub account_id: Option<String>,
+    /// Hanya untuk transfer.
+    pub counter_account_id: Option<String>,
+    /// Hanya untuk income/expense.
+    pub default_category_id: Option<String>,
+    pub priority: i64,
+    pub enabled: bool,
+}
+
+impl From<EmailRuleInput> for EmailRuleInputDto {
+    fn from(r: EmailRuleInput) -> Self {
+        Self {
+            name: r.name,
+            sender_pattern: r.sender_pattern,
+            subject_regex: r.subject_regex,
+            amount_regex: r.amount_regex,
+            payee_regex: r.payee_regex,
+            date_regex: r.date_regex,
+            date_format: r.date_format,
+            kind: r.kind.into(),
+            account_id: r.account_id.map(|u| u.to_string()),
+            counter_account_id: r.counter_account_id.map(|u| u.to_string()),
+            default_category_id: r.default_category_id.map(|u| u.to_string()),
+            priority: r.priority,
+            enabled: r.enabled,
+        }
+    }
+}
+
+impl TryFrom<EmailRuleInputDto> for EmailRuleInput {
+    type Error = IpcError;
+
+    fn try_from(d: EmailRuleInputDto) -> Result<Self, IpcError> {
+        Ok(Self {
+            account_id: parse_opt_id(d.account_id.as_deref(), "account")?,
+            counter_account_id: parse_opt_id(d.counter_account_id.as_deref(), "account")?,
+            default_category_id: parse_opt_id(d.default_category_id.as_deref(), "category")?,
+            name: d.name,
+            sender_pattern: d.sender_pattern,
+            subject_regex: d.subject_regex,
+            amount_regex: d.amount_regex,
+            payee_regex: d.payee_regex,
+            date_regex: d.date_regex,
+            date_format: d.date_format,
+            kind: d.kind.into(),
+            priority: d.priority,
+            enabled: d.enabled,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailRuleDto {
+    pub id: String,
+    #[serde(flatten)]
+    pub input: EmailRuleInputDto,
+    /// Capture pending dari rule ini.
+    pub pending: u32,
+}
+
+impl From<EmailRuleItem> for EmailRuleDto {
+    fn from(it: EmailRuleItem) -> Self {
+        let id = it.rule.id.map(|u| u.to_string()).unwrap_or_default();
+        Self {
+            id,
+            input: EmailRuleInput::from_rule(it.rule, it.enabled).into(),
+            pending: it.pending,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ReparseSummaryDto {
+    pub emails: u32,
+    pub items: u32,
+}
+
+impl From<ReparseSummary> for ReparseSummaryDto {
+    fn from(s: ReparseSummary) -> Self {
+        Self {
+            emails: s.emails,
+            items: s.items,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleSavedDto {
+    pub id: String,
+    pub reparsed: ReparseSummaryDto,
+}
+
+impl From<RuleSaved> for RuleSavedDto {
+    fn from(s: RuleSaved) -> Self {
+        Self {
+            id: s.id.to_string(),
+            reparsed: s.reparsed.into(),
+        }
+    }
+}
+
+/// Email contoh untuk uji rule; teks tempelan tidak disimpan.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RuleSampleDto {
+    #[serde(rename_all = "camelCase")]
+    Unparsed { message_id: String },
+    Pasted {
+        sender: String,
+        subject: String,
+        text: String,
+    },
+}
+
+impl From<RuleSampleDto> for RuleSample {
+    fn from(s: RuleSampleDto) -> Self {
+        match s {
+            RuleSampleDto::Unparsed { message_id } => Self::Unparsed(message_id),
+            RuleSampleDto::Pasted {
+                sender,
+                subject,
+                text,
+            } => Self::Pasted {
+                sender,
+                subject,
+                text,
+            },
+        }
+    }
+}
+
+/// Langkah rule yang gagal. `sender`/`subject`/`no_amount` = rule dilewati.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceFailDto {
+    Sender,
+    Subject,
+    NoAmount,
+    AmountInvalid,
+    NoDate,
+    DateInvalid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleTestItemDto {
+    pub amount: i64,
+    pub date: String,
+    pub payee: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleTestDto {
+    pub sender_ok: bool,
+    /// `null` = rule tanpa pola subjek.
+    pub subject_ok: Option<bool>,
+    pub amounts: Vec<String>,
+    pub payee: Option<String>,
+    pub date_text: Option<String>,
+    /// Tanggal diambil dari header email, bukan dari teks.
+    pub date_from_header: bool,
+    pub fail: Option<TraceFailDto>,
+    /// Teks yang tidak terbaca untuk `amount_invalid`/`date_invalid`.
+    pub fail_text: Option<String>,
+    pub items: Vec<RuleTestItemDto>,
+    /// Email gagal dibaca yang akan terbaca oleh rule ini.
+    pub unparsed_matches: u32,
+}
+
+impl From<RuleTest> for RuleTestDto {
+    fn from(t: RuleTest) -> Self {
+        let tr = t.trace;
+        let (fail, fail_text, items) = match tr.result {
+            Ok(items) => (
+                None,
+                None,
+                items
+                    .into_iter()
+                    .map(|c| RuleTestItemDto {
+                        amount: c.amount,
+                        date: format_date(c.date),
+                        payee: c.payee,
+                    })
+                    .collect(),
+            ),
+            Err(f) => {
+                let (fail, text) = match f {
+                    TraceFail::Sender => (TraceFailDto::Sender, None),
+                    TraceFail::Subject => (TraceFailDto::Subject, None),
+                    TraceFail::NoAmount => (TraceFailDto::NoAmount, None),
+                    TraceFail::AmountInvalid(s) => (TraceFailDto::AmountInvalid, Some(s)),
+                    TraceFail::NoDate => (TraceFailDto::NoDate, None),
+                    TraceFail::DateInvalid(s) => (TraceFailDto::DateInvalid, Some(s)),
+                };
+                (Some(fail), text, Vec::new())
+            }
+        };
+        Self {
+            sender_ok: tr.sender_ok,
+            subject_ok: tr.subject_ok,
+            amounts: tr.amounts,
+            payee: tr.payee,
+            date_text: tr.date_text,
+            date_from_header: tr.date_from_header,
+            fail,
+            fail_text,
+            items,
+            unparsed_matches: t.unparsed_matches,
+        }
+    }
+}
+
 #[cfg(test)]
 mod capture_tests {
     use super::*;
@@ -2232,5 +2497,108 @@ mod capture_tests {
         let dto = CaptureDto::from(it);
         assert_eq!(dto.kind, TxnFormKindDto::Transfer);
         assert_eq!(dto.to_account_id, Some(counter));
+    }
+}
+
+#[cfg(test)]
+mod email_rule_tests {
+    use super::*;
+    use nabungo_app::{Captured, RuleTrace};
+
+    #[test]
+    fn email_rule_dto_round_trip() {
+        let account = Uuid::now_v7();
+        let json = serde_json::json!({
+            "name": "Mandiri",
+            "senderPattern": "bankmandiri.co.id",
+            "subjectRegex": null,
+            "amountRegex": r"Rp ([\d.,]+)",
+            "payeeRegex": null,
+            "dateRegex": null,
+            "dateFormat": null,
+            "kind": "transfer_out",
+            "accountId": account.to_string(),
+            "counterAccountId": null,
+            "defaultCategoryId": null,
+            "priority": 10,
+            "enabled": true,
+        });
+        let dto: EmailRuleInputDto = serde_json::from_value(json.clone()).unwrap();
+        let input = nabungo_app::EmailRuleInput::try_from(dto).unwrap();
+        assert_eq!(input.kind, RuleKind::TransferOut);
+        assert_eq!(input.account_id, Some(account));
+        let back = EmailRuleInputDto::from(input);
+        assert_eq!(serde_json::to_value(back).unwrap(), json);
+    }
+
+    #[test]
+    fn email_rule_dto_rejects_bad_id() {
+        let mut dto = EmailRuleInputDto::from(nabungo_app::EmailRuleInput::from_rule(
+            nabungo_app::default_rules().remove(0),
+            true,
+        ));
+        dto.account_id = Some("x".into());
+        let e = nabungo_app::EmailRuleInput::try_from(dto).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidId);
+    }
+
+    #[test]
+    fn rule_test_dto_maps_fail_text() {
+        let test = nabungo_app::RuleTest {
+            trace: RuleTrace {
+                sender_ok: true,
+                subject_ok: None,
+                amounts: vec!["25,000".into()],
+                payee: None,
+                date_text: None,
+                date_from_header: true,
+                result: Err(TraceFail::AmountInvalid("25,000".into())),
+            },
+            unparsed_matches: 3,
+        };
+        let v = serde_json::to_value(RuleTestDto::from(test)).unwrap();
+        assert_eq!(v["fail"], "amount_invalid");
+        assert_eq!(v["failText"], "25,000");
+        assert_eq!(v["items"], serde_json::json!([]));
+        assert_eq!(v["unparsedMatches"], 3);
+        assert_eq!(v["dateFromHeader"], true);
+    }
+
+    #[test]
+    fn rule_test_dto_lists_items() {
+        let test = nabungo_app::RuleTest {
+            trace: RuleTrace {
+                sender_ok: true,
+                subject_ok: Some(true),
+                amounts: vec!["41.700".into()],
+                payee: Some("IDM".into()),
+                date_text: Some("09/05/2026".into()),
+                date_from_header: false,
+                result: Ok(vec![Captured {
+                    idx: 0,
+                    amount: 41_700,
+                    payee: Some("IDM".into()),
+                    date: parse_date("2026-05-09").unwrap(),
+                }]),
+            },
+            unparsed_matches: 0,
+        };
+        let v = serde_json::to_value(RuleTestDto::from(test)).unwrap();
+        assert_eq!(v["fail"], serde_json::Value::Null);
+        assert_eq!(
+            v["items"],
+            serde_json::json!([{ "amount": 41700, "date": "2026-05-09", "payee": "IDM" }])
+        );
+    }
+
+    #[test]
+    fn rule_sample_dto_is_tagged() {
+        let s: RuleSampleDto =
+            serde_json::from_value(serde_json::json!({ "kind": "unparsed", "messageId": "m1" }))
+                .unwrap();
+        assert_eq!(
+            nabungo_app::RuleSample::from(s),
+            nabungo_app::RuleSample::Unparsed("m1".into())
+        );
     }
 }

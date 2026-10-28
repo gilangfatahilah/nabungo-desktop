@@ -208,6 +208,83 @@ pub fn get_rule(conn: &Connection, id: Uuid) -> Result<Option<RuleRecord>> {
     .transpose()
 }
 
+/// Semua rule yang tidak dihapus (aktif & nonaktif), urut seperti [`list_active_rules`].
+pub fn list_rules(conn: &Connection) -> Result<Vec<RuleRecord>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {RULE_COLUMNS} FROM email_rule
+         WHERE deleted_at IS NULL
+         ORDER BY priority DESC, name, id"
+    ))?;
+    let rows = stmt.query_map([], read_rule)?;
+    rows.map(|r| to_rule(r?)).collect()
+}
+
+/// `false` bila rule tidak ada atau sudah dihapus.
+pub fn update_rule(tx: &Transaction, id: Uuid, r: &RuleWrite) -> Result<bool> {
+    let changed = tx.execute(
+        "UPDATE email_rule SET name = ?2, sender_pattern = ?3, subject_regex = ?4,
+           amount_regex = ?5, payee_regex = ?6, date_regex = ?7, date_format = ?8, kind = ?9,
+           account_id = ?10, counter_account_id = ?11, default_category_id = ?12,
+           priority = ?13, enabled = ?14, updated_at = ?15
+         WHERE id = ?1 AND deleted_at IS NULL",
+        params![
+            id.to_string(),
+            r.name,
+            r.sender_pattern,
+            r.subject_regex,
+            r.amount_regex,
+            r.payee_regex,
+            r.date_regex,
+            r.date_format,
+            r.kind,
+            r.account_id.map(|u| u.to_string()),
+            r.counter_account_id.map(|u| u.to_string()),
+            r.default_category_id.map(|u| u.to_string()),
+            r.priority,
+            r.enabled,
+            now_utc(),
+        ],
+    )?;
+    Ok(changed == 1)
+}
+
+/// `false` bila rule tidak ada atau sudah dihapus.
+pub fn set_rule_enabled(tx: &Transaction, id: Uuid, enabled: bool) -> Result<bool> {
+    let changed = tx.execute(
+        "UPDATE email_rule SET enabled = ?2, updated_at = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+        params![id.to_string(), enabled, now_utc()],
+    )?;
+    Ok(changed == 1)
+}
+
+/// `false` bila rule tidak ada atau sudah dihapus. Capture lama tetap menunjuk rule ini.
+pub fn soft_delete_rule(tx: &Transaction, id: Uuid) -> Result<bool> {
+    let now = now_utc();
+    let changed = tx.execute(
+        "UPDATE email_rule SET deleted_at = ?2, updated_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![id.to_string(), now],
+    )?;
+    Ok(changed == 1)
+}
+
+/// `false` bila rule tidak ada atau tidak sedang dihapus.
+pub fn restore_rule(tx: &Transaction, id: Uuid) -> Result<bool> {
+    let changed = tx.execute(
+        "UPDATE email_rule SET deleted_at = NULL, updated_at = ?2
+         WHERE id = ?1 AND deleted_at IS NOT NULL",
+        params![id.to_string(), now_utc()],
+    )?;
+    Ok(changed == 1)
+}
+
+pub fn count_pending_for_rule(conn: &Connection, id: Uuid) -> Result<u32> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM email_capture WHERE rule_id = ?1 AND status = 'pending'",
+        [id.to_string()],
+        |r| r.get(0),
+    )?)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CaptureWrite<'a> {
     pub message_id: &'a str,
@@ -434,23 +511,45 @@ pub fn insert_unparsed(tx: &Transaction, w: &UnparsedWrite) -> Result<bool> {
     Ok(changed == 1)
 }
 
+const UNPARSED_COLUMNS: &str = "message_id, COALESCE(sender, ''), COALESCE(subject, ''),
+    received_at, COALESCE(raw_snippet, ''), created_at";
+
+fn read_unparsed(r: &Row) -> rusqlite::Result<UnparsedRecord> {
+    Ok(UnparsedRecord {
+        message_id: r.get(0)?,
+        sender: r.get(1)?,
+        subject: r.get(2)?,
+        received_at: r.get(3)?,
+        raw_snippet: r.get(4)?,
+        created_at: r.get(5)?,
+    })
+}
+
 pub fn list_unparsed(conn: &Connection) -> Result<Vec<UnparsedRecord>> {
-    let mut stmt = conn.prepare(
-        "SELECT message_id, COALESCE(sender, ''), COALESCE(subject, ''), received_at,
-                COALESCE(raw_snippet, ''), created_at
-         FROM email_unparsed ORDER BY created_at DESC, message_id",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        Ok(UnparsedRecord {
-            message_id: r.get(0)?,
-            sender: r.get(1)?,
-            subject: r.get(2)?,
-            received_at: r.get(3)?,
-            raw_snippet: r.get(4)?,
-            created_at: r.get(5)?,
-        })
-    })?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {UNPARSED_COLUMNS} FROM email_unparsed ORDER BY created_at DESC, message_id"
+    ))?;
+    let rows = stmt.query_map([], read_unparsed)?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn get_unparsed(conn: &Connection, message_id: &str) -> Result<Option<UnparsedRecord>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT {UNPARSED_COLUMNS} FROM email_unparsed WHERE message_id = ?1"),
+            [message_id],
+            read_unparsed,
+        )
+        .optional()?)
+}
+
+/// Email sudah terbaca rule (re-parse): pindah ke `email_capture` oleh pemanggil.
+pub fn delete_unparsed(tx: &Transaction, message_id: &str) -> Result<()> {
+    tx.execute(
+        "DELETE FROM email_unparsed WHERE message_id = ?1",
+        [message_id],
+    )?;
+    Ok(())
 }
 
 pub fn count_unparsed(conn: &Connection) -> Result<u32> {
@@ -802,5 +901,73 @@ mod tests {
         assert!(capture_exists(&tx, "c1").unwrap());
         assert!(capture_exists(&tx, "u1").unwrap());
         assert!(!capture_exists(&tx, "x").unwrap());
+    }
+
+    #[test]
+    fn rules_crud() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let low = insert_rule(&tx, &rule("Rendah", 0, true)).unwrap();
+        let high = insert_rule(&tx, &rule("Tinggi", 5, true)).unwrap();
+        let ids = |rs: Vec<RuleRecord>| rs.into_iter().map(|r| r.id).collect::<Vec<_>>();
+        assert_eq!(ids(list_rules(&tx).unwrap()), vec![high, low]);
+
+        assert!(set_rule_enabled(&tx, high, false).unwrap());
+        assert_eq!(ids(list_active_rules(&tx).unwrap()), vec![low]);
+        assert_eq!(ids(list_rules(&tx).unwrap()), vec![high, low]);
+        assert!(!get_rule(&tx, high).unwrap().unwrap().enabled);
+
+        assert!(soft_delete_rule(&tx, low).unwrap());
+        assert!(!soft_delete_rule(&tx, low).unwrap());
+        assert_eq!(ids(list_active_rules(&tx).unwrap()), Vec::<Uuid>::new());
+        assert_eq!(ids(list_rules(&tx).unwrap()), vec![high]);
+        // Rule terhapus tetap bisa dibaca (nama di capture lama).
+        assert_eq!(get_rule(&tx, low).unwrap().unwrap().name, "Rendah");
+        assert!(!update_rule(&tx, low, &rule("Baru", 1, true)).unwrap());
+        assert!(!set_rule_enabled(&tx, low, true).unwrap());
+
+        assert!(restore_rule(&tx, low).unwrap());
+        assert!(!restore_rule(&tx, low).unwrap());
+        assert_eq!(ids(list_active_rules(&tx).unwrap()), vec![low]);
+
+        assert!(update_rule(&tx, low, &rule("Baru", 9, true)).unwrap());
+        let r = get_rule(&tx, low).unwrap().unwrap();
+        assert_eq!((r.name.as_str(), r.priority), ("Baru", 9));
+        assert!(!update_rule(&tx, Uuid::now_v7(), &rule("x", 0, true)).unwrap());
+    }
+
+    #[test]
+    fn pending_count_per_rule() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let r = insert_rule(&tx, &rule("QRIS", 0, true)).unwrap();
+        let other = insert_rule(&tx, &rule("Lain", 0, true)).unwrap();
+        insert_capture(&tx, &capture("a", 0, r)).unwrap();
+        insert_capture(&tx, &capture("a", 1, r)).unwrap();
+        let ignored = {
+            insert_capture(&tx, &capture("b", 0, r)).unwrap();
+            list_captures(&tx, CaptureStatus::Pending)
+                .unwrap()
+                .into_iter()
+                .find(|c| c.message_id == "b")
+                .unwrap()
+                .id
+        };
+        set_capture_status(&tx, ignored, CaptureStatus::Ignored, None).unwrap();
+        assert_eq!(count_pending_for_rule(&tx, r).unwrap(), 2);
+        assert_eq!(count_pending_for_rule(&tx, other).unwrap(), 0);
+    }
+
+    #[test]
+    fn unparsed_get_and_delete() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        insert_unparsed(&tx, &unparsed("u1")).unwrap();
+        let got = get_unparsed(&tx, "u1").unwrap().unwrap();
+        assert_eq!(got.subject, "Diskon");
+        assert_eq!(get_unparsed(&tx, "x").unwrap(), None);
+        delete_unparsed(&tx, "u1").unwrap();
+        assert_eq!(get_unparsed(&tx, "u1").unwrap(), None);
+        assert_eq!(count_unparsed(&tx).unwrap(), 0);
     }
 }

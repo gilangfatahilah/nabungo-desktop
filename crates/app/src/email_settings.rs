@@ -67,6 +67,8 @@ impl Ledger {
         setting::set_setting(&tx, KEY_ADDRESS, address)?;
         setting::set_setting(&tx, KEY_MAILBOX, mailbox)?;
         setting::set_setting(&tx, KEY_ENABLED, "1")?;
+        // Tab Rule langsung berisi rule bawaan (K11).
+        crate::capture::seed_rules(&tx)?;
         tx.commit()?;
         Ok(())
     }

@@ -2,7 +2,7 @@
 import type { AppInfo, InboxSummaryDto, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
 import { browserEmail } from './browser-email'
-import { __enterRecovery, __seedEmailInbox, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
+import { __enterRecovery, __seedDefaultEmailRules, __seedEmailInbox, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
 import { isFontScale } from '@/lib/fontScale'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
@@ -44,7 +44,12 @@ export const browserCommands = lockGuard({
   ...browserSecurity,
   ...browserRecovery,
   emailStatus: browserEmail.emailStatus,
-  connectEmail: browserEmail.connectEmail,
+  // Seperti `save_email_account`: rule bawaan disalin sekali saat akun tersimpan (K11).
+  connectEmail: async (...args: Parameters<typeof browserEmail.connectEmail>) => {
+    const r = await browserEmail.connectEmail(...args)
+    if (r.status === 'ok') __seedDefaultEmailRules()
+    return r
+  },
   disconnectEmail: browserEmail.disconnectEmail,
   syncEmail: browserEmail.syncEmail,
   inboxSummary: async (): Promise<Result<InboxSummaryDto>> => {

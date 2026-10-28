@@ -21,7 +21,7 @@ use crate::transactions::{TxnForm, form_input, write_txn};
 /// Setting penanda rule bawaan sudah disalin (rule yang dihapus user tidak kembali).
 const RULES_SEEDED: &str = "email.rules_seeded";
 /// v1 hanya IDR (D4).
-const CURRENCY: &str = "IDR";
+pub(crate) const CURRENCY: &str = "IDR";
 const MAX_DUPLICATES: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +73,7 @@ pub struct InboxSummary {
     pub unparsed: u32,
 }
 
-fn kind_str(kind: RuleKind) -> &'static str {
+pub(crate) fn kind_str(kind: RuleKind) -> &'static str {
     match kind {
         RuleKind::Income => "income",
         RuleKind::Expense => "expense",
@@ -92,7 +92,7 @@ fn parse_kind(s: &str) -> Result<RuleKind, AppError> {
     })
 }
 
-fn to_rule(r: RuleRecord) -> Result<Rule, AppError> {
+pub(crate) fn to_rule(r: RuleRecord) -> Result<Rule, AppError> {
     Ok(Rule {
         id: Some(r.id),
         kind: parse_kind(&r.kind)?,
@@ -119,34 +119,40 @@ fn pending_capture(tx: &Transaction, id: Uuid) -> Result<CaptureRecord, AppError
     }
 }
 
+/// Rule bawaan sekali saja: rule yang dihapus user tidak kembali.
+pub(crate) fn seed_rules(tx: &Transaction) -> Result<(), AppError> {
+    if setting::get_setting(tx, RULES_SEEDED)?.is_some() {
+        return Ok(());
+    }
+    for r in default_rules() {
+        repo::insert_rule(
+            tx,
+            &RuleWrite {
+                name: &r.name,
+                sender_pattern: &r.sender_pattern,
+                subject_regex: r.subject_regex.as_deref(),
+                amount_regex: &r.amount_regex,
+                payee_regex: r.payee_regex.as_deref(),
+                date_regex: r.date_regex.as_deref(),
+                date_format: r.date_format.as_deref(),
+                kind: kind_str(r.kind),
+                account_id: r.account_id,
+                counter_account_id: r.counter_account_id,
+                default_category_id: r.default_category_id,
+                priority: r.priority,
+                enabled: true,
+            },
+        )?;
+    }
+    setting::set_setting(tx, RULES_SEEDED, "1")?;
+    Ok(())
+}
+
 impl Ledger {
     /// Salin rule bawaan ke DB sekali saja (K8).
     pub fn seed_email_rules(&mut self) -> Result<(), AppError> {
         let tx = self.conn.transaction()?;
-        if setting::get_setting(&tx, RULES_SEEDED)?.is_some() {
-            return Ok(());
-        }
-        for r in default_rules() {
-            repo::insert_rule(
-                &tx,
-                &RuleWrite {
-                    name: &r.name,
-                    sender_pattern: &r.sender_pattern,
-                    subject_regex: r.subject_regex.as_deref(),
-                    amount_regex: &r.amount_regex,
-                    payee_regex: r.payee_regex.as_deref(),
-                    date_regex: r.date_regex.as_deref(),
-                    date_format: r.date_format.as_deref(),
-                    kind: kind_str(r.kind),
-                    account_id: r.account_id,
-                    counter_account_id: r.counter_account_id,
-                    default_category_id: r.default_category_id,
-                    priority: r.priority,
-                    enabled: true,
-                },
-            )?;
-        }
-        setting::set_setting(&tx, RULES_SEEDED, "1")?;
+        seed_rules(&tx)?;
         tx.commit()?;
         Ok(())
     }
@@ -428,22 +434,23 @@ impl Ledger {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::testkit::Kit;
     use nabungo_core::{FormBody, SplitLine};
     use time::macros::{date, offset};
 
-    const WIB: UtcOffset = offset!(+7);
+    pub(crate) const WIB: UtcOffset = offset!(+7);
     const MAILBOX: &str = "notion-synced";
-    const QRIS: &[u8] = include_bytes!("../../mail/tests/fixtures/bca_qris.eml");
+    pub(crate) const QRIS: &[u8] = include_bytes!("../../mail/tests/fixtures/bca_qris.eml");
     const TARIK: &[u8] = include_bytes!("../../mail/tests/fixtures/bca_tarik_tunai.eml");
-    const UNKNOWN: &[u8] = include_bytes!("../../mail/tests/fixtures/unknown_sender.eml");
+    pub(crate) const UNKNOWN: &[u8] =
+        include_bytes!("../../mail/tests/fixtures/unknown_sender.eml");
     /// bca_qris: 41.700 ke "IDM INDOMARET D" tanggal 2026-05-09.
-    const QRIS_AMOUNT: i64 = 41_700;
+    pub(crate) const QRIS_AMOUNT: i64 = 41_700;
     const QRIS_DATE: Date = date!(2026 - 05 - 09);
 
-    fn kit() -> Kit {
+    pub(crate) fn kit() -> Kit {
         let mut kit = Kit::new(1, date!(2026 - 01 - 01));
         kit.ledger.seed_email_rules().unwrap();
         kit
@@ -456,19 +463,19 @@ mod tests {
         }
     }
 
-    fn ingest(kit: &mut Kit, uid: u32, raw: &[u8]) -> IngestOutcome {
+    pub(crate) fn ingest(kit: &mut Kit, uid: u32, raw: &[u8]) -> IngestOutcome {
         let rules = kit.ledger.email_rules().unwrap();
         kit.ledger
             .ingest_email(MAILBOX, cursor(uid), raw, &rules, WIB)
             .unwrap()
     }
 
-    fn pending(kit: &Kit) -> Vec<CaptureRecord> {
+    pub(crate) fn pending(kit: &Kit) -> Vec<CaptureRecord> {
         kit.ledger.list_captures(CaptureStatus::Pending).unwrap()
     }
 
     /// Capture QRIS yang baru di-ingest.
-    fn qris_capture(kit: &mut Kit) -> Uuid {
+    pub(crate) fn qris_capture(kit: &mut Kit) -> Uuid {
         assert_eq!(ingest(kit, 10, QRIS), IngestOutcome::Captured(1));
         pending(kit)[0].id
     }

@@ -6,3 +6,4 @@ pub mod defaults;
 pub mod message;
 pub mod rule;
 pub mod source;
+pub mod suggest;

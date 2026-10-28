@@ -2,10 +2,11 @@ use nabungo_core::amount::AmountParseError;
 use nabungo_mail::defaults::default_rules;
 use nabungo_mail::message::{MailMessage, parse_message, raw_message_id};
 use nabungo_mail::rule::{
-    Captured, CompiledRules, Outcome, Rule, RuleKind, apply_rules, normalize_amount, parse_date,
+    Captured, CompiledRules, Outcome, Rule, RuleField, RuleKind, TraceFail, apply_rules,
+    normalize_amount, parse_date, trace, validate,
 };
-use time::UtcOffset;
 use time::macros::{date, offset};
+use time::{OffsetDateTime, UtcOffset};
 
 const WIB: UtcOffset = offset!(+7);
 
@@ -291,4 +292,163 @@ fn raw_message_id_is_hash_of_raw() {
     assert!(id.starts_with("sha256:"), "{id}");
     assert_eq!(id, raw_message_id(b"bukan email"));
     assert_ne!(id, raw_message_id(b"lain"));
+}
+
+fn bare(from: &str, subject: &str, text: &str) -> MailMessage {
+    MailMessage {
+        message_id: "m@example.com".into(),
+        from: from.into(),
+        subject: subject.into(),
+        sent_at: None,
+        text: text.into(),
+    }
+}
+
+#[test]
+fn validate_accepts_default_rules() {
+    for r in default_rules() {
+        assert_eq!(validate(&r), Ok(()), "{}", r.name);
+    }
+}
+
+#[test]
+fn validate_rejects_empty_name_and_sender() {
+    let mut r = rule("  ", r"Rp ([\d.]+)");
+    assert_eq!(validate(&r), Err(RuleField::Name));
+    r.name = "ok".into();
+    r.sender_pattern = " ".into();
+    assert_eq!(validate(&r), Err(RuleField::Sender));
+}
+
+#[test]
+fn validate_rejects_bad_regex() {
+    assert_eq!(validate(&rule("x", "(")), Err(RuleField::Amount));
+    let mut r = rule("x", r"Rp ([\d.]+)");
+    r.subject_regex = Some("[".into());
+    assert_eq!(validate(&r), Err(RuleField::Subject));
+}
+
+#[test]
+fn validate_rejects_amount_without_group() {
+    assert_eq!(validate(&rule("x", r"Rp [\d.]+")), Err(RuleField::Amount));
+}
+
+#[test]
+fn validate_rejects_optional_regex_without_group() {
+    let mut r = rule("x", r"Rp ([\d.]+)");
+    r.payee_regex = Some("^Ke .+$".into());
+    assert_eq!(validate(&r), Err(RuleField::Payee));
+}
+
+#[test]
+fn validate_rejects_date_without_format() {
+    let mut r = rule("x", r"Rp ([\d.]+)");
+    r.date_regex = Some(r"^Tgl (.+)$".into());
+    assert_eq!(validate(&r), Err(RuleField::DateFormat));
+    r.date_regex = None;
+    r.date_format = Some("dd/mm/yyyy".into());
+    assert_eq!(validate(&r), Err(RuleField::Date));
+}
+
+#[test]
+fn validate_rejects_unknown_date_format() {
+    let mut r = rule("x", r"Rp ([\d.]+)");
+    r.date_regex = Some(r"^Tgl (.+)$".into());
+    r.date_format = Some("yyyy-mm-dd".into());
+    assert_eq!(validate(&r), Err(RuleField::DateFormat));
+}
+
+#[test]
+fn trace_invalid_rule_is_err() {
+    let msg = bare("a@example.com", "x", "Rp 5.000");
+    assert_eq!(
+        trace(&rule("x", "("), &msg, WIB).err(),
+        Some(RuleField::Amount)
+    );
+}
+
+#[test]
+fn trace_reports_failing_step() {
+    let r = rule("x", r"^Total Rp ([\d.,]+)$");
+    let t = trace(&r, &bare("a@other.com", "x", "Total Rp 5.000"), WIB).unwrap();
+    assert!(!t.sender_ok);
+    assert_eq!(t.result, Err(TraceFail::Sender));
+
+    let mut s = r.clone();
+    s.subject_regex = Some("^Transaksi".into());
+    let t = trace(&s, &bare("a@example.com", "Promo", "Total Rp 5.000"), WIB).unwrap();
+    assert!(t.sender_ok);
+    assert_eq!(t.subject_ok, Some(false));
+    assert_eq!(t.result, Err(TraceFail::Subject));
+
+    let t = trace(&r, &bare("a@example.com", "x", "Halo"), WIB).unwrap();
+    assert_eq!(t.subject_ok, None);
+    assert_eq!(t.result, Err(TraceFail::NoAmount));
+
+    let mut dated = bare("a@example.com", "x", "Total Rp 25,000");
+    dated.sent_at = Some(OffsetDateTime::from_unix_timestamp(1_793_000_000).unwrap());
+    let t = trace(&r, &dated, WIB).unwrap();
+    assert_eq!(t.amounts, vec!["25,000".to_string()]);
+    assert_eq!(t.result, Err(TraceFail::AmountInvalid("25,000".into())));
+
+    // Tanpa header Date: tanggal wajib dari body.
+    let t = trace(&r, &bare("a@example.com", "x", "Total Rp 5.000"), WIB).unwrap();
+    assert_eq!(t.result, Err(TraceFail::NoDate));
+
+    let mut d = r.clone();
+    d.date_regex = Some(r"^Tanggal (.+)$".into());
+    d.date_format = Some("dd mmm yyyy".into());
+    let msg = bare("a@example.com", "x", "Tanggal 32 Okt 2026\nTotal Rp 5.000");
+    let t = trace(&d, &msg, WIB).unwrap();
+    assert_eq!(t.date_text.as_deref(), Some("32 Okt 2026"));
+    assert_eq!(t.result, Err(TraceFail::DateInvalid("32 Okt 2026".into())));
+}
+
+#[test]
+fn trace_date_invalid_falls_back_to_header() {
+    let mut d = rule("x", r"^Total Rp ([\d.,]+)$");
+    d.date_regex = Some(r"^Tanggal (.+)$".into());
+    d.date_format = Some("dd mmm yyyy".into());
+    let mut msg = bare("a@example.com", "x", "Tanggal 32 Okt 2026\nTotal Rp 5.000");
+    msg.sent_at = Some(OffsetDateTime::from_unix_timestamp(1_793_000_000).unwrap());
+    let t = trace(&d, &msg, WIB).unwrap();
+    assert!(t.date_from_header);
+    let items = t.result.unwrap();
+    assert_eq!(items[0].amount, 5_000);
+    assert_eq!(
+        apply_rules(&[d], &msg, WIB),
+        Outcome::Parsed { rule: 0, items }
+    );
+}
+
+#[test]
+fn trace_matches_apply_on_fixtures() {
+    let rules = default_rules();
+    let dir = format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR"));
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("eml") {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        let msg = fixture(&name);
+        let traces: Vec<_> = rules.iter().map(|r| trace(r, &msg, WIB).unwrap()).collect();
+        let chosen = traces.iter().position(|t| {
+            !matches!(
+                t.result,
+                Err(TraceFail::Sender | TraceFail::Subject | TraceFail::NoAmount)
+            )
+        });
+        let expected = match chosen {
+            Some(i) => match &traces[i].result {
+                Ok(items) => Outcome::Parsed {
+                    rule: i,
+                    items: items.clone(),
+                },
+                Err(_) => Outcome::Unparsed,
+            },
+            None => Outcome::Unparsed,
+        };
+        assert_eq!(apply_rules(&rules, &msg, WIB), expected, "{name}");
+    }
 }
