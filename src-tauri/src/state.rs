@@ -5,7 +5,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
-use nabungo_app::Ledger;
+use nabungo_app::email_runner::SyncSchedule;
+use nabungo_app::{Ledger, UtcOffset};
 
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::{RecoveryState, StartupReport};
@@ -25,6 +26,31 @@ pub struct AppState {
     /// Awal `run()`; acuan `startup_ms` saat dasbor pertama tampil.
     pub started: Instant,
     pub ready_logged: AtomicBool,
+    pub email: EmailRuntime,
+}
+
+/// Status sync email selama proses berjalan (tidak disimpan).
+pub struct EmailRuntime {
+    /// Satu sync pada satu waktu (K9); dilepas lewat `email::RunningGuard`.
+    pub running: AtomicBool,
+    pub schedule: Mutex<SyncSchedule>,
+    /// Error putaran terakhir; `None` setelah sukses atau connect/disconnect.
+    pub last_error: Mutex<Option<ErrorCode>>,
+    /// Dibaca sekali di awal `run()` (K10).
+    pub local_offset: UtcOffset,
+    pub thread_started: AtomicBool,
+}
+
+impl EmailRuntime {
+    pub fn new(local_offset: UtcOffset) -> Self {
+        Self {
+            running: AtomicBool::new(false),
+            schedule: Mutex::new(SyncSchedule::default()),
+            last_error: Mutex::new(None),
+            local_offset,
+            thread_started: AtomicBool::new(false),
+        }
+    }
 }
 
 /// Ledger yang sedang terbuka; hanya dibuat oleh [`lock_ledger`] bila tidak terkunci.

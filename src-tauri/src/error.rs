@@ -1,10 +1,10 @@
 //! Pemetaan error domain ke `IpcError` yang dikirim ke UI.
 
-use nabungo_app::AppError;
 use nabungo_app::{
     AllocationError, AmountParseError, BudgetError, CatalogError, PeriodError, RecurrenceError,
     TxnError,
 };
+use nabungo_app::{AppError, SourceError, SyncError};
 use serde::Serialize;
 
 /// Error yang diterima UI. Detail teknis tidak dikirim; UI menerjemahkan `code`.
@@ -80,6 +80,11 @@ pub enum ErrorCode {
     EmailAddressInvalid,
     EmailMailboxEmpty,
     EmailNotConfigured,
+    EmailAuthFailed,
+    EmailMailboxNotFound,
+    EmailConnection,
+    EmailSyncRunning,
+    EmailSyncInterrupted,
     RecurrenceInterval,
     RecurrenceUntil,
     FileIo,
@@ -266,6 +271,22 @@ impl From<AppError> for IpcError {
     }
 }
 
+impl From<SyncError> for IpcError {
+    fn from(e: SyncError) -> Self {
+        match e {
+            SyncError::Source(SourceError::Auth) => Self::code(ErrorCode::EmailAuthFailed),
+            SyncError::Source(SourceError::Mailbox) => Self::code(ErrorCode::EmailMailboxNotFound),
+            SyncError::Source(SourceError::Connection(detail)) => {
+                tracing::warn!(%detail, "koneksi email gagal");
+                Self::code(ErrorCode::EmailConnection)
+            }
+            SyncError::Locked => Self::code(ErrorCode::Locked),
+            SyncError::Interrupted => Self::code(ErrorCode::EmailSyncInterrupted),
+            SyncError::App(e) => e.into(),
+        }
+    }
+}
+
 impl From<AmountParseError> for IpcError {
     fn from(e: AmountParseError) -> Self {
         Self::code(match e {
@@ -346,6 +367,30 @@ mod tests {
         let e = IpcError::from(AppError::CaptureNotPending);
         assert_eq!(e.code, ErrorCode::CaptureNotPending);
         assert_eq!(serde_json::to_value(e.code).unwrap(), "capture_not_pending");
+    }
+
+    #[test]
+    fn sync_errors_map_to_codes() {
+        for (e, code) in [
+            (SyncError::Source(SourceError::Auth), "email_auth_failed"),
+            (
+                SyncError::Source(SourceError::Mailbox),
+                "email_mailbox_not_found",
+            ),
+            (
+                SyncError::Source(SourceError::Connection("timeout".into())),
+                "email_connection",
+            ),
+            (SyncError::Locked, "locked"),
+            (SyncError::Interrupted, "email_sync_interrupted"),
+            (
+                SyncError::App(AppError::EmailNotConfigured),
+                "email_not_configured",
+            ),
+        ] {
+            let e = IpcError::from(e);
+            assert_eq!(serde_json::to_value(e.code).unwrap(), code);
+        }
     }
 
     #[test]

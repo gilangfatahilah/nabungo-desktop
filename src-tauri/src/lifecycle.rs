@@ -12,8 +12,8 @@ use crate::state::AppState;
 /// Jeda antar-pemeriksaan backup otomatis selama app berjalan.
 const SCHEDULER_TICK: Duration = Duration::from_secs(60 * 60);
 /// Batas tunggu putaran pertama bila dasbor tidak pernah melapor siap (mis. onboarding).
-const FIRST_TICK_MAX_WAIT: Duration = Duration::from_secs(30);
-const READY_POLL: Duration = Duration::from_millis(200);
+pub(crate) const FIRST_TICK_MAX_WAIT: Duration = Duration::from_secs(30);
+pub(crate) const READY_POLL: Duration = Duration::from_millis(200);
 
 /// File penanda sesi: ada saat startup = sesi sebelumnya tidak berakhir normal.
 pub struct SessionMarker;
@@ -185,6 +185,7 @@ pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError
     if plan == BackupPlan::Immediate {
         spawn_backup_scheduler(app.clone());
     }
+    crate::email::on_ledger_opened(app);
     Ok(())
 }
 
@@ -197,10 +198,12 @@ pub fn on_restored(app: &AppHandle) {
     if auto_backup_allowed(&startup) {
         spawn_backup_scheduler(app.clone());
     }
+    drop(startup);
+    crate::email::on_ledger_opened(app);
 }
 
 /// Tunggu sampai `ready` (dasbor pertama tampil) atau paling lama `max`.
-fn wait_until_ready(ready: &AtomicBool, max: Duration, poll: Duration) {
+pub(crate) fn wait_until_ready(ready: &AtomicBool, max: Duration, poll: Duration) {
     let start = std::time::Instant::now();
     while !ready.load(Ordering::SeqCst) && start.elapsed() < max {
         std::thread::sleep(poll);

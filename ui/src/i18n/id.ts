@@ -612,6 +612,12 @@ export default {
     email_address_invalid: 'Alamat email tidak valid.',
     email_mailbox_empty: 'Label wajib diisi.',
     email_not_configured: 'Email belum dihubungkan.',
+    email_auth_failed: 'Login Gmail gagal. Periksa alamat email dan App Password.',
+    email_mailbox_not_found: 'Label tidak ditemukan di Gmail.',
+    email_connection: 'Tidak bisa terhubung ke Gmail. Periksa koneksi internet.',
+    email_sync_running: 'Sync email sedang berjalan.',
+    email_sync_interrupted:
+      'Sync dihentikan karena data berubah. Akan dilanjutkan di sync berikutnya.',
     recurrence_interval: 'Interval harus 1–99.',
     recurrence_until: 'Tanggal berakhir tidak boleh sebelum tanggal mulai.',
     file_io: 'Gagal membaca atau menulis file. Periksa lokasi dan ruang disk.',

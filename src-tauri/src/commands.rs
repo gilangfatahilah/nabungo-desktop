@@ -14,12 +14,12 @@ use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BackupSecretDto, BackupSourceDto,
     BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CashflowPointDto,
-    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, ContactDto, LocaleDto,
-    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto,
-    RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto,
-    SecurityStatusDto, ShareDto, StartupReportDto, TagUsageDto, ThemeDto, TxnDetailDto,
-    TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, ValuationPointDto,
-    parse_day, parse_id, parse_period,
+    CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto, ContactDto, EmailStatusDto,
+    LocaleDto, NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto,
+    ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, RuleDto, RuleInputDto,
+    SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto, SyncSummaryDto, TagUsageDto,
+    ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto,
+    ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::RecoveryReason;
@@ -1372,4 +1372,60 @@ mod tests {
                 <= 12
         );
     }
+}
+
+// --- Email capture (EML-01) ---
+
+/// Butuh DB terbuka (alamat dan label ada di setting); terkunci → `locked`.
+#[tauri::command]
+#[specta::specta]
+pub fn email_status(state: State<'_, AppState>) -> Result<EmailStatusDto, IpcError> {
+    let settings = ledger(&state)?.email_settings()?;
+    let rt = &state.email;
+    Ok(EmailStatusDto {
+        enabled: settings.enabled,
+        address: settings.address,
+        mailbox: settings.mailbox,
+        last_sync_at: settings.last_sync_at,
+        running: rt.running.load(std::sync::atomic::Ordering::SeqCst),
+        last_error: *rt.last_error.lock().unwrap_or_else(|e| e.into_inner()),
+        paused: rt.schedule.lock().unwrap_or_else(|e| e.into_inner()).paused,
+    })
+}
+
+/// Login IMAP + cek label dulu; baru App Password disimpan ke keychain dan akun ke setting.
+/// `password: None` = pakai App Password tersimpan (ganti label saja).
+#[tauri::command]
+#[specta::specta]
+pub async fn connect_email(
+    app: AppHandle,
+    address: String,
+    mailbox: String,
+    password: Option<String>,
+) -> Result<(), IpcError> {
+    blocking(move || {
+        ensure_not_recovering(&app.state::<AppState>())?;
+        crate::email::connect(&app, &address, &mailbox, password.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn disconnect_email(app: AppHandle) -> Result<(), IpcError> {
+    blocking(move || {
+        ensure_not_recovering(&app.state::<AppState>())?;
+        crate::email::disconnect(&app)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn sync_email(app: AppHandle) -> Result<SyncSummaryDto, IpcError> {
+    blocking(move || {
+        ensure_not_recovering(&app.state::<AppState>())?;
+        Ok(crate::email::run_sync(&app)?.into())
+    })
+    .await
 }

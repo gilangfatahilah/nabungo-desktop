@@ -2,6 +2,7 @@
 
 mod commands;
 mod dto;
+mod email;
 mod error;
 mod lifecycle;
 mod logging;
@@ -113,6 +114,14 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::enable_encryption,
             commands::disable_encryption,
             commands::change_password,
+            commands::email_status,
+            commands::connect_email,
+            commands::disconnect_email,
+            commands::sync_email,
+        ])
+        .events(tauri_specta::collect_events![
+            dto::EmailSyncProgress,
+            dto::EmailSyncDone
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()
@@ -124,7 +133,11 @@ fn bindings_exporter() -> specta_typescript::Typescript {
 
 const BINDINGS_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/ipc/bindings.ts");
 
-fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
+fn init(
+    app: &tauri::App,
+    started: std::time::Instant,
+    local_offset: nabungo_app::UtcOffset,
+) -> anyhow::Result<()> {
     use tauri::Manager;
 
     let exe = std::env::current_exe()?;
@@ -162,6 +175,7 @@ fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
         unclean_shutdown,
         started,
         ready_logged: std::sync::atomic::AtomicBool::new(false),
+        email: state::EmailRuntime::new(local_offset),
     });
     match db_state {
         Ok(nabungo_app::security::DbState::Plain) => {
@@ -184,6 +198,9 @@ fn init(app: &tauri::App, started: std::time::Instant) -> anyhow::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let started = std::time::Instant::now();
+    // Sebelum thread lain ada: `time` menolak membaca offset lokal di proses multi-thread (K10).
+    let local_offset = nabungo_app::UtcOffset::current_local_offset()
+        .unwrap_or(nabungo_app::UtcOffset::from_hms(7, 0, 0).expect("offset valid"));
     let builder = specta_builder();
 
     #[cfg(debug_assertions)]
@@ -195,8 +212,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(move |app| init(app, started).map_err(Into::into))
         .invoke_handler(builder.invoke_handler())
+        .setup(move |app| {
+            builder.mount_events(app);
+            init(app, started, local_offset).map_err(Into::into)
+        })
         .build(tauri::generate_context!())
         .expect("error while building Nabungo")
         .run(|app, event| {

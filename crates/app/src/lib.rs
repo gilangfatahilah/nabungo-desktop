@@ -94,7 +94,7 @@ pub use reconcile::Reconciliation;
 pub use recurring::{MAX_CATCH_UP, RuleInput, RuleRow};
 pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
 pub use settings::{AUTO_LOCK_CHOICES, Locale, Theme, UiSettings};
-pub use time::{Date, OffsetDateTime};
+pub use time::{Date, OffsetDateTime, UtcOffset};
 pub use transactions::{TxnDetail, TxnForm};
 pub use uuid::Uuid;
 pub use valuation::ValuationPoint;
