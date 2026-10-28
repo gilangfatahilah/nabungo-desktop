@@ -56,6 +56,19 @@ describe('inbox store (fallback browser)', () => {
     expect(s.pending.map((c) => c.id)).not.toContain('st-q')
   })
 
+  it('reload_failure_keeps_confirm_result', async () => {
+    __seedEmailInbox({ captures: [seed('st-r')] })
+    const s = useInboxStore()
+    await s.reload()
+    const c = s.pending.find((x) => x.id === 'st-r')!
+    const spy = vi.spyOn(ipc, 'listPendingCaptures').mockRejectedValueOnce(new Error('reload gagal'))
+    try {
+      await expect(s.quickConfirm(c)).resolves.toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('confirm_not_pending_reloads', async () => {
     __seedEmailInbox({ captures: [seed('st-2')] })
     const s = useInboxStore()

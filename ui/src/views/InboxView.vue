@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EllipsisVertical, Loader2Icon } from '@lucide/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import EmptyState from '@/components/EmptyState.vue'
@@ -22,6 +22,7 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useInboxStore } from '@/stores/inbox'
 import { useSettingsStore } from '@/stores/settings'
+import { useTransactionsStore } from '@/stores/transactions'
 
 // Inbox email capture (EML-03, docs/design/design.md §8.10). Tidak ada transaksi tanpa konfirmasi user.
 const store = useInboxStore()
@@ -43,6 +44,9 @@ onMounted(() => {
   void withErrorToast(() => categories.ensureLoaded())
   void store.listen()
 })
+
+// Transaksi dicatat/dihapus di luar Inbox (sheet global `N`, undo) mengubah kandidat duplikat: jangan tawarkan `Catat` basi.
+watch(() => useTransactionsStore().ledgerVersion, () => void withErrorToast(() => store.reload()))
 
 const notConfigured = computed(
   () => store.loaded && !store.summary.emailEnabled && !store.pending.length && !store.unparsed.length,

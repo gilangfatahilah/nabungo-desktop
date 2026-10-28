@@ -9,6 +9,7 @@ import * as ipc from '@/ipc'
 import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import { routes } from '@/router'
 import { useInboxStore } from '@/stores/inbox'
+import { useTransactionsStore } from '@/stores/transactions'
 import InboxView from './InboxView.vue'
 
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
@@ -201,5 +202,19 @@ describe('InboxView', () => {
     await flushPromises()
     expect($('[role="dialog"]')!.textContent).toContain(id.inbox.duplicatesTitle)
     expect($('[data-testid="duplicate-row"]')!.textContent).toContain('Warung IV')
+  })
+
+  it('manual_txn_elsewhere_reloads_list', async () => {
+    __seedEmailInbox({ captures: [seed('m-1', { amount: 88_000, date: '2026-02-02' })] })
+    await mountView()
+    expect(row('m-1')!.querySelector('[data-testid="capture-record"]')).not.toBeNull()
+    // Dicatat lewat sheet global (N) saat Inbox terbuka.
+    await ipc.createTxn({ kind: 'expense', date: '2026-02-02', accountId: acc, toAccountId: null, amount: 88_000,
+      splits: [{ categoryId: cat, amount: 88_000, memo: null }], fee: null, payee: 'Manual', note: null, tags: [] })
+    await useTransactionsStore().refresh()
+    await flushPromises()
+    await flushPromises()
+    expect(row('m-1')!.querySelector('[data-testid="capture-record"]')).toBeNull()
+    expect(row('m-1')!.querySelector('[data-testid="capture-duplicates"]')).not.toBeNull()
   })
 })

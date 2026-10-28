@@ -29,18 +29,21 @@ export const useInboxStore = defineStore('inbox', () => {
     loaded.value = true
   }
 
-  /** Capture bisa sudah diproses di tempat lain (sync, jendela lain): daftar selalu dimuat ulang. */
+  /**
+   * Capture bisa sudah diproses di tempat lain (sync, jendela lain): daftar selalu dimuat ulang.
+   * Gagal memuat ulang tidak boleh menimpa hasil (atau error) aksi yang sudah terjadi.
+   */
   async function guarded<T>(action: () => Promise<T>): Promise<T> {
     try {
       return await action()
     } finally {
-      await reload()
+      await reload().catch((e) => console.warn('gagal memuat ulang inbox', e))
     }
   }
 
-  /** Transaksi baru/terhubung memengaruhi saldo, daftar transaksi, dan kandidat duplikat. */
+  /** Transaksi baru/terhubung memengaruhi saldo, daftar transaksi, dan kandidat duplikat. Sudah tersimpan: gagal refresh hanya dicatat. */
   async function posted() {
-    await useTransactionsStore().refresh()
+    await useTransactionsStore().refresh().catch((e) => console.warn('gagal memuat ulang transaksi', e))
   }
 
   async function confirm(id: string, state: TxnFormState): Promise<string> {
