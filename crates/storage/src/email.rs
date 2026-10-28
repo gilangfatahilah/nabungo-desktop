@@ -358,6 +358,23 @@ pub fn list_captures(conn: &Connection, status: CaptureStatus) -> Result<Vec<Cap
     rows.map(|r| to_capture(r?)).collect()
 }
 
+pub fn count_captures(conn: &Connection, status: CaptureStatus) -> Result<u32> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM email_capture WHERE status = ?1",
+        [status.as_str()],
+        |r| r.get(0),
+    )?)
+}
+
+/// Capture `pending` dengan `date <= until`, urut `date`, `id`.
+pub fn pending_ids_until(conn: &Connection, until: Date) -> Result<Vec<Uuid>> {
+    let mut stmt = conn.prepare(
+        "SELECT id FROM email_capture WHERE status = 'pending' AND date <= ?1 ORDER BY date, id",
+    )?;
+    let ids = stmt.query_map([format_date(until)], |r| r.get::<_, String>(0))?;
+    ids.map(|id| parse_uuid("email_capture", &id?)).collect()
+}
+
 pub fn set_capture_status(
     tx: &Transaction,
     id: Uuid,
@@ -434,6 +451,10 @@ pub fn list_unparsed(conn: &Connection) -> Result<Vec<UnparsedRecord>> {
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn count_unparsed(conn: &Connection) -> Result<u32> {
+    Ok(conn.query_row("SELECT COUNT(*) FROM email_unparsed", [], |r| r.get(0))?)
 }
 
 /// Transaksi aktif `kind` bernominal `amount` (absolut; transfer = sisi masuk) dengan tanggal
@@ -679,6 +700,39 @@ mod tests {
             .collect();
         assert_eq!(pending, vec!["baru", "lama"]);
         assert_eq!(list_captures(&tx, CaptureStatus::Ignored).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn count_and_pending_until() {
+        let mut conn = open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let r = insert_rule(&tx, &rule("BCA", 0, true)).unwrap();
+        for (m, d) in [
+            ("a", date!(2026 - 05 - 09)),
+            ("b", date!(2026 - 05 - 11)),
+            ("c", date!(2026 - 05 - 01)),
+        ] {
+            let mut w = capture(m, 0, r);
+            w.date = d;
+            insert_capture(&tx, &w).unwrap();
+        }
+        let find = |m: &str| {
+            list_captures(&tx, CaptureStatus::Pending)
+                .unwrap()
+                .into_iter()
+                .find(|c| c.message_id == m)
+                .unwrap()
+                .id
+        };
+        let (a, c) = (find("a"), find("c"));
+        set_capture_status(&tx, c, CaptureStatus::Ignored, None).unwrap();
+        insert_unparsed(&tx, &unparsed("u1")).unwrap();
+        assert_eq!(count_captures(&tx, CaptureStatus::Pending).unwrap(), 2);
+        assert_eq!(count_unparsed(&tx).unwrap(), 1);
+        assert_eq!(
+            pending_ids_until(&tx, date!(2026 - 05 - 10)).unwrap(),
+            vec![a]
+        );
     }
 
     #[test]

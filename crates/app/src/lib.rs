@@ -57,7 +57,7 @@ pub use backup::{
 };
 pub use budget::{BudgetOverview, BudgetRow};
 pub use budget_alerts::BudgetAlert;
-pub use capture::{CaptureDraft, IngestOutcome};
+pub use capture::{CaptureDraft, CaptureItem, DuplicateTxn, InboxSummary, IngestOutcome};
 pub use categories::CategoryFields;
 pub use email_settings::{DEFAULT_MAILBOX, EmailSettings, normalize_address, normalize_mailbox};
 pub use email_sync::{

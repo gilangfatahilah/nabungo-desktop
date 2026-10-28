@@ -12,6 +12,7 @@ import type {
   ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto, SecurityStatusDto, StartupReportDto, ValuationPointDto,
   AttachmentDto, PayeeUsageDto, TagUsageDto,
   RecurrenceDto, RuleDto, RuleInputDto,
+  CaptureDto, DuplicateTxnDto, InboxSummaryDto, UnparsedEmailDto,
 } from './bindings'
 import { keepDay, nextAfter, occurrences } from './browser-recurrence'
 import { todayIso } from '@/lib/date'
@@ -41,6 +42,9 @@ const state = {
   buckets: [] as BucketDto[],
   mappings: [] as MappingDto[],
   rules: [] as Rule[],
+  captures: [] as Capture[],
+  /** Terbaru di depan, seperti `ORDER BY created_at DESC`. */
+  unparsed: [] as UnparsedEmailDto[],
 }
 
 /** Isi DB baru (sebelum onboarding), untuk `recoveryStartFresh`. */
@@ -60,6 +64,12 @@ type Rule = {
 // Sama dengan `MAX_CATCH_UP` / `MAX_INTERVAL` di Rust.
 const MAX_CATCH_UP = 366
 const MAX_INTERVAL = 99
+
+/** Baris `email_capture`; kandidat duplikat dihitung saat dibaca (K14). */
+type Capture = Omit<CaptureDto, 'duplicates'> & { status: 'pending' | 'confirmed' | 'ignored'; txnId: string | null }
+
+export type BrowserCaptureSeed = Omit<CaptureDto, 'id' | 'duplicates'> & { id?: string }
+export type BrowserUnparsedSeed = UnparsedEmailDto
 
 type Txn = {
   id: string
@@ -860,6 +870,49 @@ function snapshot(kind: BackupKindDto): BackupDto {
   return info
 }
 
+// --- Inbox email capture: port `crates/app/src/capture.rs` + `find_duplicate_txns`. ---
+
+const MAX_DUPLICATES = 5
+const dayNumber = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 86_400_000
+const byCaptureNewest = (a: Capture, b: Capture) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+
+/** Nominal & akun tampilan kandidat duplikat (K4). */
+function duplicateOf(t: Txn): DuplicateTxnDto {
+  const legs = t.postings.filter((p) => !p.categoryId)
+  const transfer = t.kind === 'transfer'
+  return {
+    id: t.id, date: t.date, payee: payeeName(t),
+    amount: transfer ? Math.max(...legs.map((p) => p.amount)) : Math.abs(t.postings.reduce((m, p) => m + p.amount, 0)),
+    accountId: (transfer ? legs.find((p) => p.amount < 0) : t.postings[0])?.accountId ?? '',
+  }
+}
+
+function duplicatesOf(c: Capture): DuplicateTxnDto[] {
+  const day = dayNumber(c.date)
+  return activeTxns()
+    .filter((t) => t.kind === c.kind && Math.abs(dayNumber(t.date) - day) <= 1)
+    .map((t) => ({ t, d: duplicateOf(t) }))
+    .filter(({ t, d }) => d.amount === c.amount && (c.accountId === null || t.postings.some((p) => p.accountId === c.accountId)))
+    .sort((a, b) => Math.abs(dayNumber(a.t.date) - day) - Math.abs(dayNumber(b.t.date) - day)
+      || a.t.date.localeCompare(b.t.date) || a.t.id.localeCompare(b.t.id))
+    .slice(0, MAX_DUPLICATES)
+    .map(({ d }) => d)
+}
+
+function pendingCapture(i: string): Result<Capture> {
+  const c = state.captures.find((x) => x.id === i)
+  if (!c) return notFound('email capture')
+  return c.status === 'pending' ? ok(c) : fail('capture_not_pending')
+}
+
+const capturesWith = (status: Capture['status']) => state.captures.filter((c) => c.status === status)
+
+/** Hook test/e2e: isi staging seolah hasil sync (K14). */
+export function __seedEmailInbox(seed: { captures?: BrowserCaptureSeed[]; unparsed?: BrowserUnparsedSeed[] }): void {
+  for (const c of seed.captures ?? []) state.captures.push({ ...c, id: c.id ?? id(), status: 'pending', txnId: null })
+  for (const u of seed.unparsed ?? []) state.unparsed.unshift({ ...u })
+}
+
 export const browserLedger = {
   startupReport: async (): Promise<StartupReportDto> => ({ uncleanShutdown: false, integrity: 'skipped' }),
   appReady: async (): Promise<void> => {},
@@ -1358,6 +1411,57 @@ export const browserLedger = {
   netWorthHistory: async (endPeriod: string, count: number): Promise<Result<NetWorthPointDto[]>> => {
     const end = browserPeriod.parse(endPeriod)
     return end ? ok(periodsEnding(end, count).map(netWorthPoint)) : fail('invalid_period')
+  },
+  /** `emailEnabled` dirakit di `browser.ts` dari `browserEmail`. */
+  inboxSummary: async (): Promise<Result<InboxSummaryDto>> =>
+    ok({ pending: capturesWith('pending').length, unparsed: state.unparsed.length, emailEnabled: false }),
+  listPendingCaptures: async (): Promise<Result<CaptureDto[]>> =>
+    ok(capturesWith('pending').sort(byCaptureNewest).map((c) => {
+      const { status: _, txnId: __, ...dto } = c
+      return { ...dto, duplicates: duplicatesOf(c) }
+    })),
+  listUnparsedEmails: async (): Promise<Result<UnparsedEmailDto[]>> => ok(state.unparsed.map((u) => ({ ...u }))),
+  confirmCapture: async (i: string, form: TxnFormDto): Promise<Result<SavedTxnDto>> => {
+    const c = pendingCapture(i)
+    if (c.status === 'error') return c
+    const periods = periodsOf([form.date])
+    const before = budgetLevels(periods)
+    const r = writeTxn(null, form)
+    if (r.status === 'error') return r
+    Object.assign(c.data, { status: 'confirmed', txnId: r.data })
+    return ok({ id: r.data, alerts: budgetAlerts(periods, before) })
+  },
+  linkCapture: async (i: string, txnId: string): Promise<Result<null>> => {
+    const c = pendingCapture(i)
+    if (c.status === 'error') return c
+    if (!activeTxns().some((t) => t.id === txnId)) return notFound('transaction')
+    Object.assign(c.data, { status: 'confirmed', txnId })
+    return ok(null)
+  },
+  ignoreCapture: async (i: string): Promise<Result<null>> => {
+    const c = pendingCapture(i)
+    if (c.status === 'error') return c
+    Object.assign(c.data, { status: 'ignored', txnId: null })
+    return ok(null)
+  },
+  ignoreCapturesUntil: async (until: string): Promise<Result<string[]>> => {
+    const hit = capturesWith('pending')
+      .filter((c) => c.date <= until)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    for (const c of hit) Object.assign(c, { status: 'ignored', txnId: null })
+    return ok(hit.map((c) => c.id))
+  },
+  /** Semua harus `ignored`; bila tidak, tidak ada yang berubah (K8). */
+  unignoreCaptures: async (ids: string[]): Promise<Result<null>> => {
+    const hit: Capture[] = []
+    for (const i of ids) {
+      const c = state.captures.find((x) => x.id === i)
+      if (!c) return notFound('email capture')
+      if (c.status !== 'ignored') return fail('capture_not_ignored')
+      hit.push(c)
+    }
+    for (const c of hit) Object.assign(c, { status: 'pending', txnId: null })
+    return ok(null)
   },
 }
 

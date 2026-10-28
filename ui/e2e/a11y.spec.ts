@@ -93,6 +93,32 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(page.getByRole('button', { name: 'Urungkan' })).toBeVisible()
     await expectNoViolations(page, 'toast')
 
+    // Inbox email capture: draft siap, draft tanpa kategori (+ duplikat Listrik), email tak dikenali.
+    await page.evaluate(async () => {
+      const ipc = await import('/src/ipc/index.ts')
+      const acc = (await ipc.accountsOverview()).accounts[0].id
+      const [dup] = (await ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+        amountMin: null, amountMax: null, search: 'Listrik', sort: null, limit: 1, offset: 0 })).rows
+      const base = { kind: 'expense', accountId: acc, toAccountId: null, ruleName: 'BCA QRIS', snippet: 'Transaksi QRIS berhasil' }
+      ;(window as unknown as { __seedEmailInbox: (s: unknown) => void }).__seedEmailInbox({
+        captures: [
+          { ...base, date: dup.date, amount: 50000, payee: 'Listrik', categoryId: null },
+          { ...base, date: '2026-01-02', amount: 12000, payee: 'Indomaret', categoryId: null },
+        ],
+        unparsed: [{ messageId: '<a11y@bank>', subject: 'Promo', sender: 'info@bank.example', receivedAt: null, snippet: 'Isi promo' }],
+      })
+    })
+    await go(page, '#/inbox')
+    await expect(page.locator('[data-testid="capture-row"]')).toHaveCount(2)
+    await expectNoViolations(page, 'inbox')
+    await page.locator('[data-testid="capture-review"]').first().click()
+    await expect(page.getByRole('dialog')).toContainText('Tinjau transaksi')
+    await expectNoViolations(page, 'sheet tinjau capture')
+    await page.keyboard.press('Escape')
+    await page.getByRole('tab', { name: /Gagal dibaca/ }).click()
+    await page.locator('[data-testid="unparsed-row"] button').click()
+    await expectNoViolations(page, 'inbox (gagal dibaca)')
+
     // Layar bare: kunci (enkripsi tiruan) dan pemulihan (hook browser-ledger).
     await go(page, '#/settings')
     await page.evaluate(() => (window as unknown as { __enterRecovery: (r: string) => void }).__enterRecovery('unreadable'))

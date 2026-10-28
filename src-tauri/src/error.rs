@@ -76,6 +76,7 @@ pub enum ErrorCode {
     AttachmentMissing,
     OccurrenceStale,
     CaptureNotPending,
+    CaptureNotIgnored,
     KeychainUnavailable,
     EmailAddressInvalid,
     EmailMailboxEmpty,
@@ -242,6 +243,7 @@ impl From<AppError> for IpcError {
             AppError::AttachmentMissing => Self::code(ErrorCode::AttachmentMissing),
             AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
             AppError::CaptureNotPending => Self::code(ErrorCode::CaptureNotPending),
+            AppError::CaptureNotIgnored => Self::code(ErrorCode::CaptureNotIgnored),
             AppError::KeychainUnavailable => Self::code(ErrorCode::KeychainUnavailable),
             AppError::EmailAddressInvalid => Self::code(ErrorCode::EmailAddressInvalid),
             AppError::EmailMailboxEmpty => Self::code(ErrorCode::EmailMailboxEmpty),
@@ -360,6 +362,13 @@ mod tests {
             assert_eq!(IpcError::from(err).code, code);
             assert_eq!(serde_json::to_value(code).unwrap(), wire);
         }
+    }
+
+    #[test]
+    fn capture_not_ignored_maps_to_code() {
+        let e = IpcError::from(AppError::CaptureNotIgnored);
+        assert_eq!(e.code, ErrorCode::CaptureNotIgnored);
+        assert_eq!(serde_json::to_value(e.code).unwrap(), "capture_not_ignored");
     }
 
     #[test]

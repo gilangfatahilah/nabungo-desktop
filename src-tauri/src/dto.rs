@@ -2062,6 +2062,99 @@ impl From<nabungo_app::SyncSummary> for SyncSummaryDto {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateTxnDto {
+    pub id: String,
+    pub date: String,
+    pub payee: Option<String>,
+    pub amount: i64,
+    pub account_id: String,
+}
+
+/// Satu baris Inbox (EML-03): draft form + kandidat duplikat.
+/// Transfer: `account_id` = asal, `to_account_id` = tujuan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureDto {
+    pub id: String,
+    pub kind: TxnFormKindDto,
+    pub date: String,
+    pub amount: i64,
+    pub payee: Option<String>,
+    pub account_id: Option<String>,
+    pub to_account_id: Option<String>,
+    pub category_id: Option<String>,
+    pub rule_name: Option<String>,
+    pub snippet: Option<String>,
+    pub duplicates: Vec<DuplicateTxnDto>,
+}
+
+impl From<nabungo_app::CaptureItem> for CaptureDto {
+    fn from(it: nabungo_app::CaptureItem) -> Self {
+        let d = it.draft;
+        let kind = match d.kind {
+            TxnKind::Income => TxnFormKindDto::Income,
+            TxnKind::Transfer => TxnFormKindDto::Transfer,
+            _ => TxnFormKindDto::Expense,
+        };
+        Self {
+            id: d.capture_id.to_string(),
+            kind,
+            date: format_date(d.date),
+            amount: d.amount,
+            payee: d.payee,
+            account_id: d.account_id.map(|u| u.to_string()),
+            to_account_id: d.counter_account_id.map(|u| u.to_string()),
+            category_id: d.category_id.map(|u| u.to_string()),
+            rule_name: d.note,
+            snippet: it.snippet,
+            duplicates: it
+                .duplicates
+                .into_iter()
+                .map(|t| DuplicateTxnDto {
+                    id: t.id.to_string(),
+                    date: format_date(t.date),
+                    payee: t.payee,
+                    amount: t.amount,
+                    account_id: t.account_id.to_string(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UnparsedEmailDto {
+    pub message_id: String,
+    pub sender: String,
+    pub subject: String,
+    /// ISO-8601 UTC.
+    pub received_at: Option<String>,
+    pub snippet: String,
+}
+
+impl From<nabungo_app::UnparsedRecord> for UnparsedEmailDto {
+    fn from(r: nabungo_app::UnparsedRecord) -> Self {
+        Self {
+            message_id: r.message_id,
+            sender: r.sender,
+            subject: r.subject,
+            received_at: r.received_at,
+            snippet: r.raw_snippet,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxSummaryDto {
+    pub pending: u32,
+    pub unparsed: u32,
+    pub email_enabled: bool,
+}
+
 /// Kemajuan kumulatif sync, dikirim setelah tiap batch.
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, tauri_specta::Event)]
 #[serde(rename_all = "camelCase")]
@@ -2087,4 +2180,57 @@ impl From<nabungo_app::SyncProgress> for EmailSyncProgress {
 pub struct EmailSyncDone {
     pub summary: Option<SyncSummaryDto>,
     pub error: Option<IpcError>,
+}
+
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+    use nabungo_app::{CaptureDraft, CaptureItem, DuplicateTxn};
+
+    fn item(kind: TxnKind) -> CaptureItem {
+        let (a, b, c) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+        CaptureItem {
+            draft: CaptureDraft {
+                capture_id: a,
+                kind,
+                date: parse_date("2026-05-09").unwrap(),
+                amount: 41_700,
+                payee: Some("IDM".into()),
+                account_id: Some(b),
+                counter_account_id: Some(c),
+                category_id: None,
+                note: Some("BCA Pembayaran".into()),
+            },
+            snippet: Some("Total 41.700".into()),
+            duplicates: vec![DuplicateTxn {
+                id: c,
+                date: parse_date("2026-05-10").unwrap(),
+                payee: None,
+                amount: 41_700,
+                account_id: b,
+            }],
+        }
+    }
+
+    #[test]
+    fn capture_dto_serializes_camel_case() {
+        let v = serde_json::to_value(CaptureDto::from(item(TxnKind::Expense))).unwrap();
+        assert_eq!(v["kind"], "expense");
+        assert_eq!(v["date"], "2026-05-09");
+        assert_eq!(v["ruleName"], "BCA Pembayaran");
+        assert_eq!(v["snippet"], "Total 41.700");
+        assert!(v["accountId"].is_string());
+        assert!(v["categoryId"].is_null());
+        assert_eq!(v["duplicates"][0]["date"], "2026-05-10");
+        assert!(v["duplicates"][0]["accountId"].is_string());
+    }
+
+    #[test]
+    fn capture_dto_maps_transfer_counter_account() {
+        let it = item(TxnKind::Transfer);
+        let counter = it.draft.counter_account_id.unwrap().to_string();
+        let dto = CaptureDto::from(it);
+        assert_eq!(dto.kind, TxnFormKindDto::Transfer);
+        assert_eq!(dto.to_account_id, Some(counter));
+    }
 }

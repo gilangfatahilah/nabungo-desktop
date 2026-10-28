@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Plus,
   ReceiptText,
+  Inbox,
   Settings,
   Shapes,
   Tags,
@@ -29,6 +30,7 @@ import AppLogo from '@/components/AppLogo.vue'
 import NavLinks, { type NavItem } from '@/components/layout/NavLinks.vue'
 import NavSummary from '@/components/layout/NavSummary.vue'
 import { withErrorToast } from '@/lib/notify'
+import { useInboxStore } from '@/stores/inbox'
 import { useScheduledStore } from '@/stores/scheduled'
 import { useUiStore } from '@/stores/ui'
 
@@ -44,14 +46,18 @@ const secondary: NavItem[] = [{ name: 'settings', to: '/settings', icon: Setting
 
 const ui = useUiStore()
 const scheduled = useScheduledStore()
+const inbox = useInboxStore()
 // Memuat jadwal sekaligus menjalankan auto-post saat app dibuka.
 onMounted(() => void withErrorToast(() => scheduled.reload()))
+// Badge Inbox ikut sync email (manual maupun terjadwal).
+onMounted(() => void withErrorToast(() => Promise.all([inbox.listen(), inbox.reloadSummary()])))
 
 const manage = computed<NavItem[]>(() => [
   { name: 'accounts', to: '/accounts', icon: Landmark },
   { name: 'categories', to: '/categories', icon: Shapes },
   { name: 'labels', to: '/labels', icon: Tags },
   { name: 'scheduled', to: '/scheduled', icon: CalendarClock, badge: scheduled.dueCount },
+  ...(inbox.showNav ? [{ name: 'inbox' as const, to: '/inbox', icon: Inbox, badge: inbox.summary.pending }] : []),
 ])
 </script>
 

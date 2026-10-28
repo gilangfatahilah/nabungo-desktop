@@ -157,6 +157,15 @@ export const commands = {
 	connectEmail: (address: string, mailbox: string, password: string | null) => typedError<null, IpcError>(__TAURI_INVOKE("connect_email", { address, mailbox, password })),
 	disconnectEmail: () => typedError<null, IpcError>(__TAURI_INVOKE("disconnect_email")),
 	syncEmail: () => typedError<SyncSummaryDto, IpcError>(__TAURI_INVOKE("sync_email")),
+	inboxSummary: () => typedError<InboxSummaryDto, IpcError>(__TAURI_INVOKE("inbox_summary")),
+	listPendingCaptures: () => typedError<CaptureDto[], IpcError>(__TAURI_INVOKE("list_pending_captures")),
+	listUnparsedEmails: () => typedError<UnparsedEmailDto[], IpcError>(__TAURI_INVOKE("list_unparsed_emails")),
+	confirmCapture: (id: string, form: TxnFormDto) => typedError<SavedTxnDto, IpcError>(__TAURI_INVOKE("confirm_capture", { id, form })),
+	linkCapture: (id: string, txnId: string) => typedError<null, IpcError>(__TAURI_INVOKE("link_capture", { id, txnId })),
+	ignoreCapture: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("ignore_capture", { id })),
+	/**  Abaikan massal capture pending sampai `date` (inklusif); id dikembalikan untuk undo. */
+	ignoreCapturesUntil: (date: string) => typedError<string[], IpcError>(__TAURI_INVOKE("ignore_captures_until", { date })),
+	unignoreCaptures: (ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("unignore_captures", { ids })),
 };
 
 /** Events */
@@ -372,6 +381,24 @@ export type BudgetTotalDto = {
 	perDay: number | null,
 };
 
+/**
+ *  Satu baris Inbox (EML-03): draft form + kandidat duplikat.
+ *  Transfer: `account_id` = asal, `to_account_id` = tujuan.
+ */
+export type CaptureDto = {
+	id: string,
+	kind: TxnFormKindDto,
+	date: string,
+	amount: number,
+	payee: string | null,
+	accountId: string | null,
+	toAccountId: string | null,
+	categoryId: string | null,
+	ruleName: string | null,
+	snippet: string | null,
+	duplicates: DuplicateTxnDto[],
+};
+
 export type CashflowPointDto = {
 	period: string,
 	from: string,
@@ -415,6 +442,14 @@ export type ContactDto = {
 	name: string,
 };
 
+export type DuplicateTxnDto = {
+	id: string,
+	date: string,
+	payee: string | null,
+	amount: number,
+	accountId: string,
+};
+
 export type EmailStatusDto = {
 	enabled: boolean,
 	address: string | null,
@@ -439,7 +474,7 @@ export type EmailSyncProgress = {
 	unparsed: number,
 };
 
-export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "capture_not_pending" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
+export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "capture_not_pending" | "capture_not_ignored" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
 /**  DB gagal dibuka saat startup; pulihkan dari backup dulu (P1). */
 "recovery_required" | 
 /**  Command pemulihan dipanggil saat DB sedang terbuka. */
@@ -452,6 +487,12 @@ export type FeeDto = {
 };
 
 export type FreqDto = "daily" | "weekly" | "monthly" | "yearly";
+
+export type InboxSummaryDto = {
+	pending: number,
+	unparsed: number,
+	emailEnabled: boolean,
+};
 
 export type IntegrityStatusDto = "skipped" | "ok" | "failed";
 
@@ -694,6 +735,15 @@ export type UnallocatedDto = {
 	accountId: string,
 	remainingBp: number,
 	amount: number,
+};
+
+export type UnparsedEmailDto = {
+	messageId: string,
+	sender: string,
+	subject: string,
+	/**  ISO-8601 UTC. */
+	receivedAt: string | null,
+	snippet: string,
 };
 
 /**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */

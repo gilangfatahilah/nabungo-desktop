@@ -1,8 +1,8 @@
 // Implementasi pengganti saat UI dijalankan di browser biasa (tanpa backend Tauri).
-import type { AppInfo, IpcError, UiSettingsDto } from './bindings'
+import type { AppInfo, InboxSummaryDto, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
 import { browserEmail } from './browser-email'
-import { __enterRecovery, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
+import { __enterRecovery, __seedEmailInbox, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
 import { isFontScale } from '@/lib/fontScale'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
 
@@ -47,6 +47,12 @@ export const browserCommands = lockGuard({
   connectEmail: browserEmail.connectEmail,
   disconnectEmail: browserEmail.disconnectEmail,
   syncEmail: browserEmail.syncEmail,
+  inboxSummary: async (): Promise<Result<InboxSummaryDto>> => {
+    const counts = await browserLedger.inboxSummary()
+    if (counts.status === 'error') return counts
+    const email = await browserEmail.emailStatus()
+    return ok({ ...counts.data, emailEnabled: email.status === 'ok' && email.data.enabled })
+  },
   appInfo: async (): Promise<AppInfo> => ({ version: 'browser-dev', dataDir: '', portable: false }),
   getUiSettings: async () => ok({ ...settings }),
   setTheme: async (theme: UiSettingsDto['theme']) => {
@@ -74,7 +80,7 @@ export const browserCommands = lockGuard({
   },
 })
 
-// Hook e2e (Playwright): masuk mode pemulihan tanpa backend Tauri.
+// Hook e2e (Playwright): masuk mode pemulihan / isi Inbox email tanpa backend Tauri.
 if (typeof window !== 'undefined') {
-  ;(window as unknown as { __enterRecovery: typeof __enterRecovery }).__enterRecovery = __enterRecovery
+  Object.assign(window, { __enterRecovery, __seedEmailInbox })
 }

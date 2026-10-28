@@ -7,6 +7,8 @@ import id from '@/i18n/id'
 import * as ipc from '@/ipc'
 import type { EmailStatusDto } from '@/ipc'
 import type { EmailSyncHandlers } from '@/ipc/browser-email'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { routes } from '@/router'
 import EmailSection from './EmailSection.vue'
 
 const ADDR = 'me@gmail.com'
@@ -34,7 +36,8 @@ async function mountSection(status: EmailStatusDto) {
     handlers = h
     return () => {}
   })
-  const w = mount(EmailSection, { global: { plugins: [i18n] }, attachTo: document.body })
+  const router = createRouter({ history: createMemoryHistory(), routes })
+  const w = mount(EmailSection, { global: { plugins: [i18n, router] }, attachTo: document.body })
   await flushPromises()
   return w
 }
@@ -118,6 +121,12 @@ describe('EmailSection', () => {
     expect(button(id.email.syncNow)!.disabled).toBe(false)
     expect(w.text()).not.toContain(id.email.neverSynced)
     w.unmount()
+  })
+
+  it('terhubung → link Tinjau di Inbox', async () => {
+    await mountSection(connected)
+    const link = [...document.body.querySelectorAll('a')].find((a) => a.textContent?.trim() === id.email.reviewInInbox)!
+    expect(link.getAttribute('href')).toContain('/inbox')
   })
 
   it('status dijeda → badge dan pesan galat terakhir', async () => {
