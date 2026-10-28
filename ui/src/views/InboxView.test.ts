@@ -6,6 +6,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
+import type { EmailRuleInputDto } from '@/ipc'
 import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import { routes } from '@/router'
 import { useInboxStore } from '@/stores/inbox'
@@ -35,9 +36,9 @@ beforeAll(async () => {
   cat = await ipc.createCategory('expense', { name: 'Makan IV', parentId: null, icon: null, color: null })
 })
 
-async function mountView() {
+async function mountView(path = '/inbox') {
   const router = createRouter({ history: createMemoryHistory(), routes })
-  await router.push('/inbox')
+  await router.push(path)
   const w = mount(InboxView, { global: { plugins: [i18n, router] }, attachTo: document.body })
   await flushPromises()
   await flushPromises()
@@ -216,5 +217,114 @@ describe('InboxView', () => {
     await flushPromises()
     expect(row('m-1')!.querySelector('[data-testid="capture-record"]')).toBeNull()
     expect(row('m-1')!.querySelector('[data-testid="capture-duplicates"]')).not.toBeNull()
+  })
+})
+
+describe('InboxView rule', () => {
+  const ruleRow = (name: string) =>
+    [...document.body.querySelectorAll<HTMLElement>('[data-testid="rule-row"]')].find((r) => r.querySelector('[data-part="title"]')?.textContent?.trim() === name)
+
+  const rule = (over: Partial<EmailRuleInputDto> = {}): EmailRuleInputDto => ({
+    name: 'Rule IV', senderPattern: 'rule-iv.example', subjectRegex: null, amountRegex: String.raw`Total Rp ([\d.]+)`,
+    payeeRegex: null, dateRegex: null, dateFormat: null, kind: 'expense', accountId: null, counterAccountId: null,
+    defaultCategoryId: null, priority: 10, enabled: true, ...over,
+  })
+
+  async function openTab(w: Awaited<ReturnType<typeof mountView>>['w'], label: string) {
+    const tab = w.findAll('[role="tab"]').find((t) => t.text().startsWith(label))!
+    await tab.trigger('mousedown', { button: 0 })
+    await flushPromises()
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    i18n.global.locale.value = 'id'
+    toastMock.mockClear()
+    toastMock.success.mockClear()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('rules_tab_lists_rules_with_warnings', async () => {
+    await ipc.createEmailRule(rule({ name: 'Tanpa Akun IV' }))
+    await ipc.createEmailRule(rule({ name: 'Lengkap IV', accountId: acc, defaultCategoryId: cat, enabled: false }))
+    const { w } = await mountView()
+    await openTab(w, id.emailRules.tab)
+    const bare = ruleRow('Tanpa Akun IV')!
+    expect(bare.textContent).toContain('rule-iv.example')
+    expect(bare.textContent).toContain(id.emailRules.kind.expense)
+    const warn = [...bare.querySelectorAll('.text-warning')].map((e) => e.textContent?.trim())
+    expect(warn).toEqual([id.emailRules.noAccount, id.emailRules.noCategory])
+    const full = ruleRow('Lengkap IV')!
+    expect(full.textContent).toContain('BCA IV')
+    expect(full.textContent).toContain('Makan IV')
+    expect(full.textContent).toContain(id.emailRules.disabled)
+    expect(full.querySelector('.text-warning')).toBeNull()
+  })
+
+  it('toggle_rule_enabled', async () => {
+    await ipc.createEmailRule(rule({ name: 'Toggle IV' }))
+    await mountView('/inbox?tab=rules')
+    const sw = ruleRow('Toggle IV')!.querySelector<HTMLElement>('[role="switch"]')!
+    expect(sw.getAttribute('aria-checked')).toBe('true')
+    sw.click()
+    await flushPromises()
+    await flushPromises()
+    expect((await ipc.listEmailRules()).find((r) => r.name === 'Toggle IV')!.enabled).toBe(false)
+    expect(ruleRow('Toggle IV')!.textContent).toContain(id.emailRules.disabled)
+  })
+
+  it('delete_rule_with_undo', async () => {
+    await ipc.createEmailRule(rule({ name: 'Hapus IV' }))
+    await mountView('/inbox?tab=rules')
+    key(ruleRow('Hapus IV')!.querySelector('[data-testid="rule-menu"]')!, 'Enter')
+    await flushPromises()
+    button(id.emailRules.delete).click()
+    await flushPromises()
+    expect($('[role="alertdialog"]')!.textContent).toContain(i18n.global.t('emailRules.deleteConfirm', { name: 'Hapus IV', n: 0 }))
+    ;[...$('[role="alertdialog"]')!.querySelectorAll('button')].find((b) => b.textContent?.trim() === id.emailRules.delete)!.click()
+    await flushPromises()
+    await flushPromises()
+    expect(ruleRow('Hapus IV')).toBeUndefined()
+    const [msg, opts] = toastMock.mock.calls.at(-1)! as [string, { action: { label: string; onClick: () => void } }]
+    expect(msg).toBe(id.emailRules.deleted)
+    opts.action.onClick()
+    await flushPromises()
+    await flushPromises()
+    expect(ruleRow('Hapus IV')).not.toBeUndefined()
+  })
+
+  it('create_rule_from_unparsed', async () => {
+    __seedEmailInbox({
+      unparsed: [{ messageId: '<cr@x>', sender: 'notif@baru-iv.example', subject: 'Pembayaran Baru IV', receivedAt: '2026-05-09T03:00:00Z',
+        snippet: 'Terima kasih\nTotal Bayar : Rp 23.500\n' }],
+    })
+    const { w } = await mountView('/inbox?tab=unparsed')
+    const u = $('[data-testid="unparsed-row"][data-message-id="<cr@x>"]')!
+    ;(u.querySelector('[data-testid="unparsed-create-rule"]') as HTMLElement).click()
+    await flushPromises()
+    await flushPromises()
+    expect(($('#er-sender') as HTMLInputElement).value).toBe('baru-iv.example')
+    expect(($('#er-name') as HTMLInputElement).value).toBe('Pembayaran Baru IV')
+    // Panel uji langsung memakai email itu.
+    expect($('[data-testid="rule-test-items"]')!.textContent).toContain('23.500')
+    $('[data-testid="er-form"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await flushPromises()
+    await flushPromises()
+    expect($('[data-testid="unparsed-row"][data-message-id="<cr@x>"]')).toBeNull()
+    await openTab(w, id.inbox.tabPending)
+    expect(document.body.textContent).toContain('Pembayaran Baru IV')
+  })
+
+  it('tab_follows_query', async () => {
+    await ipc.createEmailRule(rule({ name: 'Query IV' }))
+    const { router } = await mountView('/inbox?tab=rules')
+    expect(ruleRow('Query IV')).not.toBeUndefined()
+    await router.replace('/inbox?tab=unparsed')
+    await flushPromises()
+    expect(ruleRow('Query IV')).toBeUndefined()
   })
 })

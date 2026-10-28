@@ -444,7 +444,7 @@ Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. La
 
 ```
  Inbox                                   [Sync sekarang] [⋯]   ← ⋯: Abaikan sampai tanggal…
- [ Perlu ditinjau  12 | Gagal dibaca  2 ]                      ← Tabs
+ [ Perlu ditinjau  12 | Gagal dibaca  2 | Rule  8 ]            ← Tabs
  9 Mei 2026
  [✉] IDM INDOMARET D                  −Rp 41.700  [Catat] [Tinjau] ⋯
      BCA Pembayaran (QRIS/VA)   BCA   Makan & Minum
@@ -459,7 +459,22 @@ Layar `bare`: tanpa sidebar dan SiteHeader. Satu kolom 440px di tengah layar. La
 - `Catat` (utama, kecil) hanya bila draft siap dicatat sekali klik: akun & kategori/tujuan aktif dan tanpa kandidat duplikat. `Tinjau` (outline, kecil) selalu ada. `⋯` berisi `Abaikan`, plus `Hubungkan ke transaksi…` bila ada duplikat.
 - Abaikan (satu maupun massal) memunculkan toast dengan aksi `Urungkan`.
 - `Tinjau` membuka sheet kanan "Tinjau transaksi" berisi form transaksi yang sama (§7.4), terisi dari draft. Di atas form: kotak warning "Mirip dengan transaksi yang sudah ada" berisi kandidat (tanggal, payee, akun, nominal, `Hubungkan`) bila ada, lalu "Email asli" yang tertutup secara default. Isian form tidak tertimpa saat daftar dimuat ulang. Badge duplikat membuka dialog "Kemungkinan duplikat" dengan daftar kandidat yang sama.
-- Tab Gagal dibaca: baris subjek ("(tanpa subjek)" bila kosong) + pengirim + waktu terima; klik membuka cuplikan isi. Hanya dibaca.
+- Tab Gagal dibaca: baris subjek ("(tanpa subjek)" bila kosong) + pengirim + waktu terima; klik membuka cuplikan isi. Baris yang pengirimnya terbaca punya tombol `Buat rule` (outline, kecil) yang membuka sheet rule terisi saran dari email itu, dengan panel uji memakai email yang sama.
+
+Tab Rule (`/inbox?tab=rules`; tab tersimpan di query, Pengaturan → Email punya link `Kelola rule`):
+
+```
+ [ Perlu ditinjau 12 | Gagal dibaca 2 | Rule 8 ]                [+ Rule baru]
+ BCA Pembayaran (QRIS/VA)                               [●] ⋯
+     bca.co.id · Pengeluaran · BCA · Tanpa kategori        ← kosong: warning
+ Jago Terima Uang                    (Nonaktif)          [○] ⋯
+     jago.com · Transfer masuk · Tanpa akun
+```
+
+- Urut prioritas (tertinggi dulu). Baris 48px: nama (tombol, membuka sheet ubah) + badge `Nonaktif` (outline); baris 2 `text-meta`: pengirim, jenis, akun, kategori default/akun lawan. Referensi kosong/arsip ditulis "Tanpa akun"/"Tanpa kategori" berwarna warning. Switch aktif di kanan, lalu `⋯` (Ubah, Duplikat, Hapus).
+- Hapus lewat dialog konfirmasi yang menyebut jumlah item Perlu ditinjau dari rule itu (item tetap ada), lalu toast `Urungkan`. Simpan/aktifkan yang memindahkan email gagal dibaca memunculkan toast "Rule disimpan · n email dipindah ke Perlu ditinjau".
+- Sheet rule: sheet kanan 440px (pola §7.4). Field: Nama, Jenis (select 4 jenis), Pengirim (+ hint), Akun, Akun lawan (hanya transfer) atau Kategori default (hanya pemasukan/pengeluaran; kategori beda jenis dikosongkan saat jenis diganti), kotak lipat `Pola` (subjek, nominal, payee, tanggal dalam font mono + format tanggal, dengan hint regex), Prioritas + switch Aktif. `Pola` terbuka untuk rule baru/dari email, tertutup saat mengubah; error pola membukanya. Error validasi tampil di bawah field (`text-destructive`, `aria-invalid`), sheet tetap terbuka.
+- Panel "Uji rule" di bawah form (kotak bergaris): tab `Email gagal dibaca` (select) / `Tempel email` (pengirim, subjek, isi; tidak disimpan), tombol `Uji` outline kecil. Hasil: daftar langkah (Pengirim cocok, Subjek cocok, Nominal ditemukan, Payee, Tanggal terbaca) dengan ikon ✓ (income) / ✗ (destructive) sampai langkah yang gagal, lalu alasan gagal atau hasil (tanggal, payee, nominal bertanda), dan "Cocok dengan n email di Gagal dibaca".
 - Email capture belum aktif dan tidak ada item: empty state dengan link `Buka Pengaturan`. Item sidebar dan palet perintah hanya muncul bila email aktif atau masih ada item.
 
 ## 9. Gerak

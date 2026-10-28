@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { EllipsisVertical, Loader2Icon } from '@lucide/vue'
+import { EllipsisVertical, Loader2Icon, Plus } from '@lucide/vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import CaptureRow from '@/components/inbox/CaptureRow.vue'
 import CaptureSheet from '@/components/inbox/CaptureSheet.vue'
 import DuplicateDialog from '@/components/inbox/DuplicateDialog.vue'
+import EmailRuleList from '@/components/inbox/EmailRuleList.vue'
+import EmailRuleSheet from '@/components/inbox/EmailRuleSheet.vue'
 import IgnoreUntilDialog from '@/components/inbox/IgnoreUntilDialog.vue'
 import UnparsedList from '@/components/inbox/UnparsedList.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import * as ipc from '@/ipc'
-import type { CaptureDto } from '@/ipc'
+import type { CaptureDto, EmailRuleDto, EmailRuleInputDto, RuleSavedDto } from '@/ipc'
 import { isReady } from '@/lib/capture'
 import { withErrorToast } from '@/lib/notify'
 import { formatDateHeader } from '@/lib/txnList'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
+import { useEmailRulesStore } from '@/stores/emailRules'
 import { useInboxStore } from '@/stores/inbox'
 import { useSettingsStore } from '@/stores/settings'
 import { useTransactionsStore } from '@/stores/transactions'
@@ -29,17 +34,30 @@ const store = useInboxStore()
 const accounts = useAccountsStore()
 const categories = useCategoriesStore()
 const settings = useSettingsStore()
+const rules = useEmailRulesStore()
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
-const tab = ref<'pending' | 'unparsed'>('pending')
+type Tab = 'pending' | 'unparsed' | 'rules'
+// Tab disimpan di query (`/inbox?tab=rules` dari Pengaturan).
+const tab = computed<Tab>({
+  get: () => (route.query.tab === 'unparsed' || route.query.tab === 'rules' ? route.query.tab : 'pending'),
+  set: (v) => void router.replace({ query: { ...route.query, tab: v === 'pending' ? undefined : v } }),
+})
 const busy = ref<string | null>(null)
 const syncing = ref(false)
 const ignoreUntilOpen = ref(false)
 const reviewing = ref<CaptureDto | null>(null)
 const dupOf = ref<CaptureDto | null>(null)
+const ruleSheet = ref<{ rule: EmailRuleDto | null; seed: { input: EmailRuleInputDto; sampleMessageId: string | null } | null } | null>(null)
+// Rule yang dikonfirmasi tetap tersimpan setelah dialog menutup (dialog menutup sebelum `confirm`).
+const deleting = ref<EmailRuleDto | null>(null)
+const deleteOpen = ref(false)
 
 onMounted(() => {
   void withErrorToast(() => store.reload())
+  void withErrorToast(() => rules.reload())
   void withErrorToast(() => accounts.ensureLoaded())
   void withErrorToast(() => categories.ensureLoaded())
   void store.listen()
@@ -99,6 +117,34 @@ function ignoreUntil(date: string) {
   })
 }
 
+function reparsedToast(saved: RuleSavedDto) {
+  if (saved.reparsed.emails > 0) toast.success(t('emailRules.savedReparsed', { n: saved.reparsed.emails }))
+}
+
+const toggleRule = (r: EmailRuleDto, on: boolean) => run(r.id, async () => reparsedToast(await rules.setEnabled(r.id, on)))
+
+function duplicateRule(r: EmailRuleDto) {
+  const { id: _id, pending: _pending, ...input } = r
+  ruleSheet.value = { rule: null, seed: { input: { ...input, name: t('emailRules.copyName', { name: r.name }) }, sampleMessageId: null } }
+}
+
+function deleteRule() {
+  const r = deleting.value
+  if (!r) return
+  void run(r.id, async () => {
+    await rules.remove(r.id)
+    toast(t('emailRules.deleted'), {
+      action: { label: t('inbox.undo'), onClick: () => void withErrorToast(async () => reparsedToast(await rules.restore(r.id))) },
+    })
+  })
+}
+
+/** K9: rule baru dari email gagal dibaca, terisi dari saran backend. */
+const createFromEmail = (messageId: string) =>
+  withErrorToast(async () => {
+    ruleSheet.value = { rule: null, seed: { input: await ipc.suggestEmailRule(messageId), sampleMessageId: messageId } }
+  })
+
 async function syncNow() {
   syncing.value = true
   try {
@@ -139,7 +185,8 @@ async function syncNow() {
     </Button>
   </EmptyState>
   <template v-else-if="store.loaded">
-    <Tabs v-model="tab" class="mb-2">
+    <div class="mb-2 flex items-center justify-between gap-2">
+    <Tabs v-model="tab">
       <TabsList>
         <TabsTrigger value="pending" class="gap-2 px-3">
           {{ t('inbox.tabPending') }} <span class="num text-muted-foreground">{{ store.pending.length }}</span>
@@ -147,8 +194,13 @@ async function syncNow() {
         <TabsTrigger value="unparsed" class="gap-2 px-3">
           {{ t('inbox.tabUnparsed') }} <span class="num text-muted-foreground">{{ store.unparsed.length }}</span>
         </TabsTrigger>
+        <TabsTrigger value="rules" class="gap-2 px-3">
+          {{ t('emailRules.tab') }} <span class="num text-muted-foreground">{{ rules.rules.length }}</span>
+        </TabsTrigger>
       </TabsList>
     </Tabs>
+    <Button v-if="tab === 'rules'" data-testid="rule-new" @click="ruleSheet = { rule: null, seed: null }"><Plus /> {{ t('emailRules.new') }}</Button>
+    </div>
 
     <template v-if="tab === 'pending'">
       <EmptyState v-if="!store.pending.length" :title="t('inbox.emptyTitle')" />
@@ -166,10 +218,23 @@ async function syncNow() {
       </section>
       </template>
     </template>
-    <UnparsedList v-else :items="store.unparsed" />
+    <UnparsedList v-else-if="tab === 'unparsed'" :items="store.unparsed" @create-rule="createFromEmail" />
+    <EmailRuleList
+      v-else :rules="rules.rules" :busy="busy"
+      @edit="(r) => ruleSheet = { rule: r, seed: null }" @duplicate="duplicateRule" @delete="(r) => { deleting = r; deleteOpen = true }" @toggle="toggleRule"
+    />
   </template>
 
   <IgnoreUntilDialog v-model:open="ignoreUntilOpen" :captures="store.pending" @submit="ignoreUntil" />
   <CaptureSheet :capture="reviewing" @close="reviewing = null" />
   <DuplicateDialog :capture="dupOf" @close="dupOf = null" />
+  <EmailRuleSheet :open="ruleSheet !== null" :rule="ruleSheet?.rule ?? null" :seed="ruleSheet?.seed ?? null" @close="ruleSheet = null" />
+  <ConfirmDialog
+    v-model:open="deleteOpen"
+    :title="t('emailRules.delete')"
+    :description="deleting ? t('emailRules.deleteConfirm', { name: deleting.name, n: deleting.pending }) : ''"
+    :confirm-label="t('emailRules.delete')"
+    destructive
+    @confirm="deleteRule"
+  />
 </template>
