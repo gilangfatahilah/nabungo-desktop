@@ -166,6 +166,16 @@ export const commands = {
 	/**  Abaikan massal capture pending sampai `date` (inklusif); id dikembalikan untuk undo. */
 	ignoreCapturesUntil: (date: string) => typedError<string[], IpcError>(__TAURI_INVOKE("ignore_captures_until", { date })),
 	unignoreCaptures: (ids: string[]) => typedError<null, IpcError>(__TAURI_INVOKE("unignore_captures", { ids })),
+	listEmailRules: () => typedError<EmailRuleDto[], IpcError>(__TAURI_INVOKE("list_email_rules")),
+	createEmailRule: (input: EmailRuleInputDto) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("create_email_rule", { input })),
+	updateEmailRule: (id: string, input: EmailRuleInputDto) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("update_email_rule", { id, input })),
+	setEmailRuleEnabled: (id: string, enabled: boolean) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("set_email_rule_enabled", { id, enabled })),
+	deleteEmailRule: (id: string) => typedError<null, IpcError>(__TAURI_INVOKE("delete_email_rule", { id })),
+	restoreEmailRule: (id: string) => typedError<RuleSavedDto, IpcError>(__TAURI_INVOKE("restore_email_rule", { id })),
+	/**  Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan). */
+	testEmailRule: (input: EmailRuleInputDto, sample: RuleSampleDto) => typedError<RuleTestDto, IpcError>(__TAURI_INVOKE("test_email_rule", { input, sample })),
+	suggestEmailRule: (messageId: string) => typedError<EmailRuleInputDto, IpcError>(__TAURI_INVOKE("suggest_email_rule", { messageId })),
+	reparseUnparsed: () => typedError<ReparseSummaryDto, IpcError>(__TAURI_INVOKE("reparse_unparsed")),
 };
 
 /** Events */
@@ -450,6 +460,33 @@ export type DuplicateTxnDto = {
 	accountId: string,
 };
 
+export type EmailRuleDto = {
+	id: string,
+	/**  Capture pending dari rule ini. */
+	pending: number,
+} & EmailRuleInputDto;
+
+export type EmailRuleInputDto = {
+	name: string,
+	senderPattern: string,
+	subjectRegex: string | null,
+	amountRegex: string,
+	payeeRegex: string | null,
+	dateRegex: string | null,
+	/**  Salah satu `DATE_FORMATS` (`dd/mm/yyyy`, `dd-mm-yyyy`, `dd mmm yyyy`). */
+	dateFormat: string | null,
+	kind: EmailRuleKindDto,
+	accountId: string | null,
+	/**  Hanya untuk transfer. */
+	counterAccountId: string | null,
+	/**  Hanya untuk income/expense. */
+	defaultCategoryId: string | null,
+	priority: number,
+	enabled: boolean,
+};
+
+export type EmailRuleKindDto = "income" | "expense" | "transfer_out" | "transfer_in";
+
 export type EmailStatusDto = {
 	enabled: boolean,
 	address: string | null,
@@ -578,6 +615,11 @@ export type RecurrenceDto = {
 	until: string | null,
 };
 
+export type ReparseSummaryDto = {
+	emails: number,
+	items: number,
+};
+
 export type RuleDto = {
 	id: string,
 	/**  Template; `date` = kejadian berikutnya. */
@@ -594,6 +636,37 @@ export type RuleInputDto = {
 	form: TxnFormDto,
 	recurrence: RecurrenceDto,
 	autoPost: boolean,
+};
+
+/**  Email contoh untuk uji rule; teks tempelan tidak disimpan. */
+export type RuleSampleDto = { kind: "unparsed"; messageId: string } | { kind: "pasted"; sender: string; subject: string; text: string };
+
+export type RuleSavedDto = {
+	id: string,
+	reparsed: ReparseSummaryDto,
+};
+
+export type RuleTestDto = {
+	senderOk: boolean,
+	/**  `null` = rule tanpa pola subjek. */
+	subjectOk: boolean | null,
+	amounts: string[],
+	payee: string | null,
+	dateText: string | null,
+	/**  Tanggal diambil dari header email, bukan dari teks. */
+	dateFromHeader: boolean,
+	fail: TraceFailDto | null,
+	/**  Teks yang tidak terbaca untuk `amount_invalid`/`date_invalid`. */
+	failText: string | null,
+	items: RuleTestItemDto[],
+	/**  Email gagal dibaca yang akan terbaca oleh rule ini. */
+	unparsedMatches: number,
+};
+
+export type RuleTestItemDto = {
+	amount: number,
+	date: string,
+	payee: string | null,
 };
 
 /**  Hasil simpan transaksi baru: id dan peringatan budget yang baru terlewati. */
@@ -638,6 +711,9 @@ export type TagUsageDto = {
 };
 
 export type ThemeDto = "light" | "dark" | "system";
+
+/**  Langkah rule yang gagal. `sender`/`subject`/`no_amount` = rule dilewati. */
+export type TraceFailDto = "sender" | "subject" | "no_amount" | "amount_invalid" | "no_date" | "date_invalid";
 
 export type TxnDetailDto = {
 	id: string,

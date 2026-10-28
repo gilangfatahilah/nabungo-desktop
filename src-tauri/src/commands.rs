@@ -15,9 +15,10 @@ use crate::dto::{
     AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BackupSecretDto, BackupSourceDto,
     BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CaptureDto,
     CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
-    ContactDto, EmailStatusDto, InboxSummaryDto, LocaleDto, NetWorthPointDto, OnboardingDto,
-    PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto,
-    RecurrenceDto, RuleDto, RuleInputDto, SavedTxnDto, SecurityStatusDto, ShareDto,
+    ContactDto, EmailRuleDto, EmailRuleInputDto, EmailStatusDto, InboxSummaryDto, LocaleDto,
+    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto,
+    RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, ReparseSummaryDto, RuleDto, RuleInputDto,
+    RuleSampleDto, RuleSavedDto, RuleTestDto, SavedTxnDto, SecurityStatusDto, ShareDto,
     StartupReportDto, SyncSummaryDto, TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto,
     TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, UnparsedEmailDto, ValuationPointDto,
     parse_day, parse_id, parse_period,
@@ -1475,6 +1476,103 @@ pub fn unignore_captures(state: State<'_, AppState>, ids: Vec<String>) -> Result
         .map(|s| parse_id(s, "email capture"))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ledger(&state)?.unignore_captures(&ids)?)
+}
+
+// --- Rule email capture (EML-04) ---
+// Command tulis memakai offset lokal yang sama dengan sync (fallback tanggal dari header Date).
+
+#[tauri::command]
+#[specta::specta]
+pub fn list_email_rules(state: State<'_, AppState>) -> Result<Vec<EmailRuleDto>, IpcError> {
+    let rules = ledger(&state)?.email_rules_list()?;
+    Ok(rules.into_iter().map(Into::into).collect())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn create_email_rule(
+    state: State<'_, AppState>,
+    input: EmailRuleInputDto,
+) -> Result<RuleSavedDto, IpcError> {
+    let input = input.try_into()?;
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?.create_email_rule(&input, off)?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_email_rule(
+    state: State<'_, AppState>,
+    id: String,
+    input: EmailRuleInputDto,
+) -> Result<RuleSavedDto, IpcError> {
+    let id = parse_id(&id, "email rule")?;
+    let input = input.try_into()?;
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?.update_email_rule(id, &input, off)?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_email_rule_enabled(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> Result<RuleSavedDto, IpcError> {
+    let id = parse_id(&id, "email rule")?;
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?
+        .set_email_rule_enabled(id, enabled, off)?
+        .into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn delete_email_rule(state: State<'_, AppState>, id: String) -> Result<(), IpcError> {
+    let id = parse_id(&id, "email rule")?;
+    Ok(ledger(&state)?.delete_email_rule(id)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn restore_email_rule(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<RuleSavedDto, IpcError> {
+    let id = parse_id(&id, "email rule")?;
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?.restore_email_rule(id, off)?.into())
+}
+
+/// Uji rule tanpa menyimpan apa pun (teks tempelan tidak disimpan).
+#[tauri::command]
+#[specta::specta]
+pub fn test_email_rule(
+    state: State<'_, AppState>,
+    input: EmailRuleInputDto,
+    sample: RuleSampleDto,
+) -> Result<RuleTestDto, IpcError> {
+    let input = input.try_into()?;
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?
+        .test_email_rule(&input, &sample.into(), off)?
+        .into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn suggest_email_rule(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<EmailRuleInputDto, IpcError> {
+    Ok(ledger(&state)?.suggest_email_rule(&message_id)?.into())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn reparse_unparsed(state: State<'_, AppState>) -> Result<ReparseSummaryDto, IpcError> {
+    let off = state.email.local_offset;
+    Ok(ledger(&state)?.reparse_unparsed(off)?.into())
 }
 
 /// Login IMAP + cek label dulu; baru App Password disimpan ke keychain dan akun ke setting.

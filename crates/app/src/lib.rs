@@ -78,6 +78,7 @@ pub use nabungo_core::{
     FormBody, MoneyError, NetWorth, PeriodError, PeriodStartDay, SiblingWarning, SplitLine, Target,
     TxnError, TxnKind, Unallocated, parse_amount,
 };
+pub use nabungo_mail::defaults::default_rules;
 pub use nabungo_mail::rule::{
     Captured, CompiledRules, DATE_FORMATS, Rule, RuleField, RuleKind, RuleTrace, TraceFail,
 };
