@@ -608,6 +608,7 @@ export default {
     attachment_missing: 'File lampiran tidak ditemukan di folder data',
     occurrence_stale: 'Kejadian ini sudah ditangani. Daftar dimuat ulang.',
     capture_not_pending: 'Transaksi email ini sudah diproses.',
+    keychain_unavailable: 'Keychain sistem tidak tersedia, App Password tidak bisa disimpan.',
     recurrence_interval: 'Interval harus 1–99.',
     recurrence_until: 'Tanggal berakhir tidak boleh sebelum tanggal mulai.',
     file_io: 'Gagal membaca atau menulis file. Periksa lokasi dan ruang disk.',

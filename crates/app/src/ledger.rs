@@ -107,6 +107,9 @@ pub enum AppError {
     /// Capture email sudah dikonfirmasi/diabaikan.
     #[error("email capture was already processed")]
     CaptureNotPending,
+    /// OS keychain (Secret Service / Credential Manager) tidak bisa dipakai.
+    #[error("system keychain unavailable")]
+    KeychainUnavailable,
 }
 
 impl From<StorageError> for AppError {

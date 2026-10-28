@@ -37,6 +37,7 @@ mod reconcile;
 pub mod recovery;
 mod recurring;
 mod reports;
+pub mod secret;
 pub mod security;
 mod settings;
 mod tags;

@@ -76,6 +76,7 @@ pub enum ErrorCode {
     AttachmentMissing,
     OccurrenceStale,
     CaptureNotPending,
+    KeychainUnavailable,
     RecurrenceInterval,
     RecurrenceUntil,
     FileIo,
@@ -233,6 +234,7 @@ impl From<AppError> for IpcError {
             AppError::AttachmentMissing => Self::code(ErrorCode::AttachmentMissing),
             AppError::OccurrenceStale => Self::code(ErrorCode::OccurrenceStale),
             AppError::CaptureNotPending => Self::code(ErrorCode::CaptureNotPending),
+            AppError::KeychainUnavailable => Self::code(ErrorCode::KeychainUnavailable),
             AppError::Recurrence(err) => Self::code(match err {
                 RecurrenceError::Interval => ErrorCode::RecurrenceInterval,
                 RecurrenceError::UntilBeforeStart => ErrorCode::RecurrenceUntil,
@@ -338,6 +340,15 @@ mod tests {
         let e = IpcError::from(AppError::CaptureNotPending);
         assert_eq!(e.code, ErrorCode::CaptureNotPending);
         assert_eq!(serde_json::to_value(e.code).unwrap(), "capture_not_pending");
+    }
+
+    #[test]
+    fn keychain_unavailable_maps_to_code() {
+        let e = IpcError::from(AppError::KeychainUnavailable);
+        assert_eq!(
+            serde_json::to_value(e.code).unwrap(),
+            "keychain_unavailable"
+        );
     }
 
     #[test]
