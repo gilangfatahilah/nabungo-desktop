@@ -22,6 +22,7 @@ mod budget_alerts;
 mod capture;
 mod categories;
 mod defaults;
+pub mod email_runner;
 mod email_settings;
 mod email_sync;
 mod export;
@@ -60,7 +61,8 @@ pub use capture::{CaptureDraft, IngestOutcome};
 pub use categories::CategoryFields;
 pub use email_settings::{DEFAULT_MAILBOX, EmailSettings, normalize_address, normalize_mailbox};
 pub use email_sync::{
-    Fetched, MailSource, SYNC_BATCH, SourceError, SyncError, SyncSummary, sync_mailbox,
+    Fetched, LedgerAccess, MailSource, SYNC_BATCH, SourceError, SyncError, SyncProgress,
+    SyncSummary, sync_mailbox, sync_mailbox_shared,
 };
 pub use ledger::{AppError, Ledger, PostingInput, TxnInput};
 pub use nabungo_core::Mapping;
