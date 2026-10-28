@@ -4,6 +4,12 @@ import {
   commands,
   events,
   type CaptureDto,
+  type EmailRuleDto,
+  type EmailRuleInputDto,
+  type ReparseSummaryDto,
+  type RuleSampleDto,
+  type RuleSavedDto,
+  type RuleTestDto,
   type EmailStatusDto,
   type InboxSummaryDto,
   type SyncSummaryDto,
@@ -58,6 +64,15 @@ import { browserEmail, type EmailSyncHandlers } from './browser-email'
 
 export type {
   CaptureDto,
+  EmailRuleDto,
+  EmailRuleInputDto,
+  EmailRuleKindDto,
+  ReparseSummaryDto,
+  RuleSampleDto,
+  RuleSavedDto,
+  RuleTestDto,
+  RuleTestItemDto,
+  TraceFailDto,
   DuplicateTxnDto,
   InboxSummaryDto,
   UnparsedEmailDto,
@@ -690,4 +705,44 @@ export function ignoreCapturesUntil(date: string): Promise<string[]> {
 
 export async function unignoreCaptures(ids: string[]): Promise<void> {
   await unwrap(api().unignoreCaptures(ids))
+}
+
+// --- Rule email capture (EML-04) ---
+
+export function listEmailRules(): Promise<EmailRuleDto[]> {
+  return unwrap(api().listEmailRules())
+}
+
+/** Simpan lalu re-parse email gagal dibaca; `reparsed` = yang pindah ke pending. */
+export function createEmailRule(input: EmailRuleInputDto): Promise<RuleSavedDto> {
+  return unwrap(api().createEmailRule(input))
+}
+
+export function updateEmailRule(id: string, input: EmailRuleInputDto): Promise<RuleSavedDto> {
+  return unwrap(api().updateEmailRule(id, input))
+}
+
+export function setEmailRuleEnabled(id: string, enabled: boolean): Promise<RuleSavedDto> {
+  return unwrap(api().setEmailRuleEnabled(id, enabled))
+}
+
+export async function deleteEmailRule(id: string): Promise<void> {
+  await unwrap(api().deleteEmailRule(id))
+}
+
+export function restoreEmailRule(id: string): Promise<RuleSavedDto> {
+  return unwrap(api().restoreEmailRule(id))
+}
+
+/** Uji rule tanpa menyimpan apa pun. */
+export function testEmailRule(input: EmailRuleInputDto, sample: RuleSampleDto): Promise<RuleTestDto> {
+  return unwrap(api().testEmailRule(input, sample))
+}
+
+export function suggestEmailRule(messageId: string): Promise<EmailRuleInputDto> {
+  return unwrap(api().suggestEmailRule(messageId))
+}
+
+export function reparseUnparsed(): Promise<ReparseSummaryDto> {
+  return unwrap(api().reparseUnparsed())
 }

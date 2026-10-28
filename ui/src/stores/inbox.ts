@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as ipc from '@/ipc'
-import type { CaptureDto, InboxSummaryDto, UnparsedEmailDto } from '@/ipc'
+import type { CaptureDto, InboxSummaryDto, ReparseSummaryDto, UnparsedEmailDto } from '@/ipc'
 import { fromCapture } from '@/lib/capture'
 import { toDto, type TxnFormState } from '@/lib/txnForm'
 import { useAccountsStore } from './accounts'
@@ -27,6 +27,16 @@ export const useInboxStore = defineStore('inbox', () => {
     pending.value = p
     unparsed.value = u
     loaded.value = true
+  }
+
+  /** Daftar hanya dimuat bila sudah pernah dibuka; badge selalu. */
+  function refresh(): Promise<void> {
+    return loaded.value ? reload() : reloadSummary()
+  }
+
+  /** Coba lagi email gagal dibaca dengan rule aktif (setelah rule diubah di tempat lain). */
+  function reparse(): Promise<ReparseSummaryDto> {
+    return guarded(() => ipc.reparseUnparsed())
   }
 
   /**
@@ -86,7 +96,7 @@ export const useInboxStore = defineStore('inbox', () => {
   function listen(): Promise<void> {
     listening ??= ipc
       .onEmailSync({
-        done: () => void (loaded.value ? reload() : reloadSummary()).catch((e) => console.warn('gagal memuat ulang inbox', e)),
+        done: () => void refresh().catch((e) => console.warn('gagal memuat ulang inbox', e)),
       })
       .then(() => {})
     return listening
@@ -94,6 +104,6 @@ export const useInboxStore = defineStore('inbox', () => {
 
   return {
     summary, pending, unparsed, loaded, showNav,
-    reloadSummary, reload, confirm, quickConfirm, link, ignore, ignoreUntil, unignore, listen,
+    reloadSummary, reload, refresh, reparse, confirm, quickConfirm, link, ignore, ignoreUntil, unignore, listen,
   }
 })

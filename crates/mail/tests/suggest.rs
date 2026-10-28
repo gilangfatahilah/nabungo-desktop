@@ -86,3 +86,23 @@ fn suggest_without_subject_uses_domain_as_name() {
     assert_eq!(r.name, "b.example");
     assert_eq!(r.subject_regex, None);
 }
+
+/// Kasus yang sama ada di `ui/src/ipc/browser-rule.test.ts`.
+#[test]
+fn suggest_anchors_labels_from_text() {
+    let msg = bare(
+        "Notif@bca.co.id",
+        "Internet Transaction Journal",
+        "Transaction Date : 09 May 2026 12:00:00\nPayment to : IDM\nTotal Payment : IDR 41,700.00\n",
+    );
+    let r = suggest(&msg);
+    assert_eq!(r.name, "Internet Transaction Journal");
+    assert_eq!(r.sender_pattern, "bca.co.id");
+    assert_eq!(r.amount_regex, r"^Total Payment : IDR ?([\d.,]+)$");
+    assert_eq!(
+        r.date_regex.as_deref(),
+        Some(r"^Transaction Date : (\d{1,2} \w+ \d{4})")
+    );
+    let t = trace(&r, &msg, WIB).unwrap();
+    assert_eq!(t.result.unwrap()[0].amount, 41_700);
+}

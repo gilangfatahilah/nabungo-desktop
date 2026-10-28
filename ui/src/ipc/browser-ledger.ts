@@ -13,7 +13,9 @@ import type {
   AttachmentDto, PayeeUsageDto, TagUsageDto,
   RecurrenceDto, RuleDto, RuleInputDto,
   CaptureDto, DuplicateTxnDto, InboxSummaryDto, UnparsedEmailDto,
+  EmailRuleDto, EmailRuleInputDto, ReparseSummaryDto, RuleSampleDto, RuleSavedDto, RuleTestDto,
 } from './bindings'
+import { DEFAULT_RULES, apply, suggest, trace, validate, type Mail } from './browser-rule'
 import { keepDay, nextAfter, occurrences } from './browser-recurrence'
 import { todayIso } from '@/lib/date'
 import { countsAsLiability, isLiability } from '@/lib/accounts'
@@ -45,6 +47,10 @@ const state = {
   captures: [] as Capture[],
   /** Terbaru di depan, seperti `ORDER BY created_at DESC`. */
   unparsed: [] as UnparsedEmailDto[],
+  /** Tabel `email_rule` (bukan `rules`, itu transaksi terjadwal). */
+  emailRules: [] as EmailRule[],
+  /** Setting `email.rules_seeded`. */
+  emailRulesSeeded: false,
 }
 
 /** Isi DB baru (sebelum onboarding), untuk `recoveryStartFresh`. */
@@ -66,7 +72,10 @@ const MAX_CATCH_UP = 366
 const MAX_INTERVAL = 99
 
 /** Baris `email_capture`; kandidat duplikat dihitung saat dibaca (K14). */
-type Capture = Omit<CaptureDto, 'duplicates'> & { status: 'pending' | 'confirmed' | 'ignored'; txnId: string | null }
+/** `ruleId` terisi untuk capture hasil re-parse: draft diturunkan dari rule saat dibaca (`draft_of`). */
+type Capture = Omit<CaptureDto, 'duplicates'> & { status: 'pending' | 'confirmed' | 'ignored'; txnId: string | null; ruleId?: string }
+
+type EmailRule = EmailRuleInputDto & { id: string; deleted: boolean }
 
 export type BrowserCaptureSeed = Omit<CaptureDto, 'id' | 'duplicates'> & { id?: string }
 export type BrowserUnparsedSeed = UnparsedEmailDto
@@ -913,6 +922,125 @@ export function __seedEmailInbox(seed: { captures?: BrowserCaptureSeed[]; unpars
   for (const u of seed.unparsed ?? []) state.unparsed.unshift({ ...u })
 }
 
+// --- Rule email: port `crates/app/src/email_rules.rs`. ---
+
+/** Offset lokal browser dalam menit (Rust: `state.email.local_offset`). */
+const localOffset = () => -new Date().getTimezoneOffset()
+const optPattern = (s: string | null) => (s === null || s.trim() === '' ? null : s)
+const byRuleOrder = (a: EmailRule, b: EmailRule) =>
+  b.priority - a.priority || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.id < b.id ? -1 : 1)
+const activeEmailRules = () => state.emailRules.filter((r) => !r.deleted && r.enabled).sort(byRuleOrder)
+
+/** `normalized()`: nama & pengirim di-trim; pola opsional kosong → null. */
+function normalizedRule(i: EmailRuleInputDto): EmailRuleInputDto {
+  return {
+    ...i, name: i.name.trim(), senderPattern: i.senderPattern.trim(), subjectRegex: optPattern(i.subjectRegex),
+    payeeRegex: optPattern(i.payeeRegex), dateRegex: optPattern(i.dateRegex), dateFormat: optPattern(i.dateFormat),
+  }
+}
+
+/** Email tersimpan sebagai pesan rule engine; `null` = raw tidak terbaca saat sync. */
+function storedMessage(u: UnparsedEmailDto): Mail | null {
+  if (u.sender === '') return null
+  const at = u.receivedAt === null ? NaN : Date.parse(u.receivedAt)
+  return { from: u.sender, subject: u.subject, sentAt: Number.isNaN(at) ? null : Math.floor(at / 1000), text: u.snippet }
+}
+
+function activeRef<T extends { archived: boolean }>(x: T | undefined, entity: string): Result<T> {
+  if (!x) return notFound(entity)
+  return x.archived ? fail('archived', entity) : ok(x)
+}
+
+/** `check` (K3): pola lalu referensi akun/kategori. */
+function checkEmailRule(r: EmailRuleInputDto): Result<null> {
+  const field = validate(r)
+  if (field !== null) return fail('email_rule_invalid', field)
+  if (r.accountId !== null) {
+    const a = activeRef(state.accounts.find((x) => x.id === r.accountId), 'account')
+    if (a.status === 'error') return a
+  }
+  const transfer = r.kind === 'transfer_out' || r.kind === 'transfer_in'
+  if (r.counterAccountId !== null) {
+    if (!transfer) return fail('email_rule_invalid', 'counter_account')
+    if (r.accountId === r.counterAccountId) return fail('txn_transfer_same_account')
+    const a = activeRef(state.accounts.find((x) => x.id === r.counterAccountId), 'account')
+    if (a.status === 'error') return a
+  }
+  if (r.defaultCategoryId !== null) {
+    const c = activeRef(state.categories.find((x) => x.id === r.defaultCategoryId), 'category')
+    if (c.status === 'error') return c
+    if (transfer) return fail('txn_unexpected_category')
+    if (c.data.kind !== r.kind) return fail('txn_wrong_category_kind')
+  }
+  return ok(null)
+}
+
+/** `reparse_in` (K6/K7): unparsed yang lolos rule aktif pindah ke capture pending. */
+function reparse(): ReparseSummaryDto {
+  const rules = activeEmailRules()
+  const summary = { emails: 0, items: 0 }
+  for (const u of [...state.unparsed]) {
+    const msg = storedMessage(u)
+    if (msg === null) continue
+    const hit = apply(rules, msg, localOffset())
+    if (hit === null) continue
+    const rule = rules[hit.rule]!
+    for (const item of hit.items) {
+      state.captures.push({
+        id: id(), kind: 'expense', date: item.date, amount: item.amount, payee: item.payee, accountId: null,
+        toAccountId: null, categoryId: null, ruleName: rule.name, snippet: u.snippet, status: 'pending', txnId: null,
+        ruleId: rule.id,
+      })
+      summary.items += 1
+    }
+    state.unparsed.splice(state.unparsed.indexOf(u), 1)
+    summary.emails += 1
+  }
+  return summary
+}
+
+/** `draft_of`: kind/akun/kategori dari rule (termasuk yang dihapus) dan saran payee. */
+function captureDraft(c: Capture): Omit<CaptureDto, 'duplicates'> {
+  const { status: _, txnId: __, ruleId, ...dto } = c
+  const rule = state.emailRules.find((r) => r.id === ruleId)
+  if (!rule) return dto
+  const p = c.payee === null ? undefined : state.payees.find((x) => sameName(x.name, c.payee!))
+  const last = p ? activeTxns().filter((t) => t.payeeId === p.id).sort(byNewest)[0] : undefined
+  const row = last ? shapeRow(last, null, null) : null
+  const payeeCategory = state.categories.find((x) => x.id === p?.defaultCategoryId && !x.archived)?.id ?? row?.categoryId ?? null
+  const base = { ...dto, ruleName: rule.name }
+  switch (rule.kind) {
+    case 'income':
+    case 'expense':
+      return {
+        ...base, kind: rule.kind, accountId: rule.accountId ?? row?.accountId ?? null, toAccountId: null,
+        categoryId: rule.defaultCategoryId ?? payeeCategory,
+      }
+    case 'transfer_out':
+      return { ...base, kind: 'transfer', accountId: rule.accountId, toAccountId: rule.counterAccountId, categoryId: null }
+    case 'transfer_in':
+      return { ...base, kind: 'transfer', accountId: rule.counterAccountId, toAccountId: rule.accountId, categoryId: null }
+  }
+}
+
+function findEmailRule(i: string, deleted: boolean): Result<EmailRule> {
+  const r = state.emailRules.find((x) => x.id === i && x.deleted === deleted)
+  return r ? ok(r) : notFound('email rule')
+}
+
+function unparsedMessage(messageId: string): Result<Mail> {
+  const u = state.unparsed.find((x) => x.messageId === messageId)
+  const msg = u ? storedMessage(u) : null
+  return msg ? ok(msg) : notFound('email')
+}
+
+/** Salin rule bawaan sekali (K11), dipanggil saat akun email disimpan. */
+export function __seedDefaultEmailRules(): void {
+  if (state.emailRulesSeeded) return
+  for (const r of DEFAULT_RULES) state.emailRules.push({ ...r, id: id(), deleted: false })
+  state.emailRulesSeeded = true
+}
+
 export const browserLedger = {
   startupReport: async (): Promise<StartupReportDto> => ({ uncleanShutdown: false, integrity: 'skipped' }),
   appReady: async (): Promise<void> => {},
@@ -1417,8 +1545,8 @@ export const browserLedger = {
     ok({ pending: capturesWith('pending').length, unparsed: state.unparsed.length, emailEnabled: false }),
   listPendingCaptures: async (): Promise<Result<CaptureDto[]>> =>
     ok(capturesWith('pending').sort(byCaptureNewest).map((c) => {
-      const { status: _, txnId: __, ...dto } = c
-      return { ...dto, duplicates: duplicatesOf(c) }
+      const dto = captureDraft(c)
+      return { ...dto, duplicates: duplicatesOf({ ...c, ...dto }) }
     })),
   listUnparsedEmails: async (): Promise<Result<UnparsedEmailDto[]>> => ok(state.unparsed.map((u) => ({ ...u }))),
   confirmCapture: async (i: string, form: TxnFormDto): Promise<Result<SavedTxnDto>> => {
@@ -1463,6 +1591,74 @@ export const browserLedger = {
     for (const c of hit) Object.assign(c, { status: 'pending', txnId: null })
     return ok(null)
   },
+  listEmailRules: async (): Promise<Result<EmailRuleDto[]>> =>
+    ok(state.emailRules.filter((r) => !r.deleted).sort(byRuleOrder).map(({ deleted: _, ...r }) => ({
+      ...r, pending: capturesWith('pending').filter((c) => c.ruleId === r.id).length,
+    }))),
+  createEmailRule: async (input: EmailRuleInputDto): Promise<Result<RuleSavedDto>> => {
+    const r = normalizedRule(input)
+    const checked = checkEmailRule(r)
+    if (checked.status === 'error') return checked
+    const rule = { ...r, id: id(), deleted: false }
+    state.emailRules.push(rule)
+    return ok({ id: rule.id, reparsed: reparse() })
+  },
+  updateEmailRule: async (i: string, input: EmailRuleInputDto): Promise<Result<RuleSavedDto>> => {
+    const r = normalizedRule(input)
+    const checked = checkEmailRule(r)
+    if (checked.status === 'error') return checked
+    const rule = findEmailRule(i, false)
+    if (rule.status === 'error') return rule
+    Object.assign(rule.data, r)
+    return ok({ id: i, reparsed: reparse() })
+  },
+  /** Menonaktifkan tidak me-re-parse; mengaktifkan me-re-parse (K7). */
+  setEmailRuleEnabled: async (i: string, enabled: boolean): Promise<Result<RuleSavedDto>> => {
+    const rule = findEmailRule(i, false)
+    if (rule.status === 'error') return rule
+    rule.data.enabled = enabled
+    return ok({ id: i, reparsed: enabled ? reparse() : { emails: 0, items: 0 } })
+  },
+  deleteEmailRule: async (i: string): Promise<Result<null>> => {
+    const rule = findEmailRule(i, false)
+    if (rule.status === 'error') return rule
+    rule.data.deleted = true
+    return ok(null)
+  },
+  restoreEmailRule: async (i: string): Promise<Result<RuleSavedDto>> => {
+    const rule = findEmailRule(i, true)
+    if (rule.status === 'error') return rule
+    rule.data.deleted = false
+    return ok({ id: i, reparsed: reparse() })
+  },
+  /** Uji tanpa menulis apa pun; email tempelan dianggap baru diterima (K5, K13). */
+  testEmailRule: async (input: EmailRuleInputDto, sample: RuleSampleDto): Promise<Result<RuleTestDto>> => {
+    const r = normalizedRule(input)
+    const field = validate(r)
+    if (field !== null) return fail('email_rule_invalid', field)
+    let msg: Mail
+    if (sample.kind === 'unparsed') {
+      const m = unparsedMessage(sample.messageId)
+      if (m.status === 'error') return m
+      msg = m.data
+    } else {
+      msg = { from: sample.sender.trim(), subject: sample.subject.trim(), sentAt: Math.floor(Date.now() / 1000), text: sample.text }
+    }
+    const t = trace(r, msg, localOffset())
+    if (typeof t === 'string') return fail('email_rule_invalid', t)
+    const unparsedMatches = state.unparsed.filter((u) => {
+      const m = storedMessage(u)
+      if (m === null) return false
+      const other = trace(r, m, localOffset())
+      return typeof other !== 'string' && other.fail === null
+    }).length
+    return ok({ ...t, unparsedMatches })
+  },
+  suggestEmailRule: async (messageId: string): Promise<Result<EmailRuleInputDto>> => {
+    const m = unparsedMessage(messageId)
+    return m.status === 'error' ? m : ok(suggest(m.data))
+  },
+  reparseUnparsed: async (): Promise<Result<ReparseSummaryDto>> => ok(reparse()),
 }
 
 // --- Keamanan (tanpa kripto): password & recovery key disimpan di memori. ---
