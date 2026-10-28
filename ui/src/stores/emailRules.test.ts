@@ -26,6 +26,21 @@ describe('emailRules store (fallback browser)', () => {
     expect(inbox.pending.some((c) => c.ruleName === 'Warung ST')).toBe(true)
   })
 
+  it('update_reloads_pending_drafts', async () => {
+    // Draft dihitung dari rule saat dibaca: akun/kategori baru harus tampil tanpa email yang dipindah.
+    __seedEmailInbox({ unparsed: [unparsed('<es4@depot>', 'notif@depot.example', 'Total : Rp 7.000')] })
+    const s = useEmailRulesStore()
+    const input = { ...(await ipc.suggestEmailRule('<es4@depot>')), name: 'Depot ST', accountId: null }
+    const { id } = await s.save(null, input)
+    const inbox = useInboxStore()
+    await inbox.reload()
+    expect(inbox.pending.find((c) => c.ruleName === 'Depot ST')?.accountId).toBeNull()
+    const acc = await ipc.createAccount('bank', { name: 'Depot ST', groupId: null, includeInNetWorth: true, creditLimit: null,
+      statementDay: null, icon: null, color: null, openingBalance: 0, openingDate: '2020-01-01', contact: null })
+    expect((await s.save(id, { ...input, accountId: acc })).reparsed.emails).toBe(0)
+    expect(inbox.pending.find((c) => c.ruleName === 'Depot ST')?.accountId).toBe(acc)
+  })
+
   it('remove_then_restore', async () => {
     __seedEmailInbox({ unparsed: [unparsed('<es2@kios>', 'notif@kios.example', 'Total : Rp 3.000')] })
     const s = useEmailRulesStore()

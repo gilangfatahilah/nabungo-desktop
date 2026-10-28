@@ -15,11 +15,12 @@ export const useEmailRulesStore = defineStore('emailRules', () => {
     loaded.value = true
   }
 
-  /** Re-parse memindahkan email gagal dibaca ke pending: daftar inbox ikut dimuat ulang. */
-  async function written(saved: RuleSavedDto): Promise<RuleSavedDto> {
+  /** Draft pending dihitung dari rule saat dibaca, dan re-parse memindahkan email gagal dibaca:
+   *  setiap tulis rule memuat ulang inbox juga. */
+  async function written<T>(result: T): Promise<T> {
     await reload()
-    if (saved.reparsed.emails > 0) await useInboxStore().refresh()
-    return saved
+    await useInboxStore().refresh()
+    return result
   }
 
   async function save(id: string | null, input: EmailRuleInputDto): Promise<RuleSavedDto> {
@@ -31,8 +32,7 @@ export const useEmailRulesStore = defineStore('emailRules', () => {
   }
 
   async function remove(id: string) {
-    await ipc.deleteEmailRule(id)
-    await reload()
+    await written(await ipc.deleteEmailRule(id))
   }
 
   async function restore(id: string): Promise<RuleSavedDto> {

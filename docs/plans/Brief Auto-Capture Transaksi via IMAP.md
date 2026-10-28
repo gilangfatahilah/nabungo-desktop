@@ -129,6 +129,8 @@ Dikerjakan bertahap, dan tiap tahap bisa dipakai sendiri sebelum lanjut ke tahap
 
 **Status (2026-10-28):** milestone 5 dan sebagian 6 selesai di Fase 9c (`docs/plans/2026-10-28-fase-9c-email-inbox.md`): Inbox (`/inbox`) dengan Catat cepat, Tinjau (edit lalu confirm), Abaikan + Urungkan, abaikan massal sampai tanggal, hint duplikat dengan `Hubungkan` (link ke transaksi yang ada, bukan merge), dan tab Gagal dibaca (hanya baca). Rule editor + buat rule dari email unparsed → 9d.
 
+**Status (2026-10-28):** milestone 6 selesai di Fase 9d (`docs/plans/2026-10-28-fase-9d-email-rule-editor.md`): rule editor di tab Rule Inbox (akun/kategori default, pola, prioritas, aktif), uji rule terhadap email gagal dibaca atau teks tempelan, buat rule dari email gagal dibaca, dan re-parse lokal dari `raw_snippet` setiap rule disimpan/diaktifkan (tanpa sync ulang).
+
 1. **Spike IMAP**: CLI kecil di Rust yang login, `SELECT "Finance"`, dan mencetak subject 10 email terakhir.
 2. **Parser satu bank**: satu rule hardcoded untuk bank yang paling sering dipakai, diuji dengan contoh email asli yang sudah disensor.
 3. **Schema + rule engine**: tabel di atas, rule dibaca dari DB, dedup via Message-ID, log unparsed.
@@ -139,5 +141,5 @@ Dikerjakan bertahap, dan tiap tahap bisa dipakai sendiri sebelum lanjut ke tahap
 ### Open questions
 
 - [x] Bank dan e-money mana saja yang dipakai dan mengirim email per transaksi? → BCA dan Jago (9a).
-- [x] Rule editor perlu UI di v1, atau cukup seed SQL dulu? → seed dulu, editor nanti (EML-04).
+- [x] Rule editor perlu UI di v1, atau cukup seed SQL dulu? → seed dulu (9a), editor di tab Rule Inbox (9d, EML-04).
 - [x] Interval sync berkala berapa menit saat app terbuka? → 15 menit, plus sekali saat app dibuka/di-unlock (9b).

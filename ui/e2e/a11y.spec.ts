@@ -116,8 +116,19 @@ for (const scheme of ['light', 'dark'] as const) {
     await expectNoViolations(page, 'sheet tinjau capture')
     await page.keyboard.press('Escape')
     await page.getByRole('tab', { name: /Gagal dibaca/ }).click()
-    await page.locator('[data-testid="unparsed-row"] button').click()
+    await page.locator('[data-testid="unparsed-row"] button').first().click()
     await expectNoViolations(page, 'inbox (gagal dibaca)')
+    // Tab Rule (rule bawaan disalin saat email dihubungkan) dan sheet rule dengan pola + panel uji terbuka.
+    await page.evaluate(async () => (await import('/src/ipc/index.ts')).connectEmail('saya@gmail.com', 'Finance', 'rahasia'))
+    await go(page, '#/settings')
+    await go(page, '#/inbox?tab=rules')
+    await expect(page.locator('[data-testid="rule-row"]')).toHaveCount(7)
+    await expectNoViolations(page, 'inbox (rule)')
+    await page.locator('[data-testid="rule-row"] [data-part="title"]').first().click()
+    await page.getByRole('button', { name: 'Pola' }).click()
+    await expect(page.locator('#er-amount')).toBeVisible()
+    await expectNoViolations(page, 'sheet rule')
+    await page.keyboard.press('Escape')
 
     // Layar bare: kunci (enkripsi tiruan) dan pemulihan (hook browser-ledger).
     await go(page, '#/settings')
