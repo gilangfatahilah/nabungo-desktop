@@ -429,7 +429,30 @@ Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Ter
 - Target bucket bisa persen atau nominal (CAP-01). Dialog bucket memakai ToggleGroup outline kecil **Persen / Nominal**; mode Nominal memakai `AmountInput` (parse saat blur/submit) dan deskripsi dialog berganti ke penjelasan "nominal dipenuhi dulu, persen membagi sisanya".
 - Kolom Target di tabel selalu persen efektif terhadap total aset; bucket nominal menampilkan baris keterangan `text-meta` muted "Nominal tetap Rp…" di bawah nama (menggantikan keterangan "x% dari parent").
 - Peringatan di atas tabel (`text-warning`, `role="status"`): Σ target persen per tingkat ≠ 100% (hanya bila tingkat itu punya bucket persen) dan Σ target nominal melebihi basisnya (total aset atau target parent). Peringatan tidak memblokir penyimpanan.
-- Laporan: chart sesuai §7.12, setiap chart punya tabel angka di bawahnya.
+- Laporan: grid kartu `grid-cols-1 @3xl/main:grid-cols-12`, kartu tanpa data menyembunyikan diri.
+
+  ```
+  PageHeader: Periode 25 Sep – 24 Okt            [‹ Okt 2026 ›]  [1 tahun terakhir ▾]
+  [Pemasukan ↗] [Pengeluaran ↘] [Sisa ↗] [Rasio tabungan]          ← section card §7.11
+  ┌ Pemasukan vs pengeluaran ─ col 8 ┐ ┌ Perubahan terbesar ─ col 4 ┐
+  ┌ Kategori Okt 2026 ──────── col 7 ┐ ┌ Tren kategori ────── col 5 ┐
+  ┌ Kekayaan bersih ───────────────────────────────────────── full ┐
+  ```
+
+  - Dua kontrol waktu di PageHeader:
+    - **periode fokus** `‹ periode ›`, tidak bisa melewati periode berjalan; mengatur KPI dan kategori;
+    - **rentang chart** 3/6/12/24 periode, disimpan per perangkat.
+
+    Klik batang/baris arus kas atau tren kategori juga memindah fokus.
+  - KPI (§7.11): footer berisi rata-rata rentang (pemasukan, sisa) atau per hari (pengeluaran; periode berjalan dibagi hari yang sudah lewat). Rasio tabungan = sisa ÷ pemasukan, `–` tanpa pemasukan.
+  - Kategori:
+    - Tabs Pengeluaran/Pemasukan, donut 5 root teratas + Lainnya.
+    - Baris root: tile ikon, porsi, "lalu Rp…", nominal + badge tren (warna sesuai makna). Chevron membuka child; posting langsung di root tampil sebagai "Langsung di kategori ini".
+    - Klik baris memilih kategori untuk kartu Tren.
+    - Tombol `arrow-up-right` membuka Transaksi terfilter kategori (termasuk child) + rentang periode fokus.
+  - Perubahan terbesar: maks 3 naik + 3 turun (selisih nominal bertanda); klik memilih kategori untuk Tren.
+  - Tren kategori: Select root sejenis, ringkasan Rata-rata · Tertinggi · Terendah, bar chart satu seri.
+  - Setiap chart tetap punya tabel angka (§7.12), terlipat di `Collapsible` "Tampilkan tabel angka".
 - **Sumbu Y**: tick dibulatkan ke integer tanpa label kembar (`charts/axis.ts`); tanpa data hanya tick 0.
 - **Tooltip chart** (`ChartTooltip`, semua chart SVG): kotak `bg-popover` border `shadow-md` `text-meta`, baris titik warna seri + label muted + nilai `num`. Garis/batang: ditambatkan ke titik data dan terbuka menjauhi tepi chart. Donut: ditambatkan di tepi kanan donut setinggi segmen, terbuka ke kanan (arah legenda). Tooltip yang tetap melewati tepi kartu digeser masuk (jarak 8px), jadi tidak pernah tumpah ke kartu tetangga. Nilai memakai nominal penuh (`formatIdr`, prop `valueFormat`), bukan format ringkas sumbu.
   - Garis: hover/fokus memilih periode terdekat → garis kursor putus-putus + titik per seri + tooltip semua seri. Chart bisa difokus (Tab); ←/→, Home/End memindah, Escape menutup.
