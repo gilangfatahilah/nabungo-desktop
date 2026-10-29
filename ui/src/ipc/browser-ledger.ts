@@ -3,7 +3,7 @@
 // saldo berjalan, filter) dicerminkan dari core/storage dan diuji di browser-ledger.test.ts.
 import type {
   AccountDto, AccountFieldsDto, AccountGroupDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
-  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BackupSecretDto, BackupSourceDto, BackupSourceInfoDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
+  AllocationPointDto, AmountWarningDto, BackupDto, BackupKindDto, BackupSecretDto, BackupSourceDto, BackupSourceInfoDto, BucketActualDto, CashflowPointDto, CategoryAmountDto, CategoryComparisonDto, CategoryDeltaDto, CategoryTrendPointDto, NetWorthPointDto, BucketDto, BucketFieldsDto, BudgetOverviewDto, MappingDto, ShareDto,
   BudgetAlertDto, BudgetLevelDto, SavedTxnDto,
   UnallocatedDto, WarningDto,
   BudgetRowDto, CategoryDto,
@@ -852,6 +852,51 @@ function categoryBreakdown(p: Period, kind: CategoryKindDto): CategoryAmountDto[
     .sort((a, b) => b.amount - a.amount || (name(a.categoryId) < name(b.categoryId) ? -1 : name(a.categoryId) > name(b.categoryId) ? 1 : 0))
 }
 
+// Port `Ledger::category_comparison`: root yang positif di salah satu periode, dengan rincian child.
+function categoryComparison(p: Period, kind: CategoryKindDto): CategoryComparisonDto[] {
+  const signed = (q: Period) => {
+    const [from, toEx] = browserPeriod.range(q, state.periodStartDay)
+    const out = new Map<string, number>()
+    for (const [c, amount] of categoryTotals(from, toEx)) {
+      if (state.categories.find((x) => x.id === c)?.kind === kind) out.set(c, kind === 'income' ? amount : -amount)
+    }
+    return out
+  }
+  const current = signed(p)
+  const previous = signed(browserPeriod.shift(p, -1))
+  const roots = new Map<string, { total: CategoryDeltaDto; children: CategoryDeltaDto[] }>()
+  for (const id of new Set([...current.keys(), ...previous.keys()])) {
+    const rootId = state.categories.find((x) => x.id === id)?.parentId ?? id
+    let root = roots.get(rootId)
+    if (!root) roots.set(rootId, (root = { total: { categoryId: rootId, amount: 0, previous: 0 }, children: [] }))
+    const child = { categoryId: id, amount: current.get(id) ?? 0, previous: previous.get(id) ?? 0 }
+    root.total.amount += child.amount
+    root.total.previous += child.previous
+    root.children.push(child)
+  }
+  const name = (c: string) => state.categories.find((x) => x.id === c)?.name ?? ''
+  const order = (a: CategoryDeltaDto, b: CategoryDeltaDto) =>
+    b.amount - a.amount || b.previous - a.previous
+    || (name(a.categoryId) < name(b.categoryId) ? -1 : name(a.categoryId) > name(b.categoryId) ? 1 : 0)
+  return [...roots.values()]
+    .filter(({ total }) => total.amount > 0 || total.previous > 0)
+    .sort((a, b) => order(a.total, b.total))
+    .map(({ total, children }) => {
+      let rows = children.filter((c) => c.amount !== 0 || c.previous !== 0)
+      // Hanya posting langsung di root: tidak ada rincian yang perlu ditampilkan.
+      if (rows.every((c) => c.categoryId === total.categoryId)) rows = []
+      return { ...total, children: rows.sort(order) }
+    })
+}
+
+// Port `Ledger::category_trend`: kategori + child-nya per periode, bertanda sesuai jenis.
+function categoryTrendPoint(p: Period, ids: Set<string>, kind: CategoryKindDto): CategoryTrendPointDto {
+  const [from, toEx] = browserPeriod.range(p, state.periodStartDay)
+  let amount = 0
+  for (const [c, total] of categoryTotals(from, toEx)) if (ids.has(c)) amount += kind === 'income' ? total : -total
+  return { period: browserPeriod.key(p), from, to: previousDay(toEx), amount }
+}
+
 function netWorthPoint(p: Period): NetWorthPointDto {
   const date = previousDay(browserPeriod.range(p, state.periodStartDay)[1])
   let assets = 0
@@ -1535,6 +1580,18 @@ export const browserLedger = {
   categoryBreakdown: async (period: string, kind: CategoryKindDto): Promise<Result<CategoryAmountDto[]>> => {
     const p = browserPeriod.parse(period)
     return p ? ok(categoryBreakdown(p, kind)) : fail('invalid_period')
+  },
+  categoryComparison: async (period: string, kind: CategoryKindDto): Promise<Result<CategoryComparisonDto[]>> => {
+    const p = browserPeriod.parse(period)
+    return p ? ok(categoryComparison(p, kind)) : fail('invalid_period')
+  },
+  categoryTrend: async (endPeriod: string, count: number, categoryId: string): Promise<Result<CategoryTrendPointDto[]>> => {
+    const end = browserPeriod.parse(endPeriod)
+    if (!end) return fail('invalid_period')
+    const cat = state.categories.find((x) => x.id === categoryId)
+    if (!cat) return notFound('category')
+    const ids = new Set(state.categories.filter((x) => x.id === categoryId || x.parentId === categoryId).map((x) => x.id))
+    return ok(periodsEnding(end, count).map((p) => categoryTrendPoint(p, ids, cat.kind)))
   },
   netWorthHistory: async (endPeriod: string, count: number): Promise<Result<NetWorthPointDto[]>> => {
     const end = browserPeriod.parse(endPeriod)

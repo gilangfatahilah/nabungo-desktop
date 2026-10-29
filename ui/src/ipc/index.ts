@@ -36,6 +36,8 @@ import {
   type BudgetOverviewDto,
   type CashflowPointDto,
   type CategoryAmountDto,
+  type CategoryComparisonDto,
+  type CategoryTrendPointDto,
   type CategoryDto,
   type CategoryFieldsDto,
   type CategoryKindDto,
@@ -101,6 +103,9 @@ export type {
   BudgetOverviewDto,
   CashflowPointDto,
   CategoryAmountDto,
+  CategoryComparisonDto,
+  CategoryDeltaDto,
+  CategoryTrendPointDto,
   EmailStatusDto,
   EmailSyncDone,
   EmailSyncProgress,
@@ -537,6 +542,16 @@ export function cashflowReport(endPeriod: string, count: number): Promise<Cashfl
 /** Total per kategori root, nominal terbesar dulu; kategori bernilai 0 tidak muncul. */
 export function categoryBreakdown(period: string, kind: CategoryKindDto): Promise<CategoryAmountDto[]> {
   return unwrap(api().categoryBreakdown(period, kind))
+}
+
+/** Total per kategori root periode ini vs sebelumnya + rincian child; root yang 0 di kedua periode tidak muncul. */
+export function categoryComparison(period: string, kind: CategoryKindDto): Promise<CategoryComparisonDto[]> {
+  return unwrap(api().categoryComparison(period, kind))
+}
+
+/** Nominal satu kategori (root: termasuk child), `count` periode (maks. 24) berakhir di `endPeriod`. */
+export function categoryTrend(endPeriod: string, count: number, categoryId: string): Promise<CategoryTrendPointDto[]> {
+  return unwrap(api().categoryTrend(endPeriod, count, categoryId))
 }
 
 /** Net worth per akhir periode, `count` periode (maks. 24) berakhir di `endPeriod`. */

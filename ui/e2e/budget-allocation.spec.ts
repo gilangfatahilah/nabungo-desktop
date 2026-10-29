@@ -91,6 +91,7 @@ test('reports show current period', async ({ page }) => {
   await onboard(page)
   await quickExpense(page)
   await go(page, '#/reports')
+  await page.getByTestId('cashflow-table-toggle').click()
   const current = page.locator('[data-testid^="cashflow-row-"]').last()
   await expect(current).toHaveAttribute('aria-selected', 'true')
   await expect(current.getByRole('cell').nth(2)).toHaveText('25.000')

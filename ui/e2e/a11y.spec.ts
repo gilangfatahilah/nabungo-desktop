@@ -76,6 +76,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await go(page, '#/reports')
     await page.locator('[data-testid="cashflow-chart"] [role="group"]').focus()
     await expectNoViolations(page, 'tooltip chart')
+    for (const t of ['cashflow', 'trend', 'networth']) await page.getByTestId(`${t}-table-toggle`).click()
+    const expand = page.locator('[data-testid="breakdown-row"] [data-part="expand"]')
+    if (await expand.count()) await expand.first().click()
+    await expectNoViolations(page, 'laporan (tabel & sub-kategori)')
 
     await go(page, '#/labels?tab=payee')
     const menu = page.locator('[data-testid^="label-menu-"]').first()

@@ -493,6 +493,47 @@ describe('browser ledger laporan (paritas Rust)', () => {
     expect(await data(L.categoryBreakdown('2028-06', 'income'))).toEqual([])
   })
 
+  it('comparison includes previous period and children', async () => {
+    const bank = await create('bank', 'Bank C', 0, '2031-01-01')
+    const makan = await category('expense', 'Makan C')
+    const [resto, kopi] = [await category('expense', 'Resto C', makan), await category('expense', 'Kopi C', makan)]
+    const [transport, tagihan] = [await category('expense', 'Transport C'), await category('expense', 'Tagihan C')]
+    const spend = (c: string, date: string, amount: number) =>
+      data(L.createTxn(form({ accountId: bank, date, amount, splits: line(c, amount) })))
+    await spend(resto, '2031-02-02', 40_000)
+    await spend(tagihan, '2031-02-03', 99_000)
+    await spend(resto, '2031-03-02', 50_000)
+    await spend(kopi, '2031-03-03', 25_000)
+    await spend(transport, '2031-03-04', 60_000)
+    expect(await data(L.categoryComparison('2031-03', 'expense'))).toEqual([
+      { categoryId: makan, amount: 75_000, previous: 40_000, children: [
+        { categoryId: resto, amount: 50_000, previous: 40_000 },
+        { categoryId: kopi, amount: 25_000, previous: 0 },
+      ] },
+      { categoryId: transport, amount: 60_000, previous: 0, children: [] },
+      { categoryId: tagihan, amount: 0, previous: 99_000, children: [] },
+    ])
+    // Posting langsung di root muncul di samping child.
+    await spend(makan, '2031-03-05', 10_000)
+    const [m] = await data(L.categoryComparison('2031-03', 'expense'))
+    expect(m!.children.map((c) => [c.categoryId, c.amount])).toEqual([[resto, 50_000], [kopi, 25_000], [makan, 10_000]])
+    expect(await L.categoryComparison('2031-13', 'expense')).toMatchObject({ status: 'error', error: { code: 'invalid_period' } })
+  })
+
+  it('trend rolls up children per period', async () => {
+    const bank = await create('bank', 'Bank T', 0, '2029-01-01')
+    const makan = await category('expense', 'Makan T')
+    const resto = await category('expense', 'Resto T', makan)
+    await data(L.createTxn(form({ accountId: bank, date: '2029-05-02', amount: 40_000, splits: line(resto, 40_000) })))
+    await data(L.createTxn(form({ accountId: bank, date: '2029-06-02', amount: 75_000, splits: line(makan, 75_000) })))
+    const t = await data(L.categoryTrend('2029-06', 3, makan))
+    expect(t.map((p) => [p.period, p.amount])).toEqual([['2029-04', 0], ['2029-05', 40_000], ['2029-06', 75_000]])
+    expect(t[2]!.to).toBe('2029-06-30')
+    expect((await data(L.categoryTrend('2029-06', 1, resto)))[0]!.amount).toBe(0)
+    expect(await data(L.categoryTrend('2029-06', 200, makan))).toHaveLength(24)
+    expect(await L.categoryTrend('2029-06', 1, 'nope')).toMatchObject({ status: 'error', error: { code: 'not_found' } })
+  })
+
   it('net worth history per period end', async () => {
     const before = await data(L.netWorthHistory('2028-09', 3))
     expect(before.map((p) => [p.period, p.date])).toEqual([['2028-07', '2028-07-31'], ['2028-08', '2028-08-31'], ['2028-09', '2028-09-30']])
