@@ -46,7 +46,7 @@ const row = 'grid grid-cols-[8rem_repeat(3,minmax(7rem,1fr))] items-center gap-4
     </CardHeader>
     <CardContent class="flex flex-col gap-3">
       <div data-testid="networth-chart">
-        <LineChart :labels="labels" :series="series" :label="t('reports.netWorthChart')" :format="axis" :value-format="money" />
+        <LineChart :labels="labels" :series="series" :label="t('reports.netWorthChart')" :format="axis" :value-format="money" area smooth />
       </div>
       <ul class="flex gap-4 text-meta text-muted-foreground">
         <li v-for="s in series" :key="s.key" class="flex items-center gap-1.5">

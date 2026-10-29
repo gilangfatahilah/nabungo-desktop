@@ -172,7 +172,8 @@ describe('ReportsView', () => {
 
   it('kekayaan bersih menampilkan tabel per periode', async () => {
     await view()
-    expect($$('[data-testid="networth-chart"] polyline[data-key]')).toHaveLength(3)
+    expect($$('[data-testid="networth-chart"] path[data-key]')).toHaveLength(3)
+    expect($$('[data-testid="networth-chart"] [data-part="area"]')).toHaveLength(1)
     await openTable('networth')
     expect($$('[data-testid^="networth-row-"]')).toHaveLength(12)
     expect(cells($('[data-testid="networth-row-2026-08"]'))).toEqual(['Agu 2026', '0', '0', '0'])
