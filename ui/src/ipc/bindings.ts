@@ -119,6 +119,13 @@ export const commands = {
 	cashflowReport: (endPeriod: string, count: number) => typedError<CashflowPointDto[], IpcError>(__TAURI_INVOKE("cashflow_report", { endPeriod, count })),
 	/**  Total per kategori root dalam satu periode, nominal terbesar dulu. */
 	categoryBreakdown: (period: string, kind: CategoryKindDto) => typedError<CategoryAmountDto[], IpcError>(__TAURI_INVOKE("category_breakdown", { period, kind })),
+	/**  Total per kategori root periode ini vs periode sebelumnya, dengan rincian child. */
+	categoryComparison: (period: string, kind: CategoryKindDto) => typedError<CategoryComparisonDto[], IpcError>(__TAURI_INVOKE("category_comparison", { period, kind })),
+	/**
+	 *  Nominal satu kategori (root: termasuk child) per periode, `count` periode berakhir di
+	 *  `end_period` (terlama dulu, maks. 24).
+	 */
+	categoryTrend: (endPeriod: string, count: number, categoryId: string) => typedError<CategoryTrendPointDto[], IpcError>(__TAURI_INVOKE("category_trend", { endPeriod, count, categoryId })),
 	/**  Net worth per akhir periode, `count` periode berakhir di `end_period` (terlama dulu, maks. 24). */
 	netWorthHistory: (endPeriod: string, count: number) => typedError<NetWorthPointDto[], IpcError>(__TAURI_INVOKE("net_worth_history", { endPeriod, count })),
 	startupReport: () => __TAURI_INVOKE<StartupReportDto>("startup_report"),
@@ -426,6 +433,23 @@ export type CategoryAmountDto = {
 	amount: number,
 };
 
+export type CategoryComparisonDto = {
+	/**  Kategori root; nominal termasuk child. */
+	categoryId: string,
+	amount: number,
+	/**  Nominal periode sebelumnya. */
+	previous: number,
+	/**  Rincian per child (posting langsung di root memakai id root); kosong bila tidak ada child. */
+	children: CategoryDeltaDto[],
+};
+
+export type CategoryDeltaDto = {
+	categoryId: string,
+	amount: number,
+	/**  Nominal periode sebelumnya. */
+	previous: number,
+};
+
 export type CategoryDto = {
 	id: string,
 	parentId: string | null,
@@ -446,6 +470,14 @@ export type CategoryFieldsDto = {
 };
 
 export type CategoryKindDto = "income" | "expense";
+
+export type CategoryTrendPointDto = {
+	period: string,
+	from: string,
+	/**  Inklusif. */
+	to: string,
+	amount: number,
+};
 
 export type ContactDto = {
 	id: string,

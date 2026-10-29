@@ -4,11 +4,12 @@ use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
     AllocationPoint, AttachmentRow, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert,
     BudgetLevel, BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount,
-    CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Freq, Locale,
-    NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay,
-    PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme,
-    TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings,
-    Uuid, ValuationPoint, format_date, parse_date,
+    CategoryComparison, CategoryDelta, CategoryFields, CategoryKind, CategoryRow,
+    CategoryTrendPoint, ContactRow, Date, Fee, FormBody, Freq, Locale, NetWorth, NetWorthPoint,
+    OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay, PostingRecord, Reconciliation,
+    RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme, TxnDetail, TxnForm, TxnKind,
+    TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings, Uuid, ValuationPoint,
+    format_date, parse_date,
 };
 use nabungo_app::{
     EmailRuleInput, EmailRuleItem, ReparseSummary, RuleKind, RuleSample, RuleSaved, RuleTest,
@@ -1329,6 +1330,69 @@ impl From<CategoryAmount> for CategoryAmountDto {
         Self {
             category_id: c.category_id.to_string(),
             amount: c.amount,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryDeltaDto {
+    pub category_id: String,
+    pub amount: i64,
+    /// Nominal periode sebelumnya.
+    pub previous: i64,
+}
+
+impl From<CategoryDelta> for CategoryDeltaDto {
+    fn from(c: CategoryDelta) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+            previous: c.previous,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryComparisonDto {
+    /// Kategori root; nominal termasuk child.
+    pub category_id: String,
+    pub amount: i64,
+    /// Nominal periode sebelumnya.
+    pub previous: i64,
+    /// Rincian per child (posting langsung di root memakai id root); kosong bila tidak ada child.
+    pub children: Vec<CategoryDeltaDto>,
+}
+
+impl From<CategoryComparison> for CategoryComparisonDto {
+    fn from(c: CategoryComparison) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+            previous: c.previous,
+            children: c.children.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryTrendPointDto {
+    pub period: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub amount: i64,
+}
+
+impl From<CategoryTrendPoint> for CategoryTrendPointDto {
+    fn from(p: CategoryTrendPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            from: format_date(p.from),
+            to: format_date(p.to),
+            amount: p.amount,
         }
     }
 }

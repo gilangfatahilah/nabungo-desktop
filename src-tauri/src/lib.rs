@@ -92,6 +92,8 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::allocation_history,
             commands::cashflow_report,
             commands::category_breakdown,
+            commands::category_comparison,
+            commands::category_trend,
             commands::net_worth_history,
             commands::startup_report,
             commands::app_ready,

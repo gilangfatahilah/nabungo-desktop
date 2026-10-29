@@ -14,14 +14,14 @@ use crate::dto::{
     AccountFieldsDto, AccountKindDto, AccountsOverviewDto, AllocationOverviewDto,
     AllocationPointDto, AppInfo, AttachmentDto, BackupDto, BackupSecretDto, BackupSourceDto,
     BackupSourceInfoDto, BucketFieldsDto, BudgetAlertDto, BudgetOverviewDto, CaptureDto,
-    CashflowPointDto, CategoryAmountDto, CategoryDto, CategoryFieldsDto, CategoryKindDto,
-    ContactDto, EmailRuleDto, EmailRuleInputDto, EmailStatusDto, InboxSummaryDto, LocaleDto,
-    NetWorthPointDto, OnboardingDto, PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto,
-    RecoveryReasonDto, RecoveryStatusDto, RecurrenceDto, ReparseSummaryDto, RuleDto, RuleInputDto,
-    RuleSampleDto, RuleSavedDto, RuleTestDto, SavedTxnDto, SecurityStatusDto, ShareDto,
-    StartupReportDto, SyncSummaryDto, TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto,
-    TxnFormDto, TxnPageDto, TxnQueryDto, UiSettingsDto, UnparsedEmailDto, ValuationPointDto,
-    parse_day, parse_id, parse_period,
+    CashflowPointDto, CategoryAmountDto, CategoryComparisonDto, CategoryDto, CategoryFieldsDto,
+    CategoryKindDto, CategoryTrendPointDto, ContactDto, EmailRuleDto, EmailRuleInputDto,
+    EmailStatusDto, InboxSummaryDto, LocaleDto, NetWorthPointDto, OnboardingDto,
+    PayeeSuggestionDto, PayeeUsageDto, ReconciliationDto, RecoveryReasonDto, RecoveryStatusDto,
+    RecurrenceDto, ReparseSummaryDto, RuleDto, RuleInputDto, RuleSampleDto, RuleSavedDto,
+    RuleTestDto, SavedTxnDto, SecurityStatusDto, ShareDto, StartupReportDto, SyncSummaryDto,
+    TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto,
+    UiSettingsDto, UnparsedEmailDto, ValuationPointDto, parse_day, parse_id, parse_period,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::RecoveryReason;
@@ -632,6 +632,46 @@ pub async fn category_breakdown(
     let kind = kind.into();
     read(app, move |l| {
         Ok(l.category_breakdown(period, kind)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
+}
+
+/// Total per kategori root periode ini vs periode sebelumnya, dengan rincian child.
+#[tauri::command]
+#[specta::specta]
+pub async fn category_comparison(
+    app: AppHandle,
+    period: String,
+    kind: CategoryKindDto,
+) -> Result<Vec<CategoryComparisonDto>, IpcError> {
+    let period = parse_period(&period)?;
+    let kind = kind.into();
+    read(app, move |l| {
+        Ok(l.category_comparison(period, kind)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
+}
+
+/// Nominal satu kategori (root: termasuk child) per periode, `count` periode berakhir di
+/// `end_period` (terlama dulu, maks. 24).
+#[tauri::command]
+#[specta::specta]
+pub async fn category_trend(
+    app: AppHandle,
+    end_period: String,
+    count: u8,
+    category_id: String,
+) -> Result<Vec<CategoryTrendPointDto>, IpcError> {
+    let end = parse_period(&end_period)?;
+    let category_id = parse_id(&category_id, "category")?;
+    read(app, move |l| {
+        Ok(l.category_trend(end, count, category_id)?
             .into_iter()
             .map(Into::into)
             .collect())
