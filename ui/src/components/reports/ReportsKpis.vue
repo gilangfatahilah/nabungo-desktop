@@ -21,6 +21,9 @@ const avg = (pick: (p: { income: number; expense: number; net: number }) => numb
   average(store.span.map(pick))
 const avgText = (v: number | null) => (v === null ? '' : t('reports.average', { count: store.span.length, amount: money(v) }))
 
+// Minus U+2212 seperti nominal uang (lib/money).
+const percent = (v: number) => `${v < 0 ? '\u2212' : ''}${Math.abs(v)}%`
+
 const rate = computed(() => (store.focus ? savingsRate(store.focus.income, store.focus.net) : null))
 const prevRate = computed(() => (store.previous ? savingsRate(store.previous.income, store.previous.net) : null))
 
@@ -52,17 +55,19 @@ const cards = computed(() => {
         </CardTitle>
         <CardAction><TrendBadge :amount="c.amount" :previous="c.previous" :up-is-bad="c.upIsBad" /></CardAction>
       </CardHeader>
-      <CardFooter class="text-meta text-muted-foreground" data-part="hint">{{ c.hint }}</CardFooter>
+      <CardFooter class="mt-auto text-meta text-muted-foreground" data-part="hint">{{ c.hint }}</CardFooter>
     </Card>
     <Card class="@container/card gap-4 bg-linear-to-t from-primary/5 to-card shadow-xs" data-testid="reports-kpi-savings">
       <CardHeader>
         <CardDescription>{{ t('reports.savingsRate') }}</CardDescription>
-        <CardTitle class="num text-title font-semibold" data-part="amount" :class="rate !== null && rate < 0 && 'text-expense'">
-          {{ rate === null ? '–' : `${rate}%` }}
+        <CardTitle>
+          <span class="num text-title font-semibold" :class="rate !== null && rate < 0 && 'text-expense'" data-part="amount">
+            {{ rate === null ? '–' : percent(rate) }}
+          </span>
         </CardTitle>
       </CardHeader>
-      <CardFooter class="text-meta text-muted-foreground" data-part="hint">
-        {{ prevRate === null ? t('reports.savingsRateHint') : t('reports.savingsRatePrev', { rate: `${prevRate}%` }) }}
+      <CardFooter class="mt-auto text-meta text-muted-foreground" data-part="hint">
+        {{ prevRate === null ? t('reports.savingsRateHint') : t('reports.savingsRatePrev', { rate: percent(prevRate) }) }}
       </CardFooter>
     </Card>
   </div>

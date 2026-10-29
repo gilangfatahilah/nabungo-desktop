@@ -7,7 +7,7 @@ import { formatTrend, trendPercent } from '@/lib/trend'
 
 // Badge tren vs periode lalu (docs/design/design.md §7.11): warna ikon mengikuti makna, bukan arah.
 // Tanpa pembanding (periode lalu 0) tidak tampil.
-const props = defineProps<{ amount: number; previous: number | undefined; upIsBad?: boolean }>()
+const props = withDefaults(defineProps<{ amount: number; previous: number | undefined; upIsBad?: boolean }>(), { upIsBad: false })
 const { t } = useI18n()
 
 const trend = computed(() => {

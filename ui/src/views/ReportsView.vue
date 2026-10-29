@@ -43,14 +43,14 @@ watch(() => txns.ledgerVersion, () => void withErrorToast(() => store.loadReport
   <PageHeader>
     <template v-if="store.focus">{{ t('dashboard.period', { range: formatRange(store.focus.from, store.focus.to, settings.locale) }) }}</template>
     <template #actions>
-      <div class="flex items-center rounded-lg border" role="group" :aria-label="t('reports.focusPeriod')">
-        <Button variant="ghost" size="icon-sm" :disabled="!store.canPrev" :aria-label="t('reports.prevPeriod')" data-testid="period-prev" @click="shift(-1)">
+      <div class="flex h-7 items-center rounded-[min(var(--radius-md),10px)] border border-input dark:bg-input-fill/30" role="group" :aria-label="t('reports.focusPeriod')">
+        <Button variant="ghost" size="icon-xs" :disabled="!store.canPrev" :aria-label="t('reports.prevPeriod')" data-testid="period-prev" @click="shift(-1)">
           <ChevronLeft aria-hidden="true" />
         </Button>
-        <span class="num min-w-24 px-1 text-center text-sm font-medium" aria-live="polite" data-testid="period-label">
+        <span class="num min-w-24 px-1 text-center text-sm" aria-live="polite" data-testid="period-label">
           {{ store.period ? formatPeriod(store.period, settings.locale) : '' }}
         </span>
-        <Button variant="ghost" size="icon-sm" :disabled="!store.canNext" :aria-label="t('reports.nextPeriod')" data-testid="period-next" @click="shift(1)">
+        <Button variant="ghost" size="icon-xs" :disabled="!store.canNext" :aria-label="t('reports.nextPeriod')" data-testid="period-next" @click="shift(1)">
           <ChevronRight aria-hidden="true" />
         </Button>
       </div>
