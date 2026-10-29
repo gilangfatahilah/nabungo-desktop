@@ -90,7 +90,7 @@ describe('ReportsView', () => {
 
   it('arus kas: chart rentang, tabel terlipat, klik baris memindah fokus', async () => {
     await view()
-    expect($$('[data-testid="cashflow-chart"] rect[data-key]')).toHaveLength(24)
+    expect($$('[data-testid="cashflow-chart"] path[data-key]')).toHaveLength(24)
     expect($('[data-testid="cashflow-row-2026-10"]')).toBeNull()
     await openTable('cashflow')
     expect($$('[data-testid^="cashflow-row-"]')).toHaveLength(12)
@@ -167,7 +167,7 @@ describe('ReportsView', () => {
     options[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     await settle()
     expect(localStorage.getItem('nabungo.reports.range')).toBe('3')
-    expect($$('[data-testid="cashflow-chart"] rect[data-key]')).toHaveLength(6)
+    expect($$('[data-testid="cashflow-chart"] path[data-key]')).toHaveLength(6)
   })
 
   it('kekayaan bersih menampilkan tabel per periode', async () => {

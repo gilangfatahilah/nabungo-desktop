@@ -457,6 +457,7 @@ Nama jadwal = payee → kategori pertama → catatan → jenis. Item sidebar Ter
 - **Tooltip chart** (`ChartTooltip`, semua chart SVG): kotak `bg-popover` border `shadow-md` `text-meta`, baris titik warna seri + label muted + nilai `num`. Garis/batang: ditambatkan ke titik data dan terbuka menjauhi tepi chart. Donut: ditambatkan di tepi kanan donut setinggi segmen, terbuka ke kanan (arah legenda). Tooltip yang tetap melewati tepi kartu digeser masuk (jarak 8px), jadi tidak pernah tumpah ke kartu tetangga. Nilai memakai nominal penuh (`formatIdr`, prop `valueFormat`), bukan format ringkas sumbu.
   - Garis: hover/fokus memilih periode terdekat → garis kursor putus-putus + titik per seri + tooltip semua seri. Chart bisa difokus (Tab); ←/→, Home/End memindah, Escape menutup.
   - Batang: hover/fokus kelompok → tooltip; kelompok lain opasitas 0.4.
+  - Bentuk batang: ujung (sisi menjauhi sumbu nol) membulat 6px, pangkal rata; kelompok terisi 70% lebar dengan jarak 3px antarbatang; latar periode terpilih `--muted` rx 8.
   - Donut: segmen aktif menonjol (jari-jari luar +4) dan lainnya opasitas 0.4; tooltip nama, nominal, persen hanya saat donut sendiri di-hover/difokus. Hover baris legenda cukup menyorot segmen yang sama (`v-model:active`, tanpa tooltip karena angkanya sudah di legenda) dan meredupkan baris legenda lain ke 50%. Fokus + panah memutar segmen.
 
 ### 8.9 Onboarding & Kunci

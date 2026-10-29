@@ -7,7 +7,7 @@ import { yTicks } from './axis'
 
 // Batang berkelompok per label (docs/design/design.md §8.8). Setiap kelompok bisa
 // difokus: Enter/Spasi memilih, panah kiri/kanan memindah fokus. Hover/fokus menampilkan tooltip
-// dan meredupkan kelompok lain.
+// dan meredupkan kelompok lain. Ujung batang (sisi menjauhi sumbu nol) membulat, pangkalnya rata.
 const props = defineProps<{
   labels: string[]
   series: { key: string; label: string; color: string; values: number[] }[]
@@ -29,7 +29,10 @@ const PAD = { top: 8, right: 8, bottom: 24, left: 48 }
 const TICKS = 4
 const LABEL_WIDTH = 56
 // Porsi lebar kelompok yang diisi batang; sisanya jarak antarkelompok.
-const FILL = 0.6
+const FILL = 0.7
+// Jarak antarbatang dalam satu kelompok dan jari-jari ujung batang.
+const GAP = 3
+const RADIUS = 6
 
 const plotW = computed(() => W.value - PAD.left - PAD.right)
 const range = computed(() => {
@@ -43,8 +46,18 @@ const ticks = computed(() =>
   yTicks(range.value.min, range.value.max, TICKS, props.series.every((s) => s.values.every((v) => v === 0))))
 
 const groupW = computed(() => plotW.value / Math.max(props.labels.length, 1))
-const barW = computed(() => (groupW.value * FILL) / Math.max(props.series.length, 1))
+const barSlot = computed(() => (groupW.value * FILL) / Math.max(props.series.length, 1))
+const barW = computed(() => Math.max(barSlot.value - (props.series.length > 1 ? GAP : 0), 1))
 const groupX = (i: number) => PAD.left + i * groupW.value
+// Batang dari sumbu nol ke `tip`; dua sudut di `tip` membulat (nilai negatif: ujung di bawah).
+function barPath(x: number, tip: number) {
+  const base = y(0)
+  const w = barW.value
+  const dir = tip < base ? 1 : -1
+  const r = Math.min(RADIUS, w / 2, Math.abs(base - tip))
+  const sweep = dir > 0 ? 1 : 0
+  return `M${x},${base} V${tip + dir * r} A${r},${r} 0 0 ${sweep} ${x + r},${tip} H${x + w - r} A${r},${r} 0 0 ${sweep} ${x + w},${tip + dir * r} V${base} Z`
+}
 const groups = computed(() =>
   props.labels.map((text, i) => ({
     text,
@@ -55,9 +68,8 @@ const groups = computed(() =>
       return {
         key: s.key,
         color: s.color,
-        x: groupX(i) + (groupW.value * (1 - FILL)) / 2 + k * barW.value,
-        y: Math.min(y(v), y(0)),
         height: Math.abs(y(v) - y(0)),
+        d: barPath(groupX(i) + (groupW.value * (1 - FILL)) / 2 + k * barSlot.value, y(v)),
       }
     }),
   })),
@@ -97,7 +109,7 @@ function onKey(e: KeyboardEvent, i: number) {
     <svg ref="svg" :viewBox="`0 0 ${W} ${H}`" role="group" :aria-label="label" class="h-auto w-full text-muted-foreground">
       <rect
         v-if="selected !== undefined && selected >= 0 && selected < labels.length" data-part="selected" :data-index="selected"
-        :x="groupX(selected)" :y="PAD.top" :width="groupW" :height="H - PAD.top - PAD.bottom" rx="4" fill="var(--muted)"
+        :x="groupX(selected)" :y="PAD.top" :width="groupW" :height="H - PAD.top - PAD.bottom" rx="8" fill="var(--muted)"
       />
       <g v-for="v in ticks" :key="v">
         <line :x1="PAD.left" :x2="W - PAD.right" :y1="y(v)" :y2="y(v)" stroke="var(--border)" stroke-width="1" />
@@ -110,12 +122,12 @@ function onKey(e: KeyboardEvent, i: number) {
         @mouseenter="active = g.i" @focus="active = g.i" @blur="active = null"
       >
         <rect
-          :x="groupX(g.i) + 1" :y="PAD.top + 1" :width="groupW - 2" :height="H - PAD.top - PAD.bottom - 2" rx="4"
+          :x="groupX(g.i) + 1" :y="PAD.top + 1" :width="groupW - 2" :height="H - PAD.top - PAD.bottom - 2" rx="8"
           fill="transparent" stroke-width="2" class="stroke-transparent group-focus-visible/bar:stroke-ring"
         />
-        <rect
-          v-for="b in g.bars" :key="b.key" :data-key="b.key" :data-index="g.i"
-          :x="b.x" :y="b.y" :width="barW" :height="b.height" :fill="b.color" rx="1"
+        <path
+          v-for="b in g.bars" :key="b.key" :data-key="b.key" :data-index="g.i" :data-height="b.height"
+          :d="b.d" :fill="b.color"
           :opacity="active !== null && active !== g.i ? 0.4 : undefined" class="transition-opacity"
         />
         <text
