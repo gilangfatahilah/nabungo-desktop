@@ -36,7 +36,8 @@ test('piutang/hutang dengan kontak', async ({ page }) => {
   await expect(row).toContainText('Hutang · Budi')
   await expect(row).toContainText(/Rp\s50\.000/)
   await expect(row).not.toContainText('−')
-  // Hutang dihitung sebagai liabilitas: kekayaan bersih turun 50.000.
+  // Hutang dihitung sebagai liabilitas: kekayaan bersih (KPI Dasbor) turun 50.000.
+  await page.evaluate(() => { location.hash = '#/' })
   await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('950.000')
 })
 

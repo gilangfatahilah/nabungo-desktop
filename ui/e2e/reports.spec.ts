@@ -20,6 +20,7 @@ async function quickExpense(page: Page) {
   await amount.pressSequentially('25rb')
   await page.keyboard.press('Tab')
   await expect(page.locator('#txn-category')).toBeFocused()
+  await page.keyboard.press('Enter')
   await page.keyboard.type('Kopi')
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')

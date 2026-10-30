@@ -12,8 +12,9 @@ async function go(page: Page, hash: string) {
 
 async function fillExpense(page: Page, value: string) {
   await page.locator('#txn-amount').fill(value)
-  await page.locator('#txn-category').fill('Tagihan')
-  await page.locator('#txn-category').press('Enter')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
   await page.locator('#txn-payee').fill('Listrik')
 }
 

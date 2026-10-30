@@ -26,8 +26,9 @@ test('tidak ada request ke origin lain di semua layar', async ({ page }) => {
 
   await page.locator('body').press('n')
   await page.locator('#txn-amount').fill('25000')
-  await page.locator('#txn-category').fill('Tagihan')
-  await page.locator('#txn-category').press('Enter')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
   await page.locator('#txn-payee').fill('Warung')
   await page.keyboard.press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()

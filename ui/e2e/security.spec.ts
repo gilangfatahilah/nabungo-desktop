@@ -39,6 +39,12 @@ test('onboarding terenkripsi, kunci, buka dengan password lalu recovery key', as
   await done.click()
   const netWorth = page.locator('[data-testid="kpi-net-worth"]')
   await expect(netWorth).toContainText('1.000.000')
+  // Terbuka kembali di Pengaturan (asal kunci); data utuh dicek lewat KPI Dasbor.
+  const expectUnlocked = async () => {
+    await expect(page).toHaveURL(/#\/settings/)
+    await page.evaluate(() => { location.hash = '#/' })
+    await expect(netWorth).toContainText('1.000.000')
+  }
 
   // Password salah ditolak di field; password benar kembali ke halaman semula dengan data utuh.
   await lockNow(page)
@@ -48,8 +54,7 @@ test('onboarding terenkripsi, kunci, buka dengan password lalu recovery key', as
   await expect(page.getByRole('alert')).toHaveText('Password salah')
   await page.locator('#unlock-password').fill(PW)
   await page.locator('#unlock-password').press('Enter')
-  await expect(page).toHaveURL(/#\/settings/)
-  await expect(netWorth).toContainText('1.000.000')
+  await expectUnlocked()
 
   // Recovery key (ditulis huruf kecil) + password baru → terbuka; password lama tidak berlaku lagi.
   await lockNow(page)
@@ -58,7 +63,7 @@ test('onboarding terenkripsi, kunci, buka dengan password lalu recovery key', as
   await page.locator('#unlock-new-password').fill(NEW_PW)
   await page.locator('#unlock-confirm-password').fill(NEW_PW)
   await page.getByRole('button', { name: 'Pulihkan dan buka' }).click()
-  await expect(netWorth).toContainText('1.000.000')
+  await expectUnlocked()
 
   await lockNow(page)
   await page.locator('#unlock-password').fill(PW)
@@ -66,5 +71,5 @@ test('onboarding terenkripsi, kunci, buka dengan password lalu recovery key', as
   await expect(page.getByRole('alert')).toHaveText('Password salah')
   await page.locator('#unlock-password').fill(NEW_PW)
   await page.locator('#unlock-password').press('Enter')
-  await expect(netWorth).toContainText('1.000.000')
+  await expectUnlocked()
 })
