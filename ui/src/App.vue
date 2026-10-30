@@ -2,6 +2,8 @@
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import { onBeforeUnmount, onMounted, toRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { toast } from 'vue-sonner'
 import { useRoute, useRouter } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import SiteHeader from '@/components/layout/SiteHeader.vue'
@@ -11,7 +13,7 @@ import NewTxnSheet from '@/components/NewTxnSheet.vue'
 import RuleSheet from '@/components/scheduled/RuleSheet.vue'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useIdleLock } from '@/composables/useIdleLock'
-import { setRecoveryHandler } from '@/ipc'
+import { onUpdate, setRecoveryHandler } from '@/ipc'
 import { withErrorToast } from '@/lib/notify'
 import { shouldIgnoreAction } from '@/lib/overlay'
 import { createShortcutHandler, type ShortcutAction } from '@/lib/shortcuts'
@@ -28,6 +30,7 @@ const route = useRoute()
 const accounts = useAccountsStore()
 const categories = useCategoriesStore()
 const security = useSecurityStore()
+const { t } = useI18n()
 
 security.installLockHandler(router)
 // DB gagal dibuka: cukup pindah layar; tidak ada data store yang perlu dibuang (beda dengan lock).
@@ -77,8 +80,19 @@ onMounted(() => {
     if (!security.locked) await settings.load()
   })
   window.addEventListener('keydown', onKeydown)
+  // Cek update otomatis (opt-in) menemukan versi baru.
+  void onUpdate({
+    available: (latest) =>
+      toast.info(t('update.availableToast', { version: latest }), {
+        action: { label: t('update.view'), onClick: () => void router.push({ name: 'settings', query: { section: 'update' } }) },
+      }),
+  }).then((off) => (offUpdate = off))
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+let offUpdate: (() => void) | null = null
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  offUpdate?.()
+})
 </script>
 
 <template>

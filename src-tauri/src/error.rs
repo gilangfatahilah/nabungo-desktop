@@ -88,6 +88,13 @@ pub enum ErrorCode {
     EmailConnection,
     EmailSyncRunning,
     EmailSyncInterrupted,
+    UpdateNetwork,
+    UpdateNotFound,
+    UpdateNoAsset,
+    UpdateChecksum,
+    UpdateCancelled,
+    /// Unduhan update lain sedang berjalan.
+    UpdateBusy,
     RecurrenceInterval,
     RecurrenceUntil,
     FileIo,
@@ -288,6 +295,11 @@ impl From<AppError> for IpcError {
             AppError::InvalidAutoLock => Self::code(ErrorCode::InvalidAutoLock),
             AppError::InvalidFontScale => Self::code(ErrorCode::InvalidFontScale),
             AppError::DatabaseUnreadable => Self::code(ErrorCode::DatabaseUnreadable),
+            AppError::UpdateNetwork => Self::code(ErrorCode::UpdateNetwork),
+            AppError::UpdateNotFound => Self::code(ErrorCode::UpdateNotFound),
+            AppError::UpdateNoAsset => Self::code(ErrorCode::UpdateNoAsset),
+            AppError::UpdateChecksum => Self::code(ErrorCode::UpdateChecksum),
+            AppError::UpdateCancelled => Self::code(ErrorCode::UpdateCancelled),
         }
     }
 }
@@ -440,6 +452,24 @@ mod tests {
             let e = IpcError::from(e);
             assert_eq!(serde_json::to_value(e.code).unwrap(), code);
         }
+    }
+
+    #[test]
+    fn update_errors_map_to_codes() {
+        for (e, code) in [
+            (AppError::UpdateNetwork, "update_network"),
+            (AppError::UpdateNotFound, "update_not_found"),
+            (AppError::UpdateNoAsset, "update_no_asset"),
+            (AppError::UpdateChecksum, "update_checksum"),
+            (AppError::UpdateCancelled, "update_cancelled"),
+        ] {
+            let e = IpcError::from(e);
+            assert_eq!(serde_json::to_value(e.code).unwrap(), code);
+        }
+        assert_eq!(
+            serde_json::to_value(ErrorCode::UpdateBusy).unwrap(),
+            "update_busy"
+        );
     }
 
     #[test]

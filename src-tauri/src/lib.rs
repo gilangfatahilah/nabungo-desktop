@@ -8,6 +8,7 @@ mod lifecycle;
 mod logging;
 mod paths;
 mod state;
+mod update;
 
 use anyhow::Context;
 
@@ -137,10 +138,19 @@ pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::test_email_rule,
             commands::suggest_email_rule,
             commands::reparse_unparsed,
+            commands::update_status,
+            commands::set_update_auto_check,
+            commands::check_update,
+            commands::download_update,
+            commands::cancel_update_download,
+            commands::install_update,
+            commands::open_release_page,
         ])
         .events(tauri_specta::collect_events![
             dto::EmailSyncProgress,
-            dto::EmailSyncDone
+            dto::EmailSyncDone,
+            dto::UpdateDownloadProgress,
+            dto::UpdateAvailable
         ])
         // Aman: nominal dibatasi MAX_AMOUNT (10^12) < 2^53.
         .dangerously_cast_bigints_to_number()
@@ -195,6 +205,7 @@ fn init(
         started,
         ready_logged: std::sync::atomic::AtomicBool::new(false),
         email: state::EmailRuntime::new(local_offset),
+        update: update::UpdateRuntime::default(),
     });
     match db_state {
         Ok(nabungo_app::security::DbState::Plain) => {

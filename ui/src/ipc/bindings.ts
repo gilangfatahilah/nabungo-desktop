@@ -183,12 +183,23 @@ export const commands = {
 	testEmailRule: (input: EmailRuleInputDto, ruleId: string | null, sample: RuleSampleDto) => typedError<RuleTestDto, IpcError>(__TAURI_INVOKE("test_email_rule", { input, ruleId, sample })),
 	suggestEmailRule: (messageId: string) => typedError<EmailRuleInputDto, IpcError>(__TAURI_INVOKE("suggest_email_rule", { messageId })),
 	reparseUnparsed: () => typedError<ReparseSummaryDto, IpcError>(__TAURI_INVOKE("reparse_unparsed")),
+	updateStatus: () => typedError<UpdateStatusDto, IpcError>(__TAURI_INVOKE("update_status")),
+	setUpdateAutoCheck: (enabled: boolean) => typedError<null, IpcError>(__TAURI_INVOKE("set_update_auto_check", { enabled })),
+	checkUpdate: () => typedError<UpdateInfoDto, IpcError>(__TAURI_INVOKE("check_update")),
+	/**  Unduh installer dari cek terakhir; kemajuan lewat event `UpdateDownloadProgress`. */
+	downloadUpdate: () => typedError<null, IpcError>(__TAURI_INVOKE("download_update")),
+	cancelUpdateDownload: () => __TAURI_INVOKE<void>("cancel_update_download"),
+	/**  Pasang installer terunduh. AppImage: ganti file lalu mulai ulang (tidak kembali). */
+	installUpdate: () => typedError<InstallOutcomeDto, IpcError>(__TAURI_INVOKE("install_update")),
+	openReleasePage: () => typedError<null, IpcError>(__TAURI_INVOKE("open_release_page")),
 };
 
 /** Events */
 export const events = {
 	emailSyncDone: makeEvent<EmailSyncDone>("email-sync-done"),
 	emailSyncProgress: makeEvent<EmailSyncProgress>("email-sync-progress"),
+	updateAvailable: makeEvent<UpdateAvailable>("update-available"),
+	updateDownloadProgress: makeEvent<UpdateDownloadProgress>("update-download-progress"),
 };
 
 /* Types */
@@ -545,7 +556,9 @@ export type EmailSyncProgress = {
 
 export type ErrorCode = "not_found" | "archived" | "opening_not_allowed" | "txn_no_postings" | "txn_zero_amount" | "txn_amount_too_large" | "txn_missing_category" | "txn_wrong_category_kind" | "txn_unexpected_category" | "txn_transfer_leg_count" | "txn_transfer_same_account" | "txn_currency_mismatch" | "txn_unbalanced" | "txn_overflow" | "txn_valuation_non_investment" | "txn_opening_posting_count" | "txn_split_mismatch" | "txn_not_positive" | "amount_empty" | "amount_invalid" | "amount_fractional" | "amount_too_large" | "in_use" | "duplicate" | "already_onboarded" | "invalid_id" | "invalid_date" | "invalid_start_day" | "name_empty" | "name_too_long" | "invalid_statement_day" | "invalid_credit_limit" | "category_depth" | "category_kind_mismatch" | "category_has_children" | "merge_into_self" | "invalid_period" | "budget_negative" | "budget_too_large" | "budget_income_category" | "valuation_unchanged" | "txn_not_editable" | "allocation_invalid_bp" | "allocation_targets_exceed" | "allocation_shares_exceed" | "allocation_depth" | "allocation_liability" | "allocation_duplicate_bucket" | "allocation_invalid_amount" | "backup_invalid" | "backup_too_new" | "backup_target_invalid" | "backup_key_required" | "attachment_type" | "attachment_too_large" | "attachment_missing" | "occurrence_stale" | "capture_not_pending" | "capture_not_ignored" | 
 /**  `entity` = field rule yang salah (`name`, `sender`, `amount`, ...). */
-"email_rule_invalid" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
+"email_rule_invalid" | "keychain_unavailable" | "email_address_invalid" | "email_mailbox_empty" | "email_not_configured" | "email_auth_failed" | "email_mailbox_not_found" | "email_connection" | "email_sync_running" | "email_sync_interrupted" | "update_network" | "update_not_found" | "update_no_asset" | "update_checksum" | "update_cancelled" | 
+/**  Unduhan update lain sedang berjalan. */
+"update_busy" | "recurrence_interval" | "recurrence_until" | "file_io" | "locked" | "wrong_password" | "invalid_recovery_key" | "password_too_short" | "key_file_invalid" | "encryption_state" | "invalid_auto_lock" | "invalid_font_scale" | "database_unreadable" | "database_too_new" | 
 /**  DB gagal dibuka saat startup; pulihkan dari backup dulu (P1). */
 "recovery_required" | 
 /**  Command pemulihan dipanggil saat DB sedang terbuka. */
@@ -564,6 +577,17 @@ export type InboxSummaryDto = {
 	unparsed: number,
 	emailEnabled: boolean,
 };
+
+export type InstallKindDto = "deb" | "rpm" | "appimage" | "nsis" | "msi";
+
+/**  Hasil `install_update`. */
+export type InstallOutcomeDto = 
+/**  rpm/deb dibuka di installer paket sistem; mulai ulang setelah terpasang. */
+"installer_opened" | 
+/**  AppImage baru di luar folder AppImage lama: ditampilkan di file manager. */
+"revealed" | 
+/**  Installer Windows dibuka dan aplikasi ditutup. */
+"exiting";
 
 export type IntegrityStatusDto = "skipped" | "ok" | "failed";
 
@@ -856,6 +880,44 @@ export type UnparsedEmailDto = {
 	/**  ISO-8601 UTC. */
 	receivedAt: string | null,
 	snippet: string,
+};
+
+/**  Cek otomatis saat startup menemukan versi baru. */
+export type UpdateAvailable = {
+	latest: string,
+};
+
+/**  Kemajuan unduhan installer (dikirim per persen). */
+export type UpdateDownloadProgress = {
+	downloaded: number,
+	total: number,
+};
+
+/**  Hasil cek update. `installer` `None` → hanya tawarkan halaman rilis. */
+export type UpdateInfoDto = {
+	current: string,
+	latest: string,
+	available: boolean,
+	notes: string,
+	publishedAt: string | null,
+	installer: UpdateInstallerDto | null,
+};
+
+export type UpdateInstallerDto = {
+	name: string,
+	size: number,
+};
+
+export type UpdateStatusDto = {
+	current: string,
+	autoCheck: boolean,
+	/**  `None`: dev build, binary tanpa installer, atau mode portable. */
+	installKind: InstallKindDto | null,
+	/**  Cek terakhir selama proses ini (termasuk cek otomatis). */
+	lastCheck: UpdateInfoDto | null,
+	/**  Installer sudah terunduh dan terverifikasi, siap dipasang. */
+	downloaded: boolean,
+	downloading: boolean,
 };
 
 /**  `value` = saldo akun per akhir `date`; `change` = selisih yang dicatat. */

@@ -47,6 +47,7 @@ mod tags;
 #[cfg(test)]
 mod testkit;
 mod transactions;
+pub mod update;
 mod valuation;
 pub mod vault;
 

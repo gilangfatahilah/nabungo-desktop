@@ -2673,3 +2673,105 @@ mod email_rule_tests {
         );
     }
 }
+
+// --- Update aplikasi ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallKindDto {
+    Deb,
+    Rpm,
+    #[serde(rename = "appimage")]
+    AppImage,
+    Nsis,
+    Msi,
+}
+
+impl From<nabungo_app::update::InstallKind> for InstallKindDto {
+    fn from(k: nabungo_app::update::InstallKind) -> Self {
+        use nabungo_app::update::InstallKind;
+        match k {
+            InstallKind::Deb => Self::Deb,
+            InstallKind::Rpm => Self::Rpm,
+            InstallKind::AppImage => Self::AppImage,
+            InstallKind::Nsis => Self::Nsis,
+            InstallKind::Msi => Self::Msi,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInstallerDto {
+    pub name: String,
+    pub size: u64,
+}
+
+/// Hasil cek update. `installer` `None` → hanya tawarkan halaman rilis.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfoDto {
+    pub current: String,
+    pub latest: String,
+    pub available: bool,
+    pub notes: String,
+    pub published_at: Option<String>,
+    pub installer: Option<UpdateInstallerDto>,
+}
+
+impl UpdateInfoDto {
+    pub fn new(c: &nabungo_app::update::UpdateCheck) -> Self {
+        Self {
+            current: c.current.clone(),
+            latest: c.latest.clone(),
+            available: c.available,
+            notes: c.notes.clone(),
+            published_at: c.published_at.clone(),
+            installer: c.installer.as_ref().map(|i| UpdateInstallerDto {
+                name: i.name.clone(),
+                size: i.size,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateStatusDto {
+    pub current: String,
+    pub auto_check: bool,
+    /// `None`: dev build, binary tanpa installer, atau mode portable.
+    pub install_kind: Option<InstallKindDto>,
+    /// Cek terakhir selama proses ini (termasuk cek otomatis).
+    pub last_check: Option<UpdateInfoDto>,
+    /// Installer sudah terunduh dan terverifikasi, siap dipasang.
+    pub downloaded: bool,
+    pub downloading: bool,
+}
+
+/// Hasil `install_update`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallOutcomeDto {
+    /// rpm/deb dibuka di installer paket sistem; mulai ulang setelah terpasang.
+    InstallerOpened,
+    /// AppImage baru di luar folder AppImage lama: ditampilkan di file manager.
+    Revealed,
+    /// Installer Windows dibuka dan aplikasi ditutup.
+    Exiting,
+}
+
+/// Kemajuan unduhan installer (dikirim per persen).
+#[derive(Debug, Clone, Copy, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDownloadProgress {
+    pub downloaded: u64,
+    pub total: u64,
+}
+
+/// Cek otomatis saat startup menemukan versi baru.
+#[derive(Debug, Clone, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAvailable {
+    pub latest: String,
+}

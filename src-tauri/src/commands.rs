@@ -23,6 +23,7 @@ use crate::dto::{
     TagUsageDto, ThemeDto, TxnDetailDto, TxnFormDefaultsDto, TxnFormDto, TxnPageDto, TxnQueryDto,
     UiSettingsDto, UnparsedEmailDto, ValuationPointDto, parse_day, parse_id, parse_period,
 };
+use crate::dto::{InstallOutcomeDto, UpdateInfoDto, UpdateStatusDto};
 use crate::error::{ErrorCode, IpcError};
 use crate::lifecycle::RecoveryReason;
 use crate::state::{AppState, LedgerGuard, lock_ledger, lock_slot};
@@ -1652,4 +1653,51 @@ pub async fn sync_email(app: AppHandle) -> Result<SyncSummaryDto, IpcError> {
         Ok(crate::email::run_sync(&app)?.into())
     })
     .await
+}
+
+// --- Update aplikasi (opt-in; jaringan hanya saat dipanggil) ---
+
+#[tauri::command]
+#[specta::specta]
+pub fn update_status(app: AppHandle) -> Result<UpdateStatusDto, IpcError> {
+    ensure_not_recovering(&app.state::<AppState>())?;
+    crate::update::status(&app)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_update_auto_check(state: State<'_, AppState>, enabled: bool) -> Result<(), IpcError> {
+    Ok(ledger(&state)?.set_update_auto_check(enabled)?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn check_update(app: AppHandle) -> Result<UpdateInfoDto, IpcError> {
+    blocking(move || crate::update::check(&app)).await
+}
+
+/// Unduh installer dari cek terakhir; kemajuan lewat event `UpdateDownloadProgress`.
+#[tauri::command]
+#[specta::specta]
+pub async fn download_update(app: AppHandle) -> Result<(), IpcError> {
+    blocking(move || crate::update::download(&app)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_update_download(app: AppHandle) {
+    crate::update::cancel(&app);
+}
+
+/// Pasang installer terunduh. AppImage: ganti file lalu mulai ulang (tidak kembali).
+#[tauri::command]
+#[specta::specta]
+pub async fn install_update(app: AppHandle) -> Result<InstallOutcomeDto, IpcError> {
+    blocking(move || crate::update::install(&app)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn open_release_page(app: AppHandle) -> Result<(), IpcError> {
+    crate::update::open_release_page(&app)
 }

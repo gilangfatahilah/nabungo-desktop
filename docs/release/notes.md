@@ -21,4 +21,4 @@ Baru: **Email capture** (opsional, mati secara default). Nabungo membaca email n
 - Backup otomatis harian di subfolder `backups/` (14 terakhir). Backup manual dan ekspor CSV/JSON ada di Pengaturan.
 - Bila enkripsi diaktifkan, simpan recovery key: tanpa password atau recovery key data tidak bisa dibuka.
 
-Update dilakukan manual: unduh versi baru dari halaman Releases dan instal di atas versi lama; data tetap.
+Update bisa lewat **Pengaturan → Update aplikasi**: Periksa update, lalu unduh & pasang (installer diverifikasi dengan `SHA256SUMS`). Cek otomatis saat aplikasi dibuka bersifat opsional dan mati secara default. Update manual tetap bisa: unduh versi baru dari halaman Releases dan instal di atas versi lama; data tetap.

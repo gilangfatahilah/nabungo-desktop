@@ -60,11 +60,19 @@ import {
   type ValuationPointDto,
   type ContactDto,
   type ReconciliationDto,
+  type InstallOutcomeDto,
+  type UpdateInfoDto,
+  type UpdateStatusDto,
 } from './bindings'
 import { browserCommands } from './browser'
 import { browserEmail, type EmailSyncHandlers } from './browser-email'
+import { browserUpdate, type UpdateHandlers } from './browser-update'
 
 export type {
+  InstallKindDto,
+  InstallOutcomeDto,
+  UpdateInfoDto,
+  UpdateStatusDto,
   CaptureDto,
   EmailRuleDto,
   EmailRuleInputDto,
@@ -761,4 +769,45 @@ export function suggestEmailRule(messageId: string): Promise<EmailRuleInputDto> 
 
 export function reparseUnparsed(): Promise<ReparseSummaryDto> {
   return unwrap(api().reparseUnparsed())
+}
+
+// --- Update aplikasi (opt-in) ---
+
+export function updateStatus(): Promise<UpdateStatusDto> {
+  return unwrap(api().updateStatus())
+}
+
+export async function setUpdateAutoCheck(enabled: boolean): Promise<void> {
+  await unwrap(api().setUpdateAutoCheck(enabled))
+}
+
+export function checkUpdate(): Promise<UpdateInfoDto> {
+  return unwrap(api().checkUpdate())
+}
+
+/** Selesai setelah installer terunduh dan checksum cocok; kemajuan lewat `onUpdate`. */
+export async function downloadUpdate(): Promise<void> {
+  await unwrap(api().downloadUpdate())
+}
+
+export function cancelUpdateDownload(): Promise<void> {
+  return api().cancelUpdateDownload()
+}
+
+export function installUpdate(): Promise<InstallOutcomeDto> {
+  return unwrap(api().installUpdate())
+}
+
+export async function openReleasePage(): Promise<void> {
+  await unwrap(api().openReleasePage())
+}
+
+/** Kemajuan unduhan dan hasil cek otomatis saat startup. */
+export async function onUpdate(h: UpdateHandlers): Promise<() => void> {
+  if (!isTauri()) return browserUpdate.subscribe(h)
+  const offs = await Promise.all([
+    events.updateDownloadProgress.listen((e) => h.progress?.(e.payload)),
+    events.updateAvailable.listen((e) => h.available?.(e.payload.latest)),
+  ])
+  return () => offs.forEach((off) => off())
 }
