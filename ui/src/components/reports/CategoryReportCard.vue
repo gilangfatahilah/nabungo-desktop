@@ -9,11 +9,11 @@ import DonutChart from '@/components/charts/DonutChart.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import type { CategoryKindDto } from '@/ipc'
 import { colorClass } from '@/lib/colors'
 import { formatPeriod } from '@/lib/date'
 import { iconFor } from '@/lib/icons'
-import { formatCompact, formatIdr } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { formatBp } from '@/lib/percent'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,7 @@ const { t } = useI18n()
 
 const byId = computed(() => new Map(categories.list.map((c) => [c.id, c])))
 const name = (id: string) => byId.value.get(id)?.name ?? ''
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, compact } = useMoneyFormat()
 const upIsBad = computed(() => store.kind === 'expense')
 
 const active = computed(() => store.comparison.filter((r) => r.amount > 0))
@@ -98,7 +98,7 @@ async function viewTxns(categoryId: string) {
           <DonutChart v-model:active="hovered" :segments="segments" :label="t('reports.categoriesDonut')" :format="money" :locale="settings.locale" />
           <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span class="text-meta text-muted-foreground">IDR</span>
-            <span class="num text-heading font-semibold" data-part="donut-total">{{ formatCompact(total, settings.locale) }}</span>
+            <span class="num text-heading font-semibold" data-part="donut-total">{{ compact(total) }}</span>
           </div>
         </div>
         <ul class="flex flex-col" :aria-label="t('reports.categoriesTitle', { period: store.period ? formatPeriod(store.period, settings.locale) : '' })">

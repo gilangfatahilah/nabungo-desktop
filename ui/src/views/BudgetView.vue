@@ -10,8 +10,8 @@ import TableScroll from '@/components/TableScroll.vue'
 import BudgetAmountCell from '@/components/budget/BudgetAmountCell.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { formatPeriod, formatRange } from '@/lib/date'
-import { moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { cn } from '@/lib/utils'
 import { useBudgetStore } from '@/stores/budget'
@@ -49,10 +49,7 @@ watch(() => txns.ledgerVersion, () => {
   if (store.period) void withErrorToast(() => store.load(store.period!))
 })
 
-const num = (v: number) => {
-  const p = moneyParts(v, settings.locale)
-  return p.sign + p.number
-}
+const { num } = useMoneyFormat()
 // Bawaan bertanda; `—` bila tidak ada yang dibawa.
 const carry = (v: number) => (v === 0 ? '—' : v > 0 ? `+${num(v)}` : num(v))
 
@@ -119,7 +116,7 @@ function copy() {
       <span role="cell" :class="cn('truncate', r.parentId ? 'pl-6' : 'font-medium')">{{ names.get(r.categoryId) ?? '' }}</span>
       <span role="cell">
         <BudgetAmountCell
-          :category-id="r.categoryId" :name="names.get(r.categoryId) ?? ''" :amount="r.budget" :locale="settings.locale"
+          :category-id="r.categoryId" :name="names.get(r.categoryId) ?? ''" :amount="r.budget"
           @save="save(r.categoryId, $event)" @error="toast.error($event)"
         />
       </span>

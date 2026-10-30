@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { CategoryKindDto } from '@/ipc'
 import type { SplitRow } from '@/lib/txnForm'
-import CategoryCombobox from './CategoryCombobox.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 
 const rows = defineModel<SplitRow[]>({ required: true })
 const props = defineProps<{ kind: CategoryKindDto; total: number }>()
@@ -39,9 +39,11 @@ defineExpose({ commit })
 <template>
   <div class="flex flex-col gap-2">
     <div v-for="(row, i) in rows" :key="i" class="grid grid-cols-[1fr_8rem_auto] gap-2">
-      <CategoryCombobox
+      <CategorySelect
         v-model="row.categoryId"
         :kind="kind"
+        :placeholder="t('categories.pick')"
+        class="w-full min-w-0"
         :data-testid="`split-category-${i}`"
         :aria-label="t('txn.category')"
       />

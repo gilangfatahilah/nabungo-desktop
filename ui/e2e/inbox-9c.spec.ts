@@ -10,7 +10,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('5.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('5.000.000')
 }
 
 async function go(page: Page, hash: string) {

@@ -3,6 +3,8 @@ import { ChevronRight } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
+import AccountSelect from '@/components/AccountSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 import RuleTestPanel from '@/components/inbox/RuleTestPanel.vue'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -171,40 +173,27 @@ const describedBy = (field: string, hint?: string) =>
 
           <div class="flex flex-col gap-2">
             <Label id="er-account-label">{{ t('emailRules.account') }}</Label>
-            <Select :model-value="select(f.accountId)" @update:model-value="f.accountId = unselect($event)">
-              <SelectTrigger aria-labelledby="er-account-label" class="w-full" data-testid="er-account"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="NONE">{{ t('emailRules.noAccount') }}</SelectItem>
-                <SelectItem v-for="a in accountOptions" :key="a.id" :value="a.id">{{ a.name }}</SelectItem>
-              </SelectContent>
-            </Select>
+            <AccountSelect
+              v-model="f.accountId" :accounts="accountOptions" :none-label="t('emailRules.noAccount')"
+              aria-labelledby="er-account-label" class="w-full" data-testid="er-account"
+            />
           </div>
 
           <div v-if="transfer" class="flex flex-col gap-2">
             <Label id="er-counter-label">{{ t('emailRules.counterAccount') }}</Label>
-            <Select :model-value="select(f.counterAccountId)" @update:model-value="f.counterAccountId = unselect($event)">
-              <SelectTrigger
-                aria-labelledby="er-counter-label" class="w-full" data-testid="er-counter"
-                :aria-invalid="invalid('counter_account') || undefined" :aria-describedby="describedBy('counter_account')"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="NONE">{{ t('emailRules.noAccount') }}</SelectItem>
-                <SelectItem v-for="a in accountOptions" :key="a.id" :value="a.id" :disabled="a.id === f.accountId">{{ a.name }}</SelectItem>
-              </SelectContent>
-            </Select>
+            <AccountSelect
+              v-model="f.counterAccountId" :accounts="accountOptions" :none-label="t('emailRules.noAccount')" :disabled-id="f.accountId"
+              aria-labelledby="er-counter-label" class="w-full" data-testid="er-counter"
+              :aria-invalid="invalid('counter_account') || undefined" :aria-describedby="describedBy('counter_account')"
+            />
             <p v-if="invalid('counter_account')" id="er-error-counter_account" class="text-meta text-destructive">{{ t('emailRules.fieldError.counter_account') }}</p>
           </div>
           <div v-else class="flex flex-col gap-2">
             <Label id="er-category-label">{{ t('emailRules.category') }}</Label>
-            <Select :model-value="select(f.defaultCategoryId)" @update:model-value="f.defaultCategoryId = unselect($event)">
-              <SelectTrigger aria-labelledby="er-category-label" class="w-full" data-testid="er-category"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem :value="NONE">{{ t('emailRules.noCategory') }}</SelectItem>
-                <SelectItem v-for="c in categoryOptions" :key="c.id" :value="c.id">{{ c.name }}</SelectItem>
-              </SelectContent>
-            </Select>
+            <CategorySelect
+              v-model="f.defaultCategoryId" :categories="categoryOptions" :none-label="t('emailRules.noCategory')"
+              aria-labelledby="er-category-label" class="w-full" data-testid="er-category"
+            />
           </div>
 
           <Collapsible v-model:open="patternsOpen" class="flex flex-col gap-4">

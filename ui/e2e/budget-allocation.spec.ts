@@ -6,7 +6,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toBeVisible()
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toBeVisible()
 }
 
 async function go(page: Page, hash: string) {

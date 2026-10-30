@@ -64,6 +64,7 @@ function onAction(a: ShortcutAction) {
     void router.push({ name: a.route })
   } else if (a.kind === 'newTxn') ui.openNewTxn()
   else if (a.kind === 'fontScale') void withErrorToast(() => settings.stepFontScale(a.step))
+  else if (a.kind === 'toggleAmounts') ui.toggleAmountsHidden()
   else ui.paletteOpen = !ui.paletteOpen
 }
 

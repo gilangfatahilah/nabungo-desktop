@@ -37,7 +37,7 @@ test('onboarding terenkripsi, kunci, buka dengan password lalu recovery key', as
   await expect(dialog).toBeVisible()
   await dialog.locator('#recovery-saved').click()
   await done.click()
-  const netWorth = page.locator('[data-testid="sidebar-net-worth"]')
+  const netWorth = page.locator('[data-testid="kpi-net-worth"]')
   await expect(netWorth).toContainText('1.000.000')
 
   // Password salah ditolak di field; password benar kembali ke halaman semula dengan data utuh.

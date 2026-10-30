@@ -3,20 +3,18 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import MoneyText from '@/components/MoneyText.vue'
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { todayIso } from '@/lib/date'
-import { formatIdr } from '@/lib/money'
 import { average, perDay, savingsRate } from '@/lib/reportStats'
 import { useReportsStore } from '@/stores/reports'
-import { useSettingsStore } from '@/stores/settings'
 import TrendBadge from './TrendBadge.vue'
 
 // Section card KPI periode fokus (docs/design/design.md §7.11, §8.8). Nominal dari laporan arus kas;
 // rata-rata, per hari, dan rasio tabungan hanya pembagian angka backend.
 const store = useReportsStore()
-const settings = useSettingsStore()
 const { t } = useI18n()
 
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money } = useMoneyFormat()
 const avg = (pick: (p: { income: number; expense: number; net: number }) => number) =>
   average(store.span.map(pick))
 const avgText = (v: number | null) => (v === null ? '' : t('reports.average', { count: store.span.length, amount: money(v) }))

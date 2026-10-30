@@ -12,7 +12,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toBeVisible()
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toBeVisible()
 }
 
 // Data contoh lewat UI: dua transaksi berpayee (payee + kategori + budget terisi).
@@ -205,7 +205,7 @@ test('keyboard: transaksi baru hanya dengan keyboard', async ({ page }) => {
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toContainText('4.985.000')
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('4.985.000')
 })
 
 // Konten berada di dalam inset `overflow-hidden` dengan scroller sendiri, jadi dokumen tidak pernah

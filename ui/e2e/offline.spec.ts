@@ -22,7 +22,7 @@ test('tidak ada request ke origin lain di semua layar', async ({ page }) => {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toBeVisible()
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toBeVisible()
 
   await page.locator('body').press('n')
   await page.locator('#txn-amount').fill('25000')

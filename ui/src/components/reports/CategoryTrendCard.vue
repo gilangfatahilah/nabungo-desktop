@@ -5,9 +5,9 @@ import MoneyText from '@/components/MoneyText.vue'
 import TableScroll from '@/components/TableScroll.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import CategorySelect from '@/components/CategorySelect.vue'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { formatPeriod } from '@/lib/date'
-import { formatCompact, formatIdr, moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { average } from '@/lib/reportStats'
 import { cn } from '@/lib/utils'
@@ -39,12 +39,7 @@ const summary = computed(() => amounts.value.length
     ]
   : [])
 
-const num = (v: number) => {
-  const p = moneyParts(v, settings.locale)
-  return p.sign + p.number
-}
-const axis = (v: number) => formatCompact(Math.round(v), settings.locale)
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, num, axis } = useMoneyFormat()
 const pick = (v: unknown) => typeof v === 'string' && v && withErrorToast(() => store.setTrendCategory(v))
 const select = (i: number) => store.trend[i] && withErrorToast(() => store.select(store.trend[i]!.period))
 
@@ -58,12 +53,10 @@ const row = 'grid grid-cols-[8rem_minmax(7rem,1fr)] items-center gap-4 px-2'
       <CardDescription>{{ t('reports.categoryTrendHint', { count: store.range }) }}</CardDescription>
     </CardHeader>
     <CardContent class="flex flex-col gap-3">
-      <Select :model-value="store.trendCategoryId" @update:model-value="pick">
-        <SelectTrigger size="sm" class="w-full @sm/card:w-60" data-testid="trend-category" :aria-label="t('reports.category')"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem v-for="c in options" :key="c.id" :value="c.id">{{ c.name }}</SelectItem>
-        </SelectContent>
-      </Select>
+      <CategorySelect
+        :model-value="store.trendCategoryId" :categories="options" :placeholder="t('categories.pick')"
+        class="h-7 w-full @sm/card:w-60" data-testid="trend-category" :aria-label="t('reports.category')" @update:model-value="pick"
+      />
       <dl class="grid grid-cols-3 divide-x rounded-lg border text-center" data-part="summary">
         <div v-for="s in summary" :key="s.key" class="flex flex-col gap-0.5 px-2 py-2" :data-part="s.key">
           <dt class="text-meta text-muted-foreground">{{ s.label }}</dt>

@@ -135,4 +135,17 @@ describe('shortcuts', () => {
     press(document.body, '-')
     expect(actions).toEqual([])
   })
+
+  it('Ctrl+Shift+H menyembunyikan/menampilkan nominal, juga dari dalam input', () => {
+    const { actions, press } = setup()
+    const e = press(document.createElement('input'), 'H', { ctrlKey: true, shiftKey: true })
+    expect(actions).toEqual([{ kind: 'toggleAmounts' }])
+    expect(e.defaultPrevented).toBe(true)
+  })
+
+  it('Ctrl+H tanpa Shift tidak melakukan apa pun', () => {
+    const { actions, press } = setup()
+    press(document.body, 'h', { ctrlKey: true })
+    expect(actions).toEqual([])
+  })
 })

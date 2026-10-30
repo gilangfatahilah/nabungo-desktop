@@ -32,7 +32,7 @@ function form(over: Partial<TxnFormDto>): TxnFormDto {
   }
 }
 
-const q = { dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+const q = { dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
   amountMin: null, amountMax: null, search: null, sort: null, limit: 100, offset: 0 }
 
 describe('browser ledger transaksi (paritas Rust)', () => {

@@ -795,6 +795,8 @@ export type TxnQueryDto = {
 	dateFrom: string | null,
 	dateTo: string | null,
 	accountId: string | null,
+	/**  `null` = semua jenis. */
+	kind: TxnFormKindDto | null,
 	categoryId: string | null,
 	tag: string | null,
 	payeeId: string | null,

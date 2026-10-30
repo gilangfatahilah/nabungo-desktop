@@ -8,7 +8,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('1.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('1.000.000')
 }
 
 async function goAccounts(page: Page) {
@@ -37,7 +37,7 @@ test('piutang/hutang dengan kontak', async ({ page }) => {
   await expect(row).toContainText(/Rp\s50\.000/)
   await expect(row).not.toContainText('−')
   // Hutang dihitung sebagai liabilitas: kekayaan bersih turun 50.000.
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('950.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('950.000')
 })
 
 test('rekonsiliasi akun bank', async ({ page }) => {

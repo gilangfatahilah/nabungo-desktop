@@ -3,15 +3,14 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { TrendingDown, TrendingUp } from '@lucide/vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { colorClass } from '@/lib/colors'
 import { iconFor } from '@/lib/icons'
-import { moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { biggestChanges, type CategoryChange } from '@/lib/reportStats'
 import { cn } from '@/lib/utils'
 import { useCategoriesStore } from '@/stores/categories'
 import { useReportsStore } from '@/stores/reports'
-import { useSettingsStore } from '@/stores/settings'
 import TrendBadge from './TrendBadge.vue'
 
 // Kategori root dengan kenaikan/penurunan terbesar vs periode lalu (docs/design/design.md §8.8).
@@ -20,7 +19,6 @@ const LIMIT = 3
 
 const store = useReportsStore()
 const categories = useCategoriesStore()
-const settings = useSettingsStore()
 const { t } = useI18n()
 
 const byId = computed(() => new Map(categories.list.map((c) => [c.id, c])))
@@ -31,10 +29,8 @@ const groups = computed(() => [
 ].filter((g) => g.rows.length))
 const upIsBad = computed(() => store.kind === 'expense')
 
-const delta = (c: CategoryChange) => {
-  const p = moneyParts(Math.abs(c.delta), settings.locale)
-  return (c.delta > 0 ? '+' : '−') + p.number
-}
+const { num } = useMoneyFormat()
+const delta = (c: CategoryChange) => (c.delta > 0 ? '+' : '−') + num(Math.abs(c.delta))
 const pick = (id: string) => withErrorToast(() => store.setTrendCategory(id))
 </script>
 

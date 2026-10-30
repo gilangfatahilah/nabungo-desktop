@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { formatPeriod } from '@/lib/date'
-import { formatCompact, formatIdr } from '@/lib/money'
 import { formatTrend, trendPercent } from '@/lib/trend'
 import { useReportsStore } from '@/stores/reports'
 import { useSettingsStore } from '@/stores/settings'
@@ -36,8 +36,7 @@ const series = computed(() => view.value === 'cashflow'
       { key: 'expense', label: t('reports.outflow'), color: 'var(--expense)', values: cashflow.value.map((p) => p.expense) },
     ]
   : [{ key: 'net', label: t('dashboard.netWorth'), color: 'var(--chart-1)', values: netWorth.value.map((p) => p.net) }])
-const axis = (v: number) => formatCompact(Math.round(v), settings.locale)
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, axis, compact } = useMoneyFormat()
 
 const direction = computed(() => {
   const span = t(`dashboard.rangeSpan.${range.value}`)
@@ -55,7 +54,7 @@ const direction = computed(() => {
   if (!cashflow.value.length) return null
   const net = cashflow.value.reduce((s, p) => s + p.net, 0)
   return {
-    text: (net > 0 ? '+' : '') + formatCompact(net, settings.locale),
+    text: (net > 0 ? '+' : '') + compact(net),
     icon: net === 0 ? Minus : net > 0 ? TrendingUp : TrendingDown,
     tone: net === 0 ? 'text-muted-foreground' : net > 0 ? 'text-income' : 'text-expense',
     label: t(`dashboard.trendRange.${net < 0 ? 'deficit' : 'surplus'}`, { range: span }),

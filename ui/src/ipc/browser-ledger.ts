@@ -425,6 +425,7 @@ const payeeName = (t: Txn) => state.payees.find((p) => p.id === t.payeeId)?.name
 function matches(t: Txn, q: TxnQueryDto): boolean {
   if (q.dateFrom && t.date < q.dateFrom) return false
   if (q.dateTo && t.date > q.dateTo) return false
+  if (q.kind && t.kind !== q.kind) return false
   if (q.accountId && !t.postings.some((p) => p.accountId === q.accountId)) return false
   if (q.categoryId) {
     const hit = t.postings.some((p) => {

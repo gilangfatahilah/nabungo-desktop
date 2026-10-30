@@ -150,6 +150,7 @@ Huruf N berfaset yang naik ke kanan dengan koin lime yang jatuh masuk ("menabung
  ▣ Transaksi                 G T
  ▣ Budget                    G B
  ▣ Alokasi                   G A
+ ▣ Inbox                       5  ← hanya bila email capture aktif / ada item; badge = perlu ditinjau
  ▣ Laporan                   G R
 
  Kelola                           ← SidebarGroupLabel
@@ -157,19 +158,17 @@ Huruf N berfaset yang naik ke kanan dengan koin lime yang jatuh masuk ("menabung
  ▣ Kategori
  ▣ Tag & Payee
  ▣ Terjadwal                   2  ← SidebarMenuBadge jumlah jatuh tempo (sembunyi saat 0)
- ▣ Inbox                       5  ← hanya bila email capture aktif / ada item; badge = perlu ditinjau
 
  ▣ Pengaturan             Ctrl ,  ← NavSecondary, menempel di bawah (mt-auto)
  ──────────────────────────────
- Kekayaan bersih                  ← footer NavSummary: link ke Akun
- 4.343.000                  [🔒]  ← angka tanpa Rp; tombol Kunci hanya bila DB terenkripsi
+ 🔒 Kunci sekarang                ← footer NavSummary: hanya bila DB terenkripsi
 ```
 
 - Item aktif & hover: gaya bawaan shadcn (latar Kanvas aktif, teks Tinta 500). Tidak ada garis aksen.
 - Quick Create adalah satu-satunya blok Tunas di sidebar.
 - Petunjuk shortcut hanya saat hover/fokus dan pada item aktif.
 - Mode ikon: label & Kbd disembunyikan, setiap item punya tooltip berisi label; Quick Create menjadi tombol ikon `+`; footer menampilkan ikon saja.
-- Daftar saldo per akun **tidak** ada di sidebar; tempatnya kartu Akun di Dasbor (§8.1) dan layar Akun.
+- Kekayaan bersih dan daftar saldo per akun **tidak** ada di sidebar; kekayaan bersih ada di hero Dasbor, daftar saldo di kartu Akun di Dasbor (§8.1) dan layar Akun.
 - Di sidebar angka tanpa prefiks `Rp`.
 
 ### 6.3 SiteHeader
@@ -177,7 +176,7 @@ Huruf N berfaset yang naik ke kanan dengan koin lime yang jatuh masuk ("menabung
 `ui/src/components/layout/SiteHeader.vue`. Tinggi 48px, `border-b`, isi `px-4 lg:px-6`:
 
 - `SidebarTrigger` · `Separator` vertikal 16px · **h1** judul halaman (`text-heading` 500, sama dengan label navigasi `nav.<route>`).
-- Kanan: aksi global saja (pemicu Cari berbentuk kolom isian — `outline`, tinggi 36px, lebar 224px / 320px di `lg`, teks "Cari…" + `Kbd` `Ctrl K` — yang membuka command palette; satu-satunya tombol Cari di aplikasi). Aksi khusus halaman **tidak** di sini.
+- Kanan: aksi global saja (tombol ikon hantu `eye`/`eye-off` **Sembunyikan nominal** §7.10, lalu pemicu Cari berbentuk kolom isian — `outline`, tinggi 36px, lebar 224px / 320px di `lg`, teks "Cari…" + `Kbd` `Ctrl K` — yang membuka command palette; satu-satunya tombol Cari di aplikasi). Aksi khusus halaman **tidak** di sini.
 
 ### 6.4 PageHeader
 
@@ -290,6 +289,10 @@ Judul berupa pertanyaan dengan objeknya ("Hapus akun Dompet?"), isi menjelaskan 
 ### 7.10 Angka besar & batang progres
 
 - `MoneyText` punya ukuran `sm | md | lg | display`.
+- **Sembunyikan nominal** (privacy mode): satu toggle global, disimpan per perangkat (`localStorage` `nabungo.hideAmounts`, bukan setting backend). Pemicu: tombol ikon di SiteHeader, ikon kecil di samping label Kekayaan bersih hero Dasbor (`AmountsToggle`, `aria-pressed`, tooltip + `Ctrl Shift H`), shortcut `Ctrl+Shift+H` (juga dari dalam input), dan palet perintah.
+  - `MoneyText` menampilkan `Rp ••••••••` (8 titik tetap, agar jumlah digit tidak bocor), tanpa tanda minus dan tanpa nada `income`/`expense`; `aria-label` "Nominal disembunyikan".
+  - Teks nominal di luar `MoneyText` (kartu, grafik, Budget, Alokasi) lewat `useMoneyFormat()` (`money`/`num`/`compact`/`axis`): label sumbu dan nominal ringkas menjadi `•••`, tooltip chart ikut tersamar. Bentuk grafik, persen tren, dan persen budget tetap tampil.
+  - Input dan dialog aksi (form transaksi, sel budget saat diedit, rekonsiliasi, valuasi, chip filter nominal, konfirmasi arsip) tetap memakai `lib/money.ts` dan **tidak** disamarkan agar user tidak salah input.
 - Batang progres budget (`BudgetBar`): tinggi 6px, pill, track Garis. Isi Tinta pudar < 80%, Waspada ≥ 80%, Bahaya ≥ 100% (bagian lewat menonjol keluar track). Warna mengikuti `level` backend (`ok`/`warning`/`exceeded`), tidak dihitung ulang di UI.
 
 ### 7.11 Section card (KPI)
@@ -351,12 +354,12 @@ Susunan "balance details": hero kekayaan bersih di atas, lalu grid kartu 12 kolo
  │                                    │ ├ Budget perlu dilihat ────┤ │                    │
  │                                    │ │ Makan  ▓▓▓▓▓▓▓░ 86%      │ │                    │
  └────────────────────────────────────┘ └──────────────────────────┘ └────────────────────┘
- ┌ Terjadwal jatuh tempo ────────────┐ ┌ Ringkasan alokasi ────────────────┐
- └───────────────────────────────────┘ └───────────────────────────────────┘
+ ┌ Inbox ─────── [Buka Inbox] ┐ ┌ Terjadwal jatuh tempo ─┐ ┌ Ringkasan alokasi ─────┐
+ └────────────────────────────┘ └────────────────────────┘ └────────────────────────┘
 ```
 
 - **Hero** (tanpa kartu): label meta, Kekayaan bersih `text-display` 600 + badge tren (§7.11), keterangan "Aset dikurangi liabilitas". Di kanan (≥ `@3xl/main`, di bawah pada layar sempit) tiga statistik ringkas dipisah garis vertikal: Sisa periode ini, Pemasukan, Pengeluaran, masing-masing nominal `text-heading` + badge tren. Periode berjalan tetap di PageHeader.
-- **Grid**: `grid-cols-1 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12`, gap 16/24. Baris 1: Akun `col-span-4`, kolom tengah `col-span-3` (Detail akun + Budget periode ini), Tren `col-span-5` (di 2 kolom: Tren `col-span-2`). Baris 2: Transaksi terakhir `col-span-5` (2 kolom: `col-span-2`), kolom tengah `col-span-4` (Pengeluaran + Budget perlu dilihat), Komposisi kekayaan `col-span-3`. Baris 3 `@3xl/main:grid-cols-2`: Jatuh tempo, Alokasi. Kartu yang datanya kosong menyembunyikan dirinya; kolom yang kosong ikut hilang. Grid item meregang setinggi baris, dan di kolom bertumpuk kartu terakhir `flex-1`, jadi tepi bawah satu baris selalu sejajar (isi kartu tetap rata atas).
+- **Grid**: `grid-cols-1 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12`, gap 16/24. Baris 1: Akun `col-span-4`, kolom tengah `col-span-3` (Detail akun + Budget periode ini), Tren `col-span-5` (di 2 kolom: Tren `col-span-2`). Baris 2: Transaksi terakhir `col-span-5` (2 kolom: `col-span-2`), kolom tengah `col-span-4` (Pengeluaran + Budget perlu dilihat), Komposisi kekayaan `col-span-3`. Baris 3 `@3xl/main:grid-cols-2 @5xl/main:grid-cols-3`: Inbox, Jatuh tempo, Alokasi. Kartu yang datanya kosong menyembunyikan dirinya; kolom yang kosong ikut hilang. Grid item meregang setinggi baris, dan di kolom bertumpuk kartu terakhir `flex-1`, jadi tepi bawah satu baris selalu sejajar (isi kartu tetap rata atas).
 - **Akun**: akun aktif (urutan grup lalu `sortOrder`) sebagai baris yang bisa dipilih: radio, tile ikon jenis/ikon akun, nama + jenis, saldo `num` (`balanceTone`). Baris terpilih `border-primary bg-primary/5`. Isi kartu di-scroll bila melebihi ±22rem. Tombol [+] di `CardAction` → layar Akun. Pilihan default: akun aset aktif pertama.
 - **Detail akun** (akun terpilih): tiga aksi cepat (Pemasukan, Transfer, Pengeluaran) membuka sheet transaksi baru dengan jenis dan akun itu terisi. Lalu nama · jenis, saldo `text-title`, dan baris meta: grup, status rekonsiliasi (badge "Rekon s.d. tanggal" / "Belum direkonsiliasi"); kartu kredit menambah limit dan tanggal tagihan.
 - **Budget periode ini**: total terpakai dari tersedia periode berjalan, batang dua nada (`bg-primary` terpakai, `bg-primary/15` sisa; `bg-expense` bila lewat), persen dibulatkan. Belum ada budget: kartu tetap tampil dengan keterangan "Belum ada budget untuk periode ini." dan tombol outline sm **Atur budget** → layar Budget.
@@ -365,6 +368,7 @@ Susunan "balance details": hero kekayaan bersih di atas, lalu grid kartu 12 kolo
 - **Pengeluaran periode ini**: tiga angka (Periode ini, Periode lalu, Sisa budget bila ada budget), lalu `DonutChart` 5 kategori root teratas + "Lainnya" (palet `--chart-1..5`, Lainnya `--muted-foreground`) dengan kategori terbesar di tengah donut, legenda nama + nominal `num`. Judul → Laporan. Disembunyikan bila belum ada pengeluaran (kolom ini ikut hilang).
 - **Budget perlu dilihat**: maks 5, persen tertinggi, `BudgetBar`. Bila semua level `ok`, deskripsi kartu "Semua budget masih aman.". Disembunyikan bila belum ada budget (ajakannya sudah ada di Budget periode ini).
 - **Komposisi kekayaan**: `DonutChart` porsi aset per jenis akun (saringan sama dengan net worth Rust: akun `includeInNetWorth`, termasuk arsip, tanpa liabilitas), legenda jenis + nominal + persen; warna tetap per jenis (Bank `--chart-1`, E-wallet `--chart-2`, Investasi `--chart-3`, Tunai `--chart-4`, Piutang `--chart-5`). Di bawahnya Aset, Liabilitas, Kekayaan bersih. Kartu sempit: donut di atas legenda (`@container/card`). Disembunyikan bila aset ≤ 0. Judul → Akun.
+- **Inbox**: tampil dengan aturan yang sama seperti menu sidebar Inbox (email aktif atau ada pending/gagal dibaca). Deskripsi "n transaksi dari email perlu ditinjau" (atau "Semua sudah ditinjau") + link warning "n gagal dibaca" → tab Gagal dibaca; tombol outline sm **Buka Inbox** di `CardAction`. Maks 4 draft pending (tanggal, payee/nama rule, nominal bertanda); aksi catat/tinjau tetap di layar Inbox.
 - **Terjadwal jatuh tempo** dan **Ringkasan alokasi**: seperti sebelumnya (maks 5 / bucket root).
 - Data dimuat ulang setelah aksi tulis (`ledgerVersion` di store transaksi).
 

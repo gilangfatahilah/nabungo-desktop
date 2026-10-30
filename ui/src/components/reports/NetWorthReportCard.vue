@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import TableScroll from '@/components/TableScroll.vue'
 import LineChart from '@/components/charts/LineChart.vue'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { formatPeriod } from '@/lib/date'
-import { formatCompact, formatIdr, moneyParts } from '@/lib/money'
 import { cn } from '@/lib/utils'
 import { useReportsStore } from '@/stores/reports'
 import { useSettingsStore } from '@/stores/settings'
@@ -17,12 +17,7 @@ const store = useReportsStore()
 const settings = useSettingsStore()
 const { t } = useI18n()
 
-const num = (v: number) => {
-  const p = moneyParts(v, settings.locale)
-  return p.sign + p.number
-}
-const axis = (v: number) => formatCompact(Math.round(v), settings.locale)
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, num, axis } = useMoneyFormat()
 
 const points = computed(() => store.rangeNetWorth)
 const labels = computed(() => points.value.map((p) => formatPeriod(p.period, settings.locale)))

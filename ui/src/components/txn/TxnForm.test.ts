@@ -65,7 +65,7 @@ beforeAll(async () => {
 })
 
 async function txns() {
-  return ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+  return ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
     amountMin: null, amountMax: null, search: null, sort: null, limit: 1000, offset: 0 })
 }
 

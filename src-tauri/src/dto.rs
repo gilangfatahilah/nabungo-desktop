@@ -643,6 +643,8 @@ pub struct TxnQueryDto {
     pub date_from: Option<String>,
     pub date_to: Option<String>,
     pub account_id: Option<String>,
+    /// `null` = semua jenis.
+    pub kind: Option<TxnFormKindDto>,
     pub category_id: Option<String>,
     pub tag: Option<String>,
     pub payee_id: Option<String>,
@@ -693,6 +695,11 @@ impl TryFrom<TxnQueryDto> for TxnQuery {
             date_from: day(d.date_from)?,
             date_to: day(d.date_to)?,
             account_id: parse_opt_id(d.account_id.as_deref(), "account")?,
+            kind: d.kind.map(|k| match k {
+                TxnFormKindDto::Income => TxnKind::Income,
+                TxnFormKindDto::Expense => TxnKind::Expense,
+                TxnFormKindDto::Transfer => TxnKind::Transfer,
+            }),
             category_id: parse_opt_id(d.category_id.as_deref(), "category")?,
             tag: d.tag,
             payee_id: parse_opt_id(d.payee_id.as_deref(), "payee")?,
