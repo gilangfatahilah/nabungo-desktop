@@ -8,6 +8,7 @@ import * as ipc from '@/ipc'
 import type { CaptureDto } from '@/ipc'
 import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import CaptureSheet from './CaptureSheet.vue'
+import { pickOption, selectedLabel } from '@/test/select'
 
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
 vi.mock('vue-sonner', () => ({ toast: toastMock }))
@@ -21,14 +22,6 @@ async function settle() {
   await flushPromises()
   await nextTick()
   await flushPromises()
-}
-
-async function type(sel: string, value: string) {
-  const el = $(sel)
-  el.focus()
-  el.value = value
-  el.dispatchEvent(new Event('input', { bubbles: true }))
-  await settle()
 }
 
 async function key(sel: string, k: string, opts: KeyboardEventInit = {}) {
@@ -46,7 +39,7 @@ beforeAll(async () => {
 })
 
 async function txnCount() {
-  return (await ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+  return (await ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
     amountMin: null, amountMax: null, search: null, sort: null, limit: 1, offset: 0 })).total
 }
 
@@ -80,15 +73,14 @@ describe('CaptureSheet', () => {
     expect($('#txn-amount').value).toMatch(/^41\.?700$/)
     expect($('#txn-payee').value).toBe('Indomaret')
     expect($<HTMLElement>('[data-testid="txn-account"]').textContent).toContain('BCA CS')
-    expect($('#txn-category').value).toBe('Makan CS')
+    expect(selectedLabel($('#txn-category'))).toBe('Makan CS')
     expect($('#txn-date').value).toContain('9 Mei 2026')
   })
 
   it('save_confirms_capture', async () => {
     const before = await txnCount()
     const w = await openSheet(await seeded('cs-2', { categoryId: null, amount: 12_345 }))
-    await type('#txn-category', 'Makan CS')
-    await key('#txn-category', 'Enter')
+    await pickOption($<HTMLElement>('#txn-category'), 'Makan CS')
     await key('#txn-category', 'Enter', { ctrlKey: true })
     expect(await txnCount()).toBe(before + 1)
     expect(w.emitted('close')).toHaveLength(1)

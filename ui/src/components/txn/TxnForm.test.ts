@@ -11,6 +11,7 @@ import type { TxnFormDto } from '@/ipc'
 import { formatDateInput, todayIso } from '@/lib/date'
 import { emptyForm } from '@/lib/txnForm'
 import { useUiStore } from '@/stores/ui'
+import { pickOption, selectedLabel } from '@/test/select'
 
 // Sheet di-teleport ke body: query lewat document.
 const $ = <T extends Element = HTMLInputElement>(sel: string) => document.body.querySelector(sel) as T
@@ -37,11 +38,10 @@ async function key(sel: string, k: string, opts: KeyboardEventInit = {}) {
   await settle()
 }
 
-/** Ketik lalu Enter di combobox: satu interaksi (sesuai hitungan di plan). */
-async function pick(sel: string, value: string) {
-  await type(sel, value)
-  await key(sel, 'Enter')
-  interactions--
+/** Buka pemilih lalu pilih opsi: satu interaksi (sesuai hitungan di plan). */
+async function pick(sel: string, label: string) {
+  interactions++
+  await pickOption($<HTMLElement>(sel), label)
 }
 
 async function click(sel: string) {
@@ -65,7 +65,7 @@ beforeAll(async () => {
 })
 
 async function txns() {
-  return ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+  return ipc.listTxns({ dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
     amountMin: null, amountMax: null, search: null, sort: null, limit: 1000, offset: 0 })
 }
 
@@ -115,11 +115,9 @@ describe('TxnForm', () => {
     const ui = await openSheet((u) => u.openNewTxn())
     await type('#txn-amount', '75000')
     await click('[data-testid="split-toggle"]')
-    await type('[data-testid="split-category-0"]', 'Kopi')
-    await key('[data-testid="split-category-0"]', 'Enter')
+    await pick('[data-testid="split-category-0"]', 'Kopi')
     await type('[data-testid="split-amount-0"]', '50000')
-    await type('[data-testid="split-category-1"]', 'Restoran')
-    await key('[data-testid="split-category-1"]', 'Enter')
+    await pick('[data-testid="split-category-1"]', 'Restoran')
     await type('[data-testid="split-amount-1"]', '24999')
     await key('[data-testid="split-amount-1"]', 'Enter', { ctrlKey: true })
     expect($('[data-testid="split-remainder"]').textContent).toMatch(/Rp\s?1$/)
@@ -142,7 +140,7 @@ describe('TxnForm', () => {
     $<HTMLElement>('[data-testid="tab-transfer"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
     await settle()
     await click('[data-testid="fee-toggle"]')
-    expect($('#txn-fee-category').value).toBe('Biaya admin')
+    expect(selectedLabel($('#txn-fee-category'))).toBe('Biaya admin')
   })
 
   it('saran payee hanya mengisi kategori yang belum disentuh', async () => {
@@ -150,16 +148,15 @@ describe('TxnForm', () => {
     await openSheet((u) => u.openNewTxn())
     await type('#txn-payee', 'Starbucks')
     await key('#txn-payee', 'Enter')
-    expect($('#txn-category').value).toBe('Makan & Minum › Kopi & jajan')
+    expect(selectedLabel($('#txn-category'))).toBe('Makan & Minum › Kopi & jajan')
     document.body.innerHTML = ''
 
     setActivePinia(createPinia())
     await openSheet((u) => u.openNewTxn())
-    await type('#txn-category', 'Restoran')
-    await key('#txn-category', 'Enter')
+    await pick('#txn-category', 'Restoran')
     await type('#txn-payee', 'Starbucks')
     await key('#txn-payee', 'Enter')
-    expect($('#txn-category').value).toBe('Makan & Minum › Restoran')
+    expect(selectedLabel($('#txn-category'))).toBe('Makan & Minum › Restoran')
   })
 
   it('mode buat: seksi lampiran hanya berisi petunjuk simpan dulu', async () => {
@@ -182,7 +179,7 @@ describe('TxnForm', () => {
     const { id: txnId } = await ipc.createTxn(expense())
     const ui = await openSheet((u) => u.openEditTxn(txnId))
     expect($('#txn-amount').value).toBe('25000')
-    expect($('#txn-category').value).toBe('Makan & Minum › Kopi & jajan')
+    expect(selectedLabel($('#txn-category'))).toBe('Makan & Minum › Kopi & jajan')
     await type('#txn-amount', '30000')
     await key('#txn-amount', 'Enter', { ctrlKey: true })
     const d = await ipc.getTxn(txnId)

@@ -12,7 +12,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toBeVisible()
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toBeVisible()
 }
 
 // Data contoh lewat UI: dua transaksi berpayee (payee + kategori + budget terisi).
@@ -21,8 +21,9 @@ async function seed(page: Page) {
   for (const [amount, payee] of [['50000', 'Listrik'], ['25000', 'Warung']]) {
     await page.locator('body').press('n')
     await page.locator('#txn-amount').fill(amount)
-    await page.locator('#txn-category').fill('Tagihan')
-    await page.locator('#txn-category').press('Enter')
+    await page.locator('#txn-category').click()
+    await page.keyboard.type('Tagihan')
+    await page.keyboard.press('Enter')
     await page.locator('#txn-payee').fill(payee)
     await page.keyboard.press('Control+Enter')
     await expect(page.getByRole('dialog')).toBeHidden()
@@ -76,6 +77,10 @@ for (const scheme of ['light', 'dark'] as const) {
     await go(page, '#/reports')
     await page.locator('[data-testid="cashflow-chart"] [role="group"]').focus()
     await expectNoViolations(page, 'tooltip chart')
+    for (const t of ['cashflow', 'trend', 'networth']) await page.getByTestId(`${t}-table-toggle`).click()
+    const expand = page.locator('[data-testid="breakdown-row"] [data-part="expand"]')
+    if (await expand.count()) await expand.first().click()
+    await expectNoViolations(page, 'laporan (tabel & sub-kategori)')
 
     await go(page, '#/labels?tab=payee')
     const menu = page.locator('[data-testid^="label-menu-"]').first()
@@ -197,11 +202,12 @@ test('keyboard: transaksi baru hanya dengan keyboard', async ({ page }) => {
   const category = page.locator('#txn-category')
   for (let i = 0; i < 10 && !(await category.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab')
   await expect(category).toBeFocused()
+  await page.keyboard.press('Enter')
   await page.keyboard.type('Tagihan')
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toContainText('4.985.000')
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('4.985.000')
 })
 
 // Konten berada di dalam inset `overflow-hidden` dengan scroller sendiri, jadi dokumen tidak pernah

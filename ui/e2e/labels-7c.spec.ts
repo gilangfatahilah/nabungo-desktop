@@ -8,7 +8,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('1.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('1.000.000')
 }
 
 async function go(page: Page, hash: string) {
@@ -22,6 +22,7 @@ async function expense(page: Page, opts: { payee?: string; tag?: string } = {}) 
   await expect(amountInput).toBeFocused()
   await amountInput.pressSequentially('25rb')
   await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
   await page.keyboard.type('Kopi')
   await page.keyboard.press('Enter')
   if (opts.payee) await page.locator('#txn-payee').fill(opts.payee)

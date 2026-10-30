@@ -12,7 +12,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('5.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('5.000.000')
 }
 
 async function go(page: Page, hash: string) {
@@ -23,8 +23,9 @@ async function go(page: Page, hash: string) {
 async function fillExpense(page: Page, value: string) {
   const amountInput = page.locator('#txn-amount')
   await amountInput.fill(value)
-  await page.locator('#txn-category').fill('Tagihan')
-  await page.locator('#txn-category').press('Enter')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
   await page.locator('#txn-payee').fill('Listrik')
 }
 

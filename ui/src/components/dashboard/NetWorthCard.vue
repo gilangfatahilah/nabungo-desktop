@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 import MoneyText from '@/components/MoneyText.vue'
 import DonutChart from '@/components/charts/DonutChart.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import type { AccountKindDto } from '@/ipc'
 import { assetsByKind } from '@/lib/accounts'
-import { formatCompact, formatIdr } from '@/lib/money'
 import { formatBp } from '@/lib/percent'
 import { useAccountsStore } from '@/stores/accounts'
 import { useSettingsStore } from '@/stores/settings'
@@ -34,7 +34,7 @@ const rows = computed(() => assetsByKind(accounts.overview).map((r) => ({
 })))
 // Segmen yang disorot; hover legenda dan donut berbagi state ini.
 const hovered = ref<string | null>(null)
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, compact } = useMoneyFormat()
 const segments = computed(() => rows.value.map((r) => ({
   key: r.kind, label: t(`accountKinds.${r.kind}`), value: r.amount, color: r.color,
 })))
@@ -54,7 +54,7 @@ const segments = computed(() => rows.value.map((r) => ({
           <DonutChart v-model:active="hovered" :segments="segments" :label="$t('dashboard.compositionDonut')" :format="money" :locale="settings.locale" />
           <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-part="donut-total">
             <span class="text-meta text-muted-foreground">IDR</span>
-            <span class="num text-heading font-semibold">{{ formatCompact(nw.assets, settings.locale) }}</span>
+            <span class="num text-heading font-semibold">{{ compact(nw.assets) }}</span>
           </div>
         </div>
         <ul class="flex w-full min-w-0 flex-1 flex-col gap-1.5 text-sm">

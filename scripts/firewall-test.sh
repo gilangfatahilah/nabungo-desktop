@@ -2,7 +2,8 @@
 # Firewall test (PRD §8: "0 request keluar"). Jalankan binary release di network namespace yang
 # hanya punya `lo` + interface dummy (default route + DNS diarahkan ke sana), rekam semua paket IP
 # dengan tcpdump, dan pastikan jumlahnya 0. App memakai protokol tauri://, jadi paket di `lo` pun
-# dihitung. Fixture memakai konfigurasi default (tanpa auto-capture email `EML-*`, yang opt-in):
+# dihitung. Fixture memakai konfigurasi default (tanpa auto-capture email `EML-*` dan tanpa cek
+# update otomatis `update.auto_check`, keduanya opt-in):
 # fitur jaringan opt-in tidak boleh membuka koneksi selama belum dikonfigurasi.
 #
 # Pakai: scripts/firewall-test.sh <app-bin> <seed_fixture-bin>

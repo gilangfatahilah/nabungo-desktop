@@ -6,6 +6,7 @@ import id from '@/i18n/id'
 import type { CategoryDto } from '@/ipc'
 import { useCategoriesStore } from '@/stores/categories'
 import MergeCategoryDialog from './MergeCategoryDialog.vue'
+import { selectedLabel } from '@/test/select'
 
 function cat(cid: string, name: string, kind: CategoryDto['kind'] = 'expense', archived = false): CategoryDto {
   return { id: cid, parentId: null, kind, name, icon: null, color: null, sortOrder: 0, archived, inUse: true }
@@ -13,8 +14,6 @@ function cat(cid: string, name: string, kind: CategoryDto['kind'] = 'expense', a
 
 const makan = cat('makan', 'Makan')
 const list = [makan, cat('jajan', 'Jajan'), cat('lama', 'Lama', 'expense', true), cat('gaji', 'Gaji', 'income')]
-
-const key = (el: Element, k: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }))
 
 describe('MergeCategoryDialog', () => {
   beforeEach(() => setActivePinia(createPinia()))
@@ -33,13 +32,15 @@ describe('MergeCategoryDialog', () => {
     })
     await flushPromises()
 
-    key(document.body.querySelector('[data-testid="merge-target"]')!, 'Enter')
+    const trigger = document.body.querySelector<HTMLElement>('[data-testid="merge-target"]')!
+    trigger.click()
     await flushPromises()
     const options = [...document.body.querySelectorAll('[role="option"]')]
     expect(options.map((o) => o.textContent?.trim())).toEqual(['Jajan'])
 
-    key(options[0]!, 'Enter')
+    ;(options[0] as HTMLElement).click()
     await flushPromises()
+    expect(selectedLabel(trigger)).toBe('Jajan')
     expect(document.body.textContent).toContain('Semua transaksi dan budget Makan dipindah ke Jajan.')
 
     const confirm = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.trim() === id.categories.merge)

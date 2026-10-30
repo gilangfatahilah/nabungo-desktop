@@ -123,6 +123,20 @@ pub enum AppError {
     /// Email capture belum dihubungkan (atau App Password tidak ada di keychain).
     #[error("email capture is not configured")]
     EmailNotConfigured,
+    /// Server update tidak terjangkau atau responsnya tidak bisa dibaca.
+    #[error("update server unreachable")]
+    UpdateNetwork,
+    /// Repo/rilis tidak ditemukan (repo privat atau belum ada rilis).
+    #[error("no release found")]
+    UpdateNotFound,
+    /// Rilis tidak punya installer (dengan checksum) untuk format instalasi ini.
+    #[error("no installer for this installation")]
+    UpdateNoAsset,
+    /// Installer terunduh tidak cocok dengan `SHA256SUMS` atau melebihi batas ukuran.
+    #[error("downloaded installer is invalid")]
+    UpdateChecksum,
+    #[error("update download cancelled")]
+    UpdateCancelled,
 }
 
 impl From<StorageError> for AppError {

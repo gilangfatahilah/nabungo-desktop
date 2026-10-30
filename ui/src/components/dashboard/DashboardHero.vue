@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Minus, TrendingDown, TrendingUp } from '@lucide/vue'
+import AmountsToggle from '@/components/AmountsToggle.vue'
 import MoneyText from '@/components/MoneyText.vue'
 import { Badge } from '@/components/ui/badge'
 import { formatTrend, trendPercent } from '@/lib/trend'
@@ -51,7 +52,10 @@ function trend(k: Kpi) {
 <template>
   <section class="flex flex-col gap-6 @3xl/main:flex-row @3xl/main:items-end @3xl/main:justify-between" data-testid="dashboard-hero">
     <div class="flex flex-col gap-1" :data-testid="`kpi-${netWorth.key}`">
-      <span class="text-meta text-muted-foreground">{{ netWorth.label }}</span>
+      <div class="flex items-center gap-1">
+        <span class="text-meta text-muted-foreground">{{ netWorth.label }}</span>
+        <AmountsToggle size="icon-sm" class="text-muted-foreground" />
+      </div>
       <div class="flex flex-wrap items-center gap-3">
         <MoneyText
           :amount="netWorth.amount" :kind="netWorth.amount < 0 ? 'expense' : 'neutral'"

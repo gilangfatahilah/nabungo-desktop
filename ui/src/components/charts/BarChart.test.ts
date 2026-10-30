@@ -17,10 +17,10 @@ describe('BarChart', () => {
     expect(svg.attributes('aria-label')).toBeTruthy()
   })
 
-  it('satu rect per seri per label', () => {
+  it('satu batang per seri per label', () => {
     const w = mount(BarChart, { props })
     expect(w.get('svg').attributes('aria-label')).toBe('Cashflow')
-    const rects = w.findAll('rect[data-key]')
+    const rects = w.findAll('path[data-key]')
     expect(rects).toHaveLength(6)
     expect(rects.map((r) => `${r.attributes('data-key')}:${r.attributes('data-index')}`)).toEqual([
       'in:0', 'out:0', 'in:1', 'out:1', 'in:2', 'out:2',
@@ -29,10 +29,21 @@ describe('BarChart', () => {
 
   it('tinggi batang proporsional terhadap nilai', () => {
     const w = mount(BarChart, { props })
-    const h = (key: string, i: number) => Number(w.get(`rect[data-key="${key}"][data-index="${i}"]`).attributes('height'))
+    const h = (key: string, i: number) => Number(w.get(`path[data-key="${key}"][data-index="${i}"]`).attributes('data-height'))
     expect(h('in', 1)).toBeCloseTo(2 * h('in', 0))
     expect(h('in', 2)).toBeCloseTo(3 * h('in', 0))
     expect(h('out', 2)).toBe(0)
+  })
+
+  it('ujung batang membulat ke arah nilai, pangkal rata di sumbu nol', () => {
+    const w = mount(BarChart, { props: { ...props, series: [{ key: 'v', label: 'V', color: 'red', values: [100, -100, 0] }] } })
+    const d = (i: number) => w.get(`path[data-key="v"][data-index="${i}"]`).attributes('d')!
+    // Positif: busur searah jarum jam di atas; negatif: berlawanan di bawah; nol: tanpa busur.
+    expect(d(0)).toMatch(/A6,6 0 0 1 .*A6,6 0 0 1/)
+    expect(d(1)).toMatch(/A6,6 0 0 0 .*A6,6 0 0 0/)
+    expect(d(2)).toContain('A0,0')
+    const base = (s: string) => s.match(/^M[\d.]+,([\d.]+)/)![1]
+    expect(base(d(0))).toBe(base(d(1)))
   })
 
   it('Enter memilih kelompok; panah memindah fokus; kelompok terpilih berlatar', async () => {
@@ -63,8 +74,8 @@ describe('BarChart', () => {
     expect(tip.text()).toContain('Masuk')
     expect(tip.text()).toContain('Rp200')
     expect(tip.text()).toContain('Rp100')
-    expect(w.get('rect[data-key="in"][data-index="0"]').attributes('opacity')).toBe('0.4')
-    expect(w.get('rect[data-key="in"][data-index="1"]').attributes('opacity')).toBeUndefined()
+    expect(w.get('path[data-key="in"][data-index="0"]').attributes('opacity')).toBe('0.4')
+    expect(w.get('path[data-key="in"][data-index="1"]').attributes('opacity')).toBeUndefined()
     await w.trigger('mouseleave')
     expect(w.find('[data-part="tooltip"]').exists()).toBe(false)
   })

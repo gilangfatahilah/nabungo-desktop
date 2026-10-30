@@ -33,9 +33,9 @@ async function mountSidebar(path: string) {
 }
 
 describe('AppSidebar', () => {
-  it('angka di sidebar tanpa prefiks Rp', async () => {
+  it('kekayaan bersih tidak lagi di sidebar (ada di hero Dasbor)', async () => {
     const w = await mountSidebar('/')
-    expect(w.find('[data-testid="sidebar-net-worth"]').text()).toBe('4.343.000')
+    expect(w.text()).not.toContain('4.343.000')
   })
 
   it('daftar saldo per akun tidak lagi di sidebar (pindah ke Dasbor)', async () => {
@@ -50,7 +50,7 @@ describe('AppSidebar', () => {
     w.unmount()
     useSecurityStore().encrypted = true
     w = await mountSidebar('/')
-    expect(w.find('[data-testid="sidebar-lock"]').attributes('aria-label')).toBe('Kunci sekarang')
+    expect(w.find('[data-testid="sidebar-lock"]').text()).toBe('Kunci sekarang')
   })
 
   it('tombol utama berlabel "Transaksi baru"', async () => {

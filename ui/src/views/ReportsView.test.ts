@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { i18n } from '@/i18n'
 import id from '@/i18n/id'
 import * as ipc from '@/ipc'
@@ -22,9 +23,25 @@ async function settle() {
 }
 
 async function view() {
-  mount(ReportsView, { global: { plugins: [i18n] }, attachTo: document.body })
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/reports', component: ReportsView }, { path: '/transactions', component: { template: '<div />' } }],
+  })
+  await router.push('/reports')
+  await router.isReady()
+  mount(ReportsView, { global: { plugins: [i18n, router] }, attachTo: document.body })
+  await settle()
+  return router
+}
+
+async function click(sel: string | HTMLElement) {
+  ;(typeof sel === 'string' ? $(sel) : sel).click()
   await settle()
 }
+
+const openTable = (name: string) => click(`[data-testid="${name}-table-toggle"]`)
+const names = () => $$('[data-testid="breakdown-row"] [data-part="name"]').map((n) => n.textContent!.trim())
+const part = (el: Element, p: string) => el.querySelector(`[data-part="${p}"]`)?.textContent!.replace(/\s+/g, ' ').trim()
 
 beforeAll(async () => {
   bca = await ipc.completeOnboarding({
@@ -54,55 +71,110 @@ describe('ReportsView', () => {
   })
   afterEach(() => {
     vi.useRealTimers()
+    localStorage.clear()
     document.body.innerHTML = ''
   })
 
-  it('menampilkan 12 periode dan tabel cashflow', async () => {
+  it('KPI periode fokus dengan tren dan rasio tabungan', async () => {
     await view()
-    expect($('[data-part="summary"]').textContent).toContain(id.reports.lastPeriods.replace('{count}', '12'))
-    expect($$('[data-testid="cashflow-chart"] rect[data-key]')).toHaveLength(24)
-    const rows = $$('[data-testid^="cashflow-row-"]')
-    expect(rows).toHaveLength(12)
+    expect($('[data-part="summary"]').textContent).toContain('1 Okt')
+    expect($('[data-testid="period-label"]').textContent).toContain('Okt 2026')
+    expect($<HTMLButtonElement>('[data-testid="period-next"]').disabled).toBe(true)
+    const kpi = (k: string) => $(`[data-testid="reports-kpi-${k}"]`)
+    expect(part(kpi('income'), 'amount')).toBe('Rp 8.000.000')
+    expect(part(kpi('expense'), 'amount')).toBe('Rp 65.000')
+    expect(part(kpi('expense'), 'trend')).toContain('+30%')
+    expect(part(kpi('expense'), 'hint')).toBe('Rp 3.824 per hari')
+    expect(part(kpi('savings'), 'amount')).toBe('99%')
+  })
+
+  it('arus kas: chart rentang, tabel terlipat, klik baris memindah fokus', async () => {
+    await view()
+    expect($$('[data-testid="cashflow-chart"] path[data-key]')).toHaveLength(24)
+    expect($('[data-testid="cashflow-row-2026-10"]')).toBeNull()
+    await openTable('cashflow')
+    expect($$('[data-testid^="cashflow-row-"]')).toHaveLength(12)
     expect(cells($('[data-testid="cashflow-row-2026-10"]'))).toEqual(['Okt 2026', '8.000.000', '65.000', '7.935.000'])
     expect(cells($('[data-testid="cashflow-row-2026-09"]'))).toEqual(['Sep 2026', '0', '50.000', '−50.000'])
     expect($('[data-testid="cashflow-row-2026-09"] [data-part="net"]').className).toContain('text-destructive')
-  })
 
-  it('memilih periode memperbarui breakdown', async () => {
-    await view()
-    expect($('[data-testid="breakdown-title"]').textContent).toContain('Okt 2026')
-    const names = () => $$('[data-testid="breakdown-row"] [data-part="name"]').map((n) => n.textContent!.trim())
-    expect(names()).toEqual(['Transportasi', 'Makan & Minum'])
-    expect(cells($$('[data-testid="breakdown-row"]')[0]!)).toEqual(['Transportasi', '40.000', '61,54%'])
-
-    $('[data-testid="cashflow-row-2026-09"]').click()
-    await settle()
+    await click('[data-testid="cashflow-row-2026-09"]')
     expect($('[data-testid="breakdown-title"]').textContent).toContain('Sep 2026')
     expect(names()).toEqual(['Makan & Minum'])
+    expect($<HTMLButtonElement>('[data-testid="period-next"]').disabled).toBe(false)
 
-    const group = $$('[data-testid="cashflow-chart"] [data-part="group"]').at(-1)!
-    group.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    await settle()
+    await click('[data-testid="period-next"]')
     expect($('[data-testid="breakdown-title"]').textContent).toContain('Okt 2026')
   })
 
-  it('tab pemasukan menampilkan kategori income', async () => {
+  it('kategori: porsi, banding periode lalu, sub-kategori', async () => {
+    await view()
+    expect(names()).toEqual(['Transportasi', 'Makan & Minum'])
+    const [transport, food] = $$('[data-testid="breakdown-row"]')
+    expect(part(transport!, 'amount')).toBe('40.000')
+    expect(part(transport!, 'share')).toBe('61,54%')
+    expect(part(food!, 'trend')).toContain('−50%')
+    expect($('[data-testid="breakdown-child"]')).toBeNull()
+    await click(food!.querySelector<HTMLElement>('[data-part="expand"]')!)
+    expect($$('[data-testid="breakdown-child"]').map((c) => c.textContent!.replace(/\s+/g, ' ').trim()))
+      .toEqual([expect.stringContaining('Kopi & jajan'), expect.stringContaining('Restoran')])
+  })
+
+  it('tren kategori mengikuti pilihan baris; perubahan terbesar', async () => {
+    await view()
+    expect($('[data-testid="trend-category"]').textContent).toContain('Transportasi')
+    await click($$('[data-testid="breakdown-row"] [data-part="select"]')[1]!)
+    expect($('[data-testid="trend-category"]').textContent).toContain('Makan & Minum')
+    expect(part($('[data-testid="reports-trend"]'), 'max')).toContain('50.000')
+    await openTable('trend')
+    expect($$('[data-testid="reports-trend"] [role="row"]')).toHaveLength(13)
+
+    const changes = $('[data-testid="reports-changes"]')
+    expect(part(changes.querySelector('[data-part="up"]')!, 'delta')).toBe('+40.000')
+    expect(part(changes.querySelector('[data-part="down"]')!, 'delta')).toBe('−25.000')
+  })
+
+  it('panah kategori membuka Transaksi terfilter kategori dan periode', async () => {
+    const router = await view()
+    const transport = (await ipc.listCategories()).find((c) => c.name === 'Transportasi')!.id
+    await click($('[data-testid="breakdown-row"] [data-part="view-txns"]'))
+    expect(router.currentRoute.value.path).toBe('/transactions')
+    const q = useTransactionsStore().query
+    expect(q.categoryId).toBe(transport)
+    expect([q.dateFrom, q.dateTo]).toEqual(['2026-10-01', '2026-10-31'])
+  })
+
+  it('tab pemasukan dan periode kosong', async () => {
     await view()
     const tab = $$('[role="tab"]').find((t) => t.textContent!.trim() === id.reports.income)!
     tab.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }))
     await settle()
-    const rows = $$('[data-testid="breakdown-row"]')
-    expect(rows.map(cells)).toEqual([['Gaji', '8.000.000', '100%']])
+    expect(names()).toEqual(['Gaji'])
+    expect(part($('[data-testid="breakdown-row"]'), 'share')).toBe('100%')
 
-    $('[data-testid="cashflow-row-2026-08"]').click()
-    await settle()
+    await click('[data-testid="period-prev"]')
+    await click('[data-testid="period-prev"]')
     expect($$('[data-testid="breakdown-row"]')).toHaveLength(0)
     expect($('[data-testid="breakdown-empty"]').textContent).toContain(id.reports.emptyIncome)
   })
 
+  it('rentang chart mengubah jumlah periode', async () => {
+    await view()
+    $('[data-testid="reports-range"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await settle()
+    const options = $$('[role="option"]')
+    expect(options.map((o) => o.textContent!.trim())).toEqual(Object.values(id.reports.ranges))
+    options[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await settle()
+    expect(localStorage.getItem('nabungo.reports.range')).toBe('3')
+    expect($$('[data-testid="cashflow-chart"] path[data-key]')).toHaveLength(6)
+  })
+
   it('kekayaan bersih menampilkan tabel per periode', async () => {
     await view()
-    expect($$('[data-testid="networth-chart"] polyline[data-key]')).toHaveLength(3)
+    expect($$('[data-testid="networth-chart"] path[data-key]')).toHaveLength(3)
+    expect($$('[data-testid="networth-chart"] [data-part="area"]')).toHaveLength(1)
+    await openTable('networth')
     expect($$('[data-testid^="networth-row-"]')).toHaveLength(12)
     expect(cells($('[data-testid="networth-row-2026-08"]'))).toEqual(['Agu 2026', '0', '0', '0'])
     expect(cells($('[data-testid="networth-row-2026-09"]'))).toEqual(['Sep 2026', '950.000', '0', '950.000'])
@@ -117,7 +189,8 @@ describe('ReportsView', () => {
       amount: 10_000, categoryId: transport,
     })
     await settle()
+    await openTable('cashflow')
     expect(cells($('[data-testid="cashflow-row-2026-10"]'))).toEqual(['Okt 2026', '8.000.000', '75.000', '7.925.000'])
-    expect(cells($$('[data-testid="breakdown-row"]')[0]!)).toEqual(['Transportasi', '50.000', '66,67%'])
+    expect(part($('[data-testid="breakdown-row"]'), 'share')).toBe('66,67%')
   })
 })

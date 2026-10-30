@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import CategorySelect from '@/components/CategorySelect.vue'
 import type { CategoryDto, CategoryKindDto } from '@/ipc'
 import { buildTree } from '@/lib/categories'
 import { errorMessage, type Translate } from '@/lib/errors'
@@ -92,13 +92,10 @@ async function submit() {
         </div>
         <div class="flex flex-col gap-2">
           <Label id="cat-parent">{{ t('categories.parent') }}</Label>
-          <Select v-model="parent" :disabled="hasChildren">
-            <SelectTrigger aria-labelledby="cat-parent" class="w-full" :disabled="hasChildren"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem :value="NO_PARENT">{{ t('categories.noParent') }}</SelectItem>
-              <SelectItem v-for="c in parents" :key="c.id" :value="c.id">{{ c.name }}</SelectItem>
-            </SelectContent>
-          </Select>
+          <CategorySelect
+            :model-value="parent === NO_PARENT ? null : parent" :categories="parents" :none-label="t('categories.noParent')"
+            aria-labelledby="cat-parent" class="w-full" :disabled="hasChildren" @update:model-value="parent = $event ?? NO_PARENT"
+          />
           <p v-if="hasChildren" class="text-xs text-muted-foreground">{{ t('categories.parentLocked') }}</p>
         </div>
         <IconColorPicker v-model:icon="icon" v-model:color="color" />
