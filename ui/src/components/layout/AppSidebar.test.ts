@@ -50,7 +50,7 @@ describe('AppSidebar', () => {
     w.unmount()
     useSecurityStore().encrypted = true
     w = await mountSidebar('/')
-    expect(w.find('[data-testid="sidebar-lock"]').attributes('aria-label')).toBe('Kunci sekarang')
+    expect(w.find('[data-testid="sidebar-lock"]').text()).toBe('Kunci sekarang')
   })
 
   it('tombol utama berlabel "Transaksi baru"', async () => {

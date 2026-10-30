@@ -8,6 +8,7 @@ import type { TxnFormDto } from '@/ipc'
 import { formatDateInput } from '@/lib/date'
 import { useUiStore } from '@/stores/ui'
 import RuleSheet from './RuleSheet.vue'
+import { pickOption } from '@/test/select'
 
 const $ = <T extends Element = HTMLInputElement>(sel: string) => document.body.querySelector(sel) as T
 
@@ -64,13 +65,7 @@ describe('RuleSheet', () => {
     amount.value = '15000'
     amount.dispatchEvent(new Event('input', { bubbles: true }))
     await settle()
-    const c = $('#txn-category')
-    c.focus()
-    c.value = 'Listrik RS'
-    c.dispatchEvent(new Event('input', { bubbles: true }))
-    await settle()
-    c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
-    await settle()
+    await pickOption($<HTMLElement>('#txn-category'), 'Listrik RS')
     await save()
     const rules = await ipc.listRules()
     expect(rules.length).toBe(before + 1)
