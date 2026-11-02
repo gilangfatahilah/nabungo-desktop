@@ -1,6 +1,15 @@
-Nabungo adalah aplikasi keuangan pribadi desktop yang berjalan sepenuhnya offline: transaksi, saldo akun, budget, dan alokasi modal tersimpan di satu file SQLite milik Anda. Tidak ada akun, tidak ada telemetry, tidak ada koneksi internet saat aplikasi berjalan.
+Nabungo adalah aplikasi keuangan pribadi desktop yang berjalan sepenuhnya offline: transaksi, saldo akun, budget, dan alokasi modal tersimpan di satu file SQLite milik Anda. Tidak ada akun, tidak ada telemetry, dan tidak ada koneksi internet kecuali untuk fitur opsional yang Anda aktifkan sendiri (email capture, periksa update).
 
-Baru: **Email capture** (opsional, mati secara default). Nabungo membaca email notifikasi bank dari satu label Gmail secara read-only lewat App Password yang disimpan di keychain sistem, lalu menyiapkan transaksi di Inbox untuk ditinjau. Rule pembacaan bisa diubah, dan rule baru bisa dibuat dari email yang gagal dibaca. Hanya fitur ini yang memakai internet, dan hanya setelah Anda mengaktifkannya.
+## Baru di v0.4.0
+
+- **Laporan dirombak**: tampilan berbasis kartu dengan ringkasan KPI, arus kas, grafik kekayaan bersih, perbandingan dan tren per kategori, serta perubahan terbesar dibanding periode sebelumnya.
+- **Update dari aplikasi**: Pengaturan → Update aplikasi memeriksa rilis terbaru, menampilkan catatan rilis, lalu mengunduh dan memasang installer yang sesuai setelah diverifikasi dengan `SHA256SUMS`. Cek otomatis saat aplikasi dibuka bersifat opsional dan mati secara default.
+- **Sembunyikan nominal** (`Ctrl+Shift+H` atau tombol di header): angka di Dasbor, Laporan, Budget, dan Alokasi disamarkan, cocok saat berbagi layar. Pilihan ini diingat per perangkat.
+- **Pemilih kategori dan akun** yang baru, dengan ikon dan kotak cari, serta input rentang tanggal.
+- **Inbox** kini ada di navigasi utama, dan Dasbor menampilkan kartu Inbox.
+- Daftar transaksi bisa difilter berdasarkan jenis (pemasukan, pengeluaran, transfer).
+
+Sudah ada sejak v0.3.0: **Email capture** (opsional, mati secara default) membaca email notifikasi bank dari satu label Gmail secara read-only lewat App Password yang disimpan di keychain sistem, lalu menyiapkan transaksi di Inbox untuk ditinjau.
 
 ## Unduhan
 
