@@ -35,13 +35,6 @@ import { useScheduledStore } from '@/stores/scheduled'
 import { useUiStore } from '@/stores/ui'
 
 // Struktur mengikuti shadcn-vue dashboard-01 (docs/design/design.md §6.2).
-const main: NavItem[] = [
-  { name: 'dashboard', to: '/', icon: LayoutDashboard, keys: 'G D' },
-  { name: 'transactions', to: '/transactions', icon: ReceiptText, keys: 'G T' },
-  { name: 'budget', to: '/budget', icon: Wallet, keys: 'G B' },
-  { name: 'allocation', to: '/allocation', icon: ChartPie, keys: 'G A' },
-  { name: 'reports', to: '/reports', icon: ChartColumn, keys: 'G R' },
-]
 const secondary: NavItem[] = [{ name: 'settings', to: '/settings', icon: Settings, keys: 'Ctrl+,' }]
 
 const ui = useUiStore()
@@ -52,12 +45,19 @@ onMounted(() => void withErrorToast(() => scheduled.reload()))
 // Badge Inbox ikut sync email (manual maupun terjadwal).
 onMounted(() => void withErrorToast(() => Promise.all([inbox.listen(), inbox.reloadSummary()])))
 
+const main = computed<NavItem[]>(() => [
+  { name: 'dashboard', to: '/', icon: LayoutDashboard, keys: 'G D' },
+  { name: 'transactions', to: '/transactions', icon: ReceiptText, keys: 'G T' },
+  { name: 'budget', to: '/budget', icon: Wallet, keys: 'G B' },
+  { name: 'allocation', to: '/allocation', icon: ChartPie, keys: 'G A' },
+  ...(inbox.showNav ? [{ name: 'inbox' as const, to: '/inbox', icon: Inbox, badge: inbox.summary.pending }] : []),
+  { name: 'reports', to: '/reports', icon: ChartColumn, keys: 'G R' },
+])
 const manage = computed<NavItem[]>(() => [
   { name: 'accounts', to: '/accounts', icon: Landmark },
   { name: 'categories', to: '/categories', icon: Shapes },
   { name: 'labels', to: '/labels', icon: Tags },
   { name: 'scheduled', to: '/scheduled', icon: CalendarClock, badge: scheduled.dueCount },
-  ...(inbox.showNav ? [{ name: 'inbox' as const, to: '/inbox', icon: Inbox, badge: inbox.summary.pending }] : []),
 ])
 </script>
 

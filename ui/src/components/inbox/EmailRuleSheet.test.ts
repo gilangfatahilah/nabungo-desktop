@@ -9,6 +9,7 @@ import type { EmailRuleDto, EmailRuleInputDto } from '@/ipc'
 import { __seedEmailInbox } from '@/ipc/browser-ledger'
 import { useInboxStore } from '@/stores/inbox'
 import EmailRuleSheet from './EmailRuleSheet.vue'
+import { pickOption } from '@/test/select'
 
 const toastMock = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }))
 vi.mock('vue-sonner', () => ({ toast: toastMock }))
@@ -105,7 +106,7 @@ describe('EmailRuleSheet', () => {
     await pick('er-kind', id.emailRules.kind.transfer_out)
     expect($('[data-testid="er-category"]')).toBeNull()
     expect($('[data-testid="er-counter"]')).not.toBeNull()
-    await pick('er-counter', 'Jago ER')
+    await pickOption($<HTMLElement>('[data-testid="er-counter"]'), 'Jago ER')
     await pick('er-kind', id.emailRules.kind.income)
     expect($('[data-testid="er-counter"]')).toBeNull()
     // Kategori pengeluaran tidak cocok untuk pemasukan: dikosongkan.

@@ -47,6 +47,7 @@ mod tags;
 #[cfg(test)]
 mod testkit;
 mod transactions;
+pub mod update;
 mod valuation;
 pub mod vault;
 
@@ -99,7 +100,10 @@ pub use payee::PayeeSuggestion;
 pub use readers::ReadPool;
 pub use reconcile::Reconciliation;
 pub use recurring::{MAX_CATCH_UP, RuleInput, RuleRow};
-pub use reports::{CashflowPoint, CategoryAmount, MAX_PERIODS, NetWorthPoint};
+pub use reports::{
+    CashflowPoint, CategoryAmount, CategoryComparison, CategoryDelta, CategoryTrendPoint,
+    MAX_PERIODS, NetWorthPoint,
+};
 pub use settings::{AUTO_LOCK_CHOICES, Locale, Theme, UiSettings};
 pub use time::{Date, OffsetDateTime, UtcOffset};
 pub use transactions::{TxnDetail, TxnForm};

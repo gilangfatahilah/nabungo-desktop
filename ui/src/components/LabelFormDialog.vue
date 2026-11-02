@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CategoryCombobox from '@/components/txn/CategoryCombobox.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -76,7 +76,7 @@ async function submit() {
         </div>
         <div v-if="kind === 'payee'" class="flex flex-col gap-2">
           <Label for="label-category">{{ t('labels.defaultCategory') }}</Label>
-          <CategoryCombobox id="label-category" v-model="category" :placeholder="t('labels.noDefault')" />
+          <CategorySelect id="label-category" v-model="category" class="w-full" :none-label="t('labels.noDefault')" />
         </div>
         <p v-if="error" class="text-sm text-destructive" role="alert">{{ error }}</p>
         <DialogFooter>

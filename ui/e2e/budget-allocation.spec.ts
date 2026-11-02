@@ -6,7 +6,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toBeVisible()
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toBeVisible()
 }
 
 async function go(page: Page, hash: string) {
@@ -20,6 +20,7 @@ async function quickExpense(page: Page) {
   await amount.pressSequentially('25rb')
   await page.keyboard.press('Tab')
   await expect(page.locator('#txn-category')).toBeFocused()
+  await page.keyboard.press('Enter')
   await page.keyboard.type('Kopi')
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')
@@ -91,6 +92,7 @@ test('reports show current period', async ({ page }) => {
   await onboard(page)
   await quickExpense(page)
   await go(page, '#/reports')
+  await page.getByTestId('cashflow-table-toggle').click()
   const current = page.locator('[data-testid^="cashflow-row-"]').last()
   await expect(current).toHaveAttribute('aria-selected', 'true')
   await expect(current.getByRole('cell').nth(2)).toHaveText('25.000')

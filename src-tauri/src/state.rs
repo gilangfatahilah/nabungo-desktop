@@ -27,6 +27,7 @@ pub struct AppState {
     pub started: Instant,
     pub ready_logged: AtomicBool,
     pub email: EmailRuntime,
+    pub update: crate::update::UpdateRuntime,
 }
 
 /// Status sync email selama proses berjalan (tidak disimpan).

@@ -4,11 +4,12 @@ use nabungo_app::{
     AccountFields, AccountGroupRow, AccountKind, AccountRow, AccountsOverview, AllocationOverview,
     AllocationPoint, AttachmentRow, BackupInfo, BackupKind, BucketFields, BucketRow, BudgetAlert,
     BudgetLevel, BudgetOverview, BudgetPeriod, BudgetRow, CashflowPoint, CategoryAmount,
-    CategoryFields, CategoryKind, CategoryRow, ContactRow, Date, Fee, FormBody, Freq, Locale,
-    NetWorth, NetWorthPoint, OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay,
-    PostingRecord, Reconciliation, RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme,
-    TxnDetail, TxnForm, TxnKind, TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings,
-    Uuid, ValuationPoint, format_date, parse_date,
+    CategoryComparison, CategoryDelta, CategoryFields, CategoryKind, CategoryRow,
+    CategoryTrendPoint, ContactRow, Date, Fee, FormBody, Freq, Locale, NetWorth, NetWorthPoint,
+    OnboardingInput, PayeeSuggestion, PayeeUsage, PeriodStartDay, PostingRecord, Reconciliation,
+    RuleInput, RuleRow, SplitLine, TagUsage, Target, Theme, TxnDetail, TxnForm, TxnKind,
+    TxnListRow, TxnPage, TxnQuery, TxnSort, TxnSortField, UiSettings, Uuid, ValuationPoint,
+    format_date, parse_date,
 };
 use nabungo_app::{
     EmailRuleInput, EmailRuleItem, ReparseSummary, RuleKind, RuleSample, RuleSaved, RuleTest,
@@ -642,6 +643,8 @@ pub struct TxnQueryDto {
     pub date_from: Option<String>,
     pub date_to: Option<String>,
     pub account_id: Option<String>,
+    /// `null` = semua jenis.
+    pub kind: Option<TxnFormKindDto>,
     pub category_id: Option<String>,
     pub tag: Option<String>,
     pub payee_id: Option<String>,
@@ -692,6 +695,11 @@ impl TryFrom<TxnQueryDto> for TxnQuery {
             date_from: day(d.date_from)?,
             date_to: day(d.date_to)?,
             account_id: parse_opt_id(d.account_id.as_deref(), "account")?,
+            kind: d.kind.map(|k| match k {
+                TxnFormKindDto::Income => TxnKind::Income,
+                TxnFormKindDto::Expense => TxnKind::Expense,
+                TxnFormKindDto::Transfer => TxnKind::Transfer,
+            }),
             category_id: parse_opt_id(d.category_id.as_deref(), "category")?,
             tag: d.tag,
             payee_id: parse_opt_id(d.payee_id.as_deref(), "payee")?,
@@ -1329,6 +1337,69 @@ impl From<CategoryAmount> for CategoryAmountDto {
         Self {
             category_id: c.category_id.to_string(),
             amount: c.amount,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryDeltaDto {
+    pub category_id: String,
+    pub amount: i64,
+    /// Nominal periode sebelumnya.
+    pub previous: i64,
+}
+
+impl From<CategoryDelta> for CategoryDeltaDto {
+    fn from(c: CategoryDelta) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+            previous: c.previous,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryComparisonDto {
+    /// Kategori root; nominal termasuk child.
+    pub category_id: String,
+    pub amount: i64,
+    /// Nominal periode sebelumnya.
+    pub previous: i64,
+    /// Rincian per child (posting langsung di root memakai id root); kosong bila tidak ada child.
+    pub children: Vec<CategoryDeltaDto>,
+}
+
+impl From<CategoryComparison> for CategoryComparisonDto {
+    fn from(c: CategoryComparison) -> Self {
+        Self {
+            category_id: c.category_id.to_string(),
+            amount: c.amount,
+            previous: c.previous,
+            children: c.children.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryTrendPointDto {
+    pub period: String,
+    pub from: String,
+    /// Inklusif.
+    pub to: String,
+    pub amount: i64,
+}
+
+impl From<CategoryTrendPoint> for CategoryTrendPointDto {
+    fn from(p: CategoryTrendPoint) -> Self {
+        Self {
+            period: p.period.key(),
+            from: format_date(p.from),
+            to: format_date(p.to),
+            amount: p.amount,
         }
     }
 }
@@ -2601,4 +2672,106 @@ mod email_rule_tests {
             nabungo_app::RuleSample::Unparsed("m1".into())
         );
     }
+}
+
+// --- Update aplikasi ---
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallKindDto {
+    Deb,
+    Rpm,
+    #[serde(rename = "appimage")]
+    AppImage,
+    Nsis,
+    Msi,
+}
+
+impl From<nabungo_app::update::InstallKind> for InstallKindDto {
+    fn from(k: nabungo_app::update::InstallKind) -> Self {
+        use nabungo_app::update::InstallKind;
+        match k {
+            InstallKind::Deb => Self::Deb,
+            InstallKind::Rpm => Self::Rpm,
+            InstallKind::AppImage => Self::AppImage,
+            InstallKind::Nsis => Self::Nsis,
+            InstallKind::Msi => Self::Msi,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInstallerDto {
+    pub name: String,
+    pub size: u64,
+}
+
+/// Hasil cek update. `installer` `None` → hanya tawarkan halaman rilis.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfoDto {
+    pub current: String,
+    pub latest: String,
+    pub available: bool,
+    pub notes: String,
+    pub published_at: Option<String>,
+    pub installer: Option<UpdateInstallerDto>,
+}
+
+impl UpdateInfoDto {
+    pub fn new(c: &nabungo_app::update::UpdateCheck) -> Self {
+        Self {
+            current: c.current.clone(),
+            latest: c.latest.clone(),
+            available: c.available,
+            notes: c.notes.clone(),
+            published_at: c.published_at.clone(),
+            installer: c.installer.as_ref().map(|i| UpdateInstallerDto {
+                name: i.name.clone(),
+                size: i.size,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateStatusDto {
+    pub current: String,
+    pub auto_check: bool,
+    /// `None`: dev build, binary tanpa installer, atau mode portable.
+    pub install_kind: Option<InstallKindDto>,
+    /// Cek terakhir selama proses ini (termasuk cek otomatis).
+    pub last_check: Option<UpdateInfoDto>,
+    /// Installer sudah terunduh dan terverifikasi, siap dipasang.
+    pub downloaded: bool,
+    pub downloading: bool,
+}
+
+/// Hasil `install_update`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallOutcomeDto {
+    /// rpm/deb dibuka di installer paket sistem; mulai ulang setelah terpasang.
+    InstallerOpened,
+    /// AppImage baru di luar folder AppImage lama: ditampilkan di file manager.
+    Revealed,
+    /// Installer Windows dibuka dan aplikasi ditutup.
+    Exiting,
+}
+
+/// Kemajuan unduhan installer (dikirim per persen).
+#[derive(Debug, Clone, Copy, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDownloadProgress {
+    pub downloaded: u64,
+    pub total: u64,
+}
+
+/// Cek otomatis saat startup menemukan versi baru.
+#[derive(Debug, Clone, Serialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAvailable {
+    pub latest: String,
 }

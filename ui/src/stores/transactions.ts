@@ -17,7 +17,7 @@ export type { TxnFilter } from '@/lib/txnFilter'
 const PAGE = 100
 
 export const EMPTY_FILTER: TxnFilter = {
-  dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+  dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
   amountMin: null, amountMax: null, search: null,
 }
 

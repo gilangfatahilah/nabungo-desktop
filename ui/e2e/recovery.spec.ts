@@ -10,7 +10,7 @@ test('DB tidak terbaca: semua rute ke pemulihan, restore backup kembali ke dasbo
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  const netWorth = page.locator('[data-testid="sidebar-net-worth"]')
+  const netWorth = page.locator('[data-testid="kpi-net-worth"]')
   await expect(netWorth).toContainText('1.000.000')
 
   await go(page, '#/settings')

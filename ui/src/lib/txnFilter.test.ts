@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { activeFilterCount, periodOf, periodRange } from './txnFilter'
 
-const EMPTY = { dateFrom: null, dateTo: null, accountId: null, categoryId: null, tag: null, payeeId: null,
+const EMPTY = { dateFrom: null, dateTo: null, accountId: null, kind: null, categoryId: null, tag: null, payeeId: null,
   amountMin: null, amountMax: null, search: null }
 const today = '2026-10-17'
 

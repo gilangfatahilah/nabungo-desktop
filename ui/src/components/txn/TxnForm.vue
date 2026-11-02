@@ -2,12 +2,13 @@
 import { PlusIcon } from '@lucide/vue'
 import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AccountSelect from '@/components/AccountSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
 import AmountInput from '@/components/AmountInput.vue'
 import DateInput from '@/components/DateInput.vue'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +19,6 @@ import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useTransactionsStore } from '@/stores/transactions'
 import AttachmentList from './AttachmentList.vue'
-import CategoryCombobox from './CategoryCombobox.vue'
 import PayeeCombobox from './PayeeCombobox.vue'
 import SplitEditor from './SplitEditor.vue'
 import TagInput from './TagInput.vue'
@@ -138,7 +138,10 @@ async function onSubmit() {
         <Label class="col-start-1 row-start-1" :for="s.split ? undefined : 'txn-category'">{{ t('txn.category') }}</Label>
         <div class="col-span-2 row-start-2">
           <SplitEditor v-if="s.split" ref="splitEditor" v-model="s.splits" :kind="s.kind as 'income' | 'expense'" :total="s.amount" @error="error = $event" />
-          <CategoryCombobox v-else id="txn-category" v-model="s.categoryId" :kind="s.kind as 'income' | 'expense'" @picked="touched.category = true" />
+          <CategorySelect
+            v-else id="txn-category" v-model="s.categoryId" :kind="s.kind as 'income' | 'expense'" :placeholder="t('categories.pick')" class="w-full"
+            @picked="touched.category = true"
+          />
         </div>
         <Button type="button" variant="ghost" size="xs" class="col-start-2 row-start-1 text-muted-foreground" data-testid="split-toggle" @click="toggleSplit">
           {{ s.split ? t('txn.unsplit') : t('txn.split') }}
@@ -148,21 +151,16 @@ async function onSubmit() {
       <div class="grid grid-cols-2 gap-3">
         <div class="flex flex-col gap-2">
           <Label id="txn-account-label">{{ transfer ? t('txn.from') : t('txn.account') }}</Label>
-          <Select v-model="s.accountId" @update:model-value="touched.account = true">
-            <SelectTrigger aria-labelledby="txn-account-label" class="w-full" data-testid="txn-account"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="a in activeAccounts" :key="a.id" :value="a.id">{{ a.name }}</SelectItem>
-            </SelectContent>
-          </Select>
+          <AccountSelect
+            v-model="s.accountId" :accounts="activeAccounts" aria-labelledby="txn-account-label" class="w-full" data-testid="txn-account"
+            @update:model-value="touched.account = true"
+          />
         </div>
         <div v-if="transfer" class="flex flex-col gap-2">
           <Label id="txn-to-label">{{ t('txn.to') }}</Label>
-          <Select v-model="s.toAccountId">
-            <SelectTrigger aria-labelledby="txn-to-label" class="w-full" data-testid="txn-to-account"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="a in activeAccounts" :key="a.id" :value="a.id" :disabled="a.id === s.accountId">{{ a.name }}</SelectItem>
-            </SelectContent>
-          </Select>
+          <AccountSelect
+            v-model="s.toAccountId" :accounts="activeAccounts" :disabled-id="s.accountId" aria-labelledby="txn-to-label" class="w-full" data-testid="txn-to-account"
+          />
         </div>
         <div class="flex flex-col gap-2">
           <Label for="txn-date">{{ dateLabel ?? t('txn.date') }}</Label>
@@ -177,7 +175,7 @@ async function onSubmit() {
         </Label>
         <div v-if="s.feeEnabled" class="grid grid-cols-[8rem_1fr] gap-2">
           <AmountInput ref="feeInput" v-model="s.fee" class="num text-right" :aria-label="t('txn.feeAmount')" @error="error = $event" />
-          <CategoryCombobox id="txn-fee-category" v-model="s.feeCategoryId" kind="expense" :aria-label="t('txn.feeCategory')" />
+          <CategorySelect id="txn-fee-category" v-model="s.feeCategoryId" kind="expense" :placeholder="t('categories.pick')" class="w-full" :aria-label="t('txn.feeCategory')" />
         </div>
       </div>
 

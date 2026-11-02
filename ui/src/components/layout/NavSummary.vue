@@ -1,25 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Lock, PiggyBank } from '@lucide/vue'
-import { SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
-import MoneyText from '@/components/MoneyText.vue'
-import { formatIdr } from '@/lib/money'
+import { Lock } from '@lucide/vue'
+import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar'
 import { withErrorToast } from '@/lib/notify'
-import { useAccountsStore } from '@/stores/accounts'
 import { useSecurityStore } from '@/stores/security'
-import { useSettingsStore } from '@/stores/settings'
 
-// Footer sidebar: kekayaan bersih (angka tanpa Rp) + kunci bila DB terenkripsi (docs/design/design.md §6.2).
-const { t } = useI18n()
+// Footer sidebar: tombol Kunci, hanya bila DB terenkripsi (docs/design/design.md §6.2).
 const router = useRouter()
-const accounts = useAccountsStore()
 const security = useSecurityStore()
-const settings = useSettingsStore()
-
-const net = computed(() => accounts.overview.netWorth.net)
-const tooltip = computed(() => `${t('accounts.netWorth')} ${formatIdr(net.value, settings.locale)}`)
 
 function lockNow() {
   void withErrorToast(async () => {
@@ -30,27 +18,12 @@ function lockNow() {
 </script>
 
 <template>
-  <SidebarMenu>
+  <SidebarMenu v-if="security.encrypted">
     <SidebarMenuItem>
-      <SidebarMenuButton as-child size="lg" :tooltip="tooltip">
-        <RouterLink to="/accounts">
-          <PiggyBank />
-          <span class="grid min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
-            <span class="truncate text-meta text-muted-foreground">{{ $t('accounts.netWorth') }}</span>
-            <MoneyText :amount="net" :currency="false" class="truncate font-semibold" data-testid="sidebar-net-worth" />
-          </span>
-        </RouterLink>
-      </SidebarMenuButton>
-      <SidebarMenuAction
-        v-if="security.encrypted"
-        class="top-3! size-6"
-        :aria-label="$t('security.lockNow')"
-        :title="$t('security.lockNow')"
-        data-testid="sidebar-lock"
-        @click="lockNow"
-      >
+      <SidebarMenuButton :tooltip="$t('security.lockNow')" data-testid="sidebar-lock" @click="lockNow">
         <Lock />
-      </SidebarMenuAction>
+        <span>{{ $t('security.lockNow') }}</span>
+      </SidebarMenuButton>
     </SidebarMenuItem>
   </SidebarMenu>
 </template>

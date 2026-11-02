@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import MoneyText from '@/components/MoneyText.vue'
 import DonutChart from '@/components/charts/DonutChart.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import type { BudgetTotalDto, CategoryAmountDto } from '@/ipc'
-import { formatCompact, formatIdr } from '@/lib/money'
 import { TOP_LIMIT } from '@/stores/dashboard'
 import { useCategoriesStore } from '@/stores/categories'
 import { useReportsStore } from '@/stores/reports'
@@ -35,7 +35,7 @@ const segments = computed(() => other.value > 0
   : top.value)
 // Segmen yang disorot; hover legenda dan donut berbagi state ini.
 const hovered = ref<string | null>(null)
-const money = (v: number) => formatIdr(v, settings.locale)
+const { money, compact } = useMoneyFormat()
 </script>
 
 <template>
@@ -71,7 +71,7 @@ const money = (v: number) => formatIdr(v, settings.locale)
           <DonutChart v-model:active="hovered" :segments="segments" :label="$t('dashboard.expenseDonut')" :format="money" :locale="settings.locale" />
           <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-part="donut-total">
             <span class="text-meta text-muted-foreground">IDR</span>
-            <span class="num text-heading font-semibold">{{ formatCompact(total, settings.locale) }}</span>
+            <span class="num text-heading font-semibold">{{ compact(total) }}</span>
           </div>
         </div>
         <ul class="flex w-full min-w-0 flex-col gap-1.5 text-sm">

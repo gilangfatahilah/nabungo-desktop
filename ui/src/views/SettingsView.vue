@@ -3,8 +3,11 @@ import BackupSection from '@/components/settings/BackupSection.vue'
 import EmailSection from '@/components/settings/EmailSection.vue'
 import ExportSection from '@/components/settings/ExportSection.vue'
 import SecuritySection from '@/components/settings/SecuritySection.vue'
+import UpdateSection from '@/components/settings/UpdateSection.vue'
 import { Separator } from '@/components/ui/separator'
+import { nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { LocaleDto, ThemeDto } from '@/ipc'
 import { FONT_SCALES, isFontScale } from '@/lib/fontScale'
@@ -13,6 +16,14 @@ import { useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const { t } = useI18n()
+const route = useRoute()
+
+// `?section=update` (dari toast update tersedia): langsung ke section-nya.
+onMounted(async () => {
+  if (typeof route.query.section !== 'string') return
+  await nextTick()
+  document.getElementById(`settings-${route.query.section}`)?.scrollIntoView({ block: 'start' })
+})
 
 const themes: ThemeDto[] = ['light', 'dark', 'system']
 const locales: LocaleDto[] = ['id', 'en']
@@ -105,5 +116,10 @@ function onDay(v: unknown) {
   <section aria-labelledby="settings-export" class="max-w-md">
     <h2 id="settings-export" class="mb-4 text-heading">{{ t('settings.sections.export') }}</h2>
     <ExportSection />
+  </section>
+  <Separator class="my-8" />
+  <section aria-labelledby="settings-update">
+    <h2 id="settings-update" class="mb-4 text-heading">{{ t('settings.sections.update') }}</h2>
+    <UpdateSection />
   </section>
 </template>

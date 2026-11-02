@@ -1,9 +1,13 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { useUiStore } from '@/stores/ui'
 import MoneyText from './MoneyText.vue'
 
-beforeEach(() => setActivePinia(createPinia()))
+beforeEach(() => {
+  localStorage.clear()
+  setActivePinia(createPinia())
+})
 
 describe('MoneyText', () => {
   it('menampilkan minus sejati, prefiks mata uang terpisah, dan nada warna', () => {
@@ -23,5 +27,14 @@ describe('MoneyText', () => {
   it('ukuran display memakai token text-display', () => {
     const w = mount(MoneyText, { props: { amount: 1, size: 'display' } })
     expect(w.classes()).toContain('text-display')
+  })
+
+  it('mode sembunyikan nominal: angka, tanda, dan nada warna disamarkan', () => {
+    useUiStore().amountsHidden = true
+    const w = mount(MoneyText, { props: { amount: -25_000, kind: 'expense' } })
+    expect(w.text()).toBe('Rp\u00a0••••••••')
+    expect(w.classes()).not.toContain('text-expense')
+    expect(w.attributes('aria-label')).toBe('Nominal disembunyikan')
+    expect(w.attributes('data-hidden')).toBe('true')
   })
 })

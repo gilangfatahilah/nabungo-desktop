@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Search } from '@lucide/vue'
+import AmountsToggle from '@/components/AmountsToggle.vue'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { Separator } from '@/components/ui/separator'
@@ -21,6 +22,7 @@ const titleKey = computed(() => (typeof route.name === 'string' ? `nav.${route.n
       <Separator orientation="vertical" class="mx-2 data-[orientation=vertical]:h-4" />
       <h1 class="shrink-0 text-heading font-medium">{{ titleKey ? $t(titleKey) : '' }}</h1>
       <div class="ml-auto flex min-w-0 items-center gap-2">
+        <AmountsToggle />
         <!-- Tampil seperti kolom isian agar mudah ditemukan; membuka command palette. -->
         <Button
           variant="outline"

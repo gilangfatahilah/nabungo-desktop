@@ -36,6 +36,11 @@ function go(name: RouteName) {
   void router.push({ name })
 }
 
+function toggleAmounts() {
+  ui.paletteOpen = false
+  ui.toggleAmountsHidden()
+}
+
 function newTxn() {
   ui.paletteOpen = false
   ui.openNewTxn()
@@ -61,6 +66,10 @@ function newTxn() {
         <CommandItem :value="$t('txn.new')" @select="newTxn">
           <span>{{ $t('txn.new') }}</span>
           <CommandShortcut>N</CommandShortcut>
+        </CommandItem>
+        <CommandItem :value="$t(ui.amountsHidden ? 'privacy.show' : 'privacy.hide')" @select="toggleAmounts">
+          <span>{{ $t(ui.amountsHidden ? 'privacy.show' : 'privacy.hide') }}</span>
+          <CommandShortcut>Ctrl+Shift+H</CommandShortcut>
         </CommandItem>
       </CommandGroup>
     </CommandList>

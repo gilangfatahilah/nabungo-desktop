@@ -186,6 +186,7 @@ pub fn open_unlocked(app: &AppHandle, key: Option<DbKey>) -> Result<(), AppError
         spawn_backup_scheduler(app.clone());
     }
     crate::email::on_ledger_opened(app);
+    crate::update::on_ledger_opened(app);
     Ok(())
 }
 
@@ -200,6 +201,7 @@ pub fn on_restored(app: &AppHandle) {
     }
     drop(startup);
     crate::email::on_ledger_opened(app);
+    crate::update::on_ledger_opened(app);
 }
 
 /// Tunggu sampai `ready` (dasbor pertama tampil) atau paling lama `max`.

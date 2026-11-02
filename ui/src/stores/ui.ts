@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { TxnFormKindDto } from '@/ipc'
+import { loadAmountsHidden, saveAmountsHidden } from '@/lib/privacy'
 
 export interface TxnEditor {
   mode: 'create' | 'edit' | 'duplicate'
@@ -16,12 +17,13 @@ export type RuleEditor =
   | { mode: 'fromTxn'; txnId: string }
   | { mode: 'occurrence'; ruleId: string; date: string }
 
-// State overlay global: command palette dan sheet form transaksi.
+// State overlay global: command palette, sheet form transaksi, dan mode sembunyikan nominal.
 export const useUiStore = defineStore('ui', () => {
   const paletteOpen = ref(false)
   const txnEditor = ref<TxnEditor | null>(null)
   const newTxnOpen = computed(() => txnEditor.value !== null)
   const ruleEditor = ref<RuleEditor | null>(null)
+  const amountsHidden = ref(loadAmountsHidden())
   return {
     paletteOpen,
     txnEditor,
@@ -33,5 +35,10 @@ export const useUiStore = defineStore('ui', () => {
     ruleEditor,
     openRuleEditor: (e: RuleEditor) => { ruleEditor.value = e },
     closeRuleEditor: () => { ruleEditor.value = null },
+    amountsHidden,
+    toggleAmountsHidden: () => {
+      amountsHidden.value = !amountsHidden.value
+      saveAmountsHidden(amountsHidden.value)
+    },
   }
 })

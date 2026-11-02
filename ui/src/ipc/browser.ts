@@ -2,6 +2,7 @@
 import type { AppInfo, InboxSummaryDto, IpcError, UiSettingsDto } from './bindings'
 import { parseAmountBrowser } from './browser-amount'
 import { browserEmail } from './browser-email'
+import { browserUpdate } from './browser-update'
 import { __enterRecovery, __seedDefaultEmailRules, __seedEmailInbox, browserLedger, browserRecovery, browserSecurity, isBrowserLocked, isBrowserRecovering } from './browser-ledger'
 import { isFontScale } from '@/lib/fontScale'
 import { AUTO_LOCK_CHOICES } from '@/lib/security'
@@ -51,6 +52,13 @@ export const browserCommands = lockGuard({
     return r
   },
   disconnectEmail: browserEmail.disconnectEmail,
+  updateStatus: browserUpdate.updateStatus,
+  setUpdateAutoCheck: browserUpdate.setUpdateAutoCheck,
+  checkUpdate: browserUpdate.checkUpdate,
+  downloadUpdate: browserUpdate.downloadUpdate,
+  cancelUpdateDownload: browserUpdate.cancelUpdateDownload,
+  installUpdate: browserUpdate.installUpdate,
+  openReleasePage: browserUpdate.openReleasePage,
   syncEmail: browserEmail.syncEmail,
   inboxSummary: async (): Promise<Result<InboxSummaryDto>> => {
     const counts = await browserLedger.inboxSummary()
@@ -85,7 +93,7 @@ export const browserCommands = lockGuard({
   },
 })
 
-// Hook e2e (Playwright): masuk mode pemulihan / isi Inbox email tanpa backend Tauri.
+// Hook e2e (Playwright): masuk mode pemulihan / isi Inbox email / atur rilis update tanpa backend Tauri.
 if (typeof window !== 'undefined') {
-  Object.assign(window, { __enterRecovery, __seedEmailInbox })
+  Object.assign(window, { __enterRecovery, __seedEmailInbox, __seedUpdate: browserUpdate.seed })
 }

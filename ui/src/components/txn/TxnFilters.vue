@@ -2,7 +2,9 @@
 import { Columns3Icon, ListFilterIcon, ListIcon, SearchIcon, Table2Icon, XIcon } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import DateInput from '@/components/DateInput.vue'
+import AccountSelect from '@/components/AccountSelect.vue'
+import CategorySelect from '@/components/CategorySelect.vue'
+import DateRangeInput from '@/components/DateRangeInput.vue'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -22,7 +24,6 @@ import { useCategoriesStore } from '@/stores/categories'
 import { useLabelsStore } from '@/stores/labels'
 import { useSettingsStore } from '@/stores/settings'
 import { type TxnFilter, useTransactionsStore } from '@/stores/transactions'
-import CategoryCombobox from './CategoryCombobox.vue'
 
 // Filter disimpan di store (bukan URL). Payee dicari lewat kotak pencarian; filter payeeId
 // (dari layar Tag & Payee) hanya tampil sebagai chip.
@@ -47,12 +48,17 @@ const tags = ref<string[]>([])
 const customOpen = ref(false)
 const period = computed<Period>(() => (customOpen.value ? 'custom' : periodOf(store.query, todayIso())))
 const PERIODS: Period[] = ['all', 'thisMonth', 'last30', 'custom']
+const rangeOpen = ref(false)
 
 function setPeriod(v: unknown) {
   const p = v as Period
   customOpen.value = p === 'custom'
   if (p !== 'custom') apply(periodRange(p, todayIso()))
+  // Buka kalender setelah Select selesai menutup dan mengembalikan fokus ke pemicunya.
+  else setTimeout(() => { rangeOpen.value = true }, 0)
 }
+
+const KINDS = ['expense', 'income', 'transfer'] as const
 
 type Chip = { key: 'categoryId' | 'tag' | 'payeeId' | 'amountMin' | 'amountMax'; label: string }
 const chips = computed<Chip[]>(() => {
@@ -145,23 +151,22 @@ function reset() {
           <SelectItem v-for="p in PERIODS" :key="p" :value="p">{{ t(`txn.filters.periods.${p}`) }}</SelectItem>
         </SelectContent>
       </Select>
-      <template v-if="period === 'custom'">
-        <DateInput
-          nullable class="w-40" data-testid="filter-from" :aria-label="t('txn.filters.from')" :placeholder="t('txn.filters.from')" :model-value="store.query.dateFrom"
-          @update:model-value="apply({ dateFrom: $event })"
-        />
-        <DateInput
-          nullable class="w-40" data-testid="filter-to" :aria-label="t('txn.filters.to')" :placeholder="t('txn.filters.to')" :model-value="store.query.dateTo"
-          @update:model-value="apply({ dateTo: $event })"
-        />
-      </template>
-      <Select :model-value="store.query.accountId ?? ALL" @update:model-value="apply({ accountId: select($event) })">
-        <SelectTrigger class="w-40" data-testid="filter-account" :aria-label="t('txn.account')"><SelectValue /></SelectTrigger>
+      <DateRangeInput
+        v-if="period === 'custom'" v-model:open="rangeOpen" :from="store.query.dateFrom" :to="store.query.dateTo"
+        class="w-64" data-testid="filter-range" :aria-label="t('txn.filters.range')" :placeholder="t('txn.filters.range')"
+        @change="apply({ dateFrom: $event.from, dateTo: $event.to })"
+      />
+      <Select :model-value="store.query.kind ?? ALL" @update:model-value="apply({ kind: select($event) as TxnFilter['kind'] })">
+        <SelectTrigger class="w-40" data-testid="filter-kind" :aria-label="t('txn.filters.kind')"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem :value="ALL">{{ t('txn.filters.allAccounts') }}</SelectItem>
-          <SelectItem v-for="a in activeAccounts" :key="a.id" :value="a.id">{{ a.name }}</SelectItem>
+          <SelectItem :value="ALL">{{ t('txn.filters.allKinds') }}</SelectItem>
+          <SelectItem v-for="k in KINDS" :key="k" :value="k">{{ t(`txn.kinds.${k}`) }}</SelectItem>
         </SelectContent>
       </Select>
+      <AccountSelect
+        :model-value="store.query.accountId ?? null" :accounts="activeAccounts" :none-label="t('txn.filters.allAccounts')"
+        class="w-40" data-testid="filter-account" :aria-label="t('txn.account')" @update:model-value="apply({ accountId: $event })"
+      />
       <Popover>
         <PopoverTrigger as-child>
           <Button variant="outline" data-testid="filter-more"><ListFilterIcon /> {{ t('txn.filters.more') }}</Button>
@@ -169,9 +174,9 @@ function reset() {
         <!-- Fokus ke panel, bukan ke combobox kategori yang langsung membuka daftarnya; Tab masuk ke field pertama. -->
         <PopoverContent align="start" class="flex w-72 flex-col gap-2 outline-none" @open-auto-focus="focusPanel">
           <Label for="filter-category">{{ t('txn.category') }}</Label>
-          <CategoryCombobox id="filter-category"
-            :model-value="store.query.categoryId" data-testid="filter-category"
-            :placeholder="t('txn.filters.category')" :aria-label="t('txn.filters.category')"
+          <CategorySelect id="filter-category"
+            :model-value="store.query.categoryId" data-testid="filter-category" class="w-full"
+            :none-label="t('txn.filters.allCategories')" :aria-label="t('txn.filters.category')"
             @update:model-value="(id: string | null) => { if (id !== store.query.categoryId) apply({ categoryId: id }) }"
           />
           <Label id="filter-tag-label" class="mt-1">{{ t('txn.tags') }}</Label>

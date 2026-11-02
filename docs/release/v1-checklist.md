@@ -45,6 +45,7 @@ Orca (Fedora) dan NVDA (Windows): onboarding, sheet transaksi (label field, erro
 - [ ] Hapus akun/kategori yang terpakai diblokir dan menawarkan arsip/merge.
 - [ ] Transaksi: input, edit, split, transfer dengan biaya, hapus + undo.
 - [ ] Budget dan alokasi: salin dari bulan lalu, rollover, donut, dan tabel target vs aktual.
+- [ ] Update aplikasi: pasang installer versi lama (rpm, AppImage, dan `*-setup.exe`) → Pengaturan → Update aplikasi → Periksa update menawarkan rilis Latest, unduh selesai tanpa `update_checksum`, installer terbuka (AppImage: file diganti dan app mulai ulang), versi baru jalan dengan data yang sama. Cek otomatis aktif → toast "tersedia" saat startup.
 
 ## 6. Gate 1
 

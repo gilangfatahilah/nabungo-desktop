@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import CategorySelect from '@/components/CategorySelect.vue'
 import type { CategoryDto } from '@/ipc'
 import { mergeTargets } from '@/lib/categories'
 import { errorMessage, type Translate } from '@/lib/errors'
@@ -53,14 +53,10 @@ async function submit() {
       </DialogHeader>
       <div class="flex flex-col gap-2">
         <Label id="merge-target-label">{{ t('categories.mergeTarget') }}</Label>
-        <Select v-model="targetId">
-          <SelectTrigger data-testid="merge-target" aria-labelledby="merge-target-label" class="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="c in targets" :key="c.id" :value="c.id">{{ c.name }}</SelectItem>
-          </SelectContent>
-        </Select>
+        <CategorySelect
+          :model-value="targetId || null" :categories="targets" :placeholder="t('categories.pick')"
+          data-testid="merge-target" aria-labelledby="merge-target-label" class="w-full" @update:model-value="targetId = $event ?? ''"
+        />
       </div>
       <p v-if="target" class="text-sm">
         {{ t('categories.mergeBody', { source: source.name, target: target.name }) }}

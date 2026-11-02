@@ -10,7 +10,7 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('5000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('5.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('5.000.000')
 }
 
 async function go(page: Page, hash: string) {
@@ -56,8 +56,9 @@ test('review with category then save', async ({ page }) => {
   const sheet = page.getByRole('dialog')
   await expect(sheet).toContainText('Tinjau transaksi')
   await expect(page.locator('#txn-payee')).toHaveValue('Indomaret')
-  await page.locator('#txn-category').fill('Tagihan')
-  await page.locator('#txn-category').press('Enter')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')
   await expect(sheet).toBeHidden()
   await expect(rows(page)).toHaveCount(0)
@@ -85,8 +86,9 @@ test('link duplicate', async ({ page }) => {
   await onboard(page)
   await page.locator('body').press('n')
   await page.locator('#txn-amount').fill('66000')
-  await page.locator('#txn-category').fill('Tagihan')
-  await page.locator('#txn-category').press('Enter')
+  await page.locator('#txn-category').click()
+  await page.keyboard.type('Tagihan')
+  await page.keyboard.press('Enter')
   await page.locator('#txn-payee').fill('Warung')
   await page.keyboard.press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()

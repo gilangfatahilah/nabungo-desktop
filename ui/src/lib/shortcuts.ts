@@ -5,6 +5,7 @@ export type ShortcutAction =
   | { kind: 'newTxn' }
   | { kind: 'palette' }
   | { kind: 'fontScale'; step: 1 | -1 | 0 }
+  | { kind: 'toggleAmounts' }
 
 interface Options {
   onAction: (a: ShortcutAction) => void
@@ -45,6 +46,7 @@ export function createShortcutHandler(opts: Options): (e: KeyboardEvent) => void
 
     if (mod && !e.altKey) {
       gAt = null
+      if (key === 'h' && e.shiftKey) return fire(e, { kind: 'toggleAmounts' })
       if (key === 'k') return fire(e, { kind: 'palette' })
       if (key === ',') return fire(e, { kind: 'navigate', route: 'settings' })
       if (key === '=' || key === '+') return fire(e, { kind: 'fontScale', step: 1 })

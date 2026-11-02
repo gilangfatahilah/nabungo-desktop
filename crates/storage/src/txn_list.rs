@@ -19,6 +19,8 @@ pub struct TxnQuery {
     /// Inklusif.
     pub date_to: Option<Date>,
     pub account_id: Option<Uuid>,
+    /// Jenis header txn.
+    pub kind: Option<TxnKind>,
     /// Termasuk child kategori ini.
     pub category_id: Option<Uuid>,
     /// Nama tag (NOCASE).
@@ -208,6 +210,9 @@ fn where_clause(q: &TxnQuery) -> (String, Vec<Value>) {
             "EXISTS (SELECT 1 FROM posting p WHERE p.txn_id = t.id AND p.account_id = ?)",
             vec![Value::Text(a.to_string())],
         );
+    }
+    if let Some(k) = q.kind {
+        push("t.kind = ?", vec![Value::Text(k.as_str().to_owned())]);
     }
     if let Some(c) = q.category_id {
         let c = Value::Text(c.to_string());
@@ -833,6 +838,24 @@ mod tests {
         assert_eq!(ids(&search("50%")), vec![f.split_txn]);
         assert!(search("50_").rows.is_empty());
         assert_eq!(ids(&search("KENANGAN")), vec![f.kopi_txn]);
+    }
+
+    #[test]
+    fn kind_filter() {
+        let f = fixture();
+        let by = |kind| {
+            ids(&list_txns(
+                &f.conn,
+                &TxnQuery {
+                    kind: Some(kind),
+                    ..q()
+                },
+            )
+            .unwrap())
+        };
+        assert_eq!(by(TxnKind::Transfer), vec![f.transfer_txn]);
+        assert_eq!(by(TxnKind::Income), vec![f.income_txn]);
+        assert_eq!(by(TxnKind::Expense), vec![f.split_txn, f.kopi_txn]);
     }
 
     #[test]

@@ -9,7 +9,10 @@ import { i18n } from '@/i18n'
 import { routes } from '@/router'
 import { useUiStore } from '@/stores/ui'
 
-beforeEach(() => setActivePinia(createPinia()))
+beforeEach(() => {
+  localStorage.clear()
+  setActivePinia(createPinia())
+})
 
 async function mountHeader(path: string) {
   const router = createRouter({ history: createMemoryHistory(), routes })
@@ -35,5 +38,18 @@ describe('SiteHeader', () => {
   it('toggle sidebar berlabel terjemahan', async () => {
     const w = await mountHeader('/')
     expect(w.find('[data-sidebar="trigger"]').text()).toBe('Buka atau ciutkan sidebar')
+  })
+
+  it('tombol mata menyembunyikan nominal dan disimpan per perangkat', async () => {
+    const w = await mountHeader('/')
+    const btn = w.find('[data-testid="toggle-amounts"]')
+    expect(btn.attributes('aria-label')).toBe('Sembunyikan nominal')
+    await btn.trigger('click')
+    expect(useUiStore().amountsHidden).toBe(true)
+    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.attributes('aria-label')).toBe('Tampilkan nominal')
+    expect(localStorage.getItem('nabungo.hideAmounts')).toBe('1')
+    setActivePinia(createPinia())
+    expect(useUiStore().amountsHidden).toBe(true)
   })
 })

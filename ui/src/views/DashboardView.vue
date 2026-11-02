@@ -11,6 +11,7 @@ import BudgetWatchCard from '@/components/dashboard/BudgetWatchCard.vue'
 import CashflowCard from '@/components/dashboard/CashflowCard.vue'
 import DashboardHero from '@/components/dashboard/DashboardHero.vue'
 import DueScheduledCard from '@/components/dashboard/DueScheduledCard.vue'
+import InboxCard from '@/components/dashboard/InboxCard.vue'
 import ExpenseCard from '@/components/dashboard/ExpenseCard.vue'
 import NetWorthCard from '@/components/dashboard/NetWorthCard.vue'
 import RecentTxnsCard from '@/components/dashboard/RecentTxnsCard.vue'
@@ -23,6 +24,7 @@ import { withErrorToast } from '@/lib/notify'
 import { useAccountsStore } from '@/stores/accounts'
 import { useCategoriesStore } from '@/stores/categories'
 import { useDashboardStore } from '@/stores/dashboard'
+import { useInboxStore } from '@/stores/inbox'
 import { useReportsStore } from '@/stores/reports'
 import { useScheduledStore } from '@/stores/scheduled'
 import { useSettingsStore } from '@/stores/settings'
@@ -37,6 +39,7 @@ const categories = useCategoriesStore()
 const settings = useSettingsStore()
 const ui = useUiStore()
 const scheduled = useScheduledStore()
+const inbox = useInboxStore()
 
 const current = computed(() => reports.cashflow.at(-1))
 // Akun terpilih di kartu Akun; jatuh ke akun aset aktif pertama bila belum dipilih atau sudah diarsip.
@@ -51,7 +54,7 @@ const budgetTotal = computed(() => {
   const total = dashboard.budget?.total
   return total && total.available > 0 ? total : null
 })
-const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.load(), scheduled.reload()]))
+const load = () => withErrorToast(() => Promise.all([dashboard.load(), reports.load(), scheduled.reload(), inbox.reload()]))
 
 onMounted(() => {
   // Ukur startup sampai dasbor pertama terisi (log lokal di backend; mode browser no-op).
@@ -94,7 +97,8 @@ watch(() => txns.ledgerVersion, () => void load())
       </div>
       <NetWorthCard class="@5xl/main:col-span-3" />
     </div>
-    <div class="grid grid-cols-1 gap-4 md:gap-6 @3xl/main:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 md:gap-6 @3xl/main:grid-cols-2 @5xl/main:grid-cols-3">
+      <InboxCard />
       <DueScheduledCard />
       <AllocationSummaryCard v-if="dashboard.allocation" :overview="dashboard.allocation" />
     </div>

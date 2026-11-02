@@ -1,0 +1,47 @@
+{
+  "tag_name": "v0.3.0",
+  "name": "Nabungo 0.3.0",
+  "draft": false,
+  "prerelease": false,
+  "html_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/tag/v0.3.0",
+  "published_at": "2026-10-28T15:58:32Z",
+  "body": "Nabungo adalah aplikasi keuangan pribadi desktop yang berjalan sepenuhnya offline: transaksi, saldo akun, budget, dan alokasi modal tersimpan di satu file SQLite milik Anda. Tidak ada akun, tidak ada telemetry, tidak ada koneksi internet saat aplikasi berjalan.\n\nBaru: **Email capture** (opsional, mati secara default). Nabungo membaca email notifikasi bank dari satu label Gmail secara read-only lewat App Password yang disimpan di keychain sistem, lalu menyiapkan transaksi di Inbox untuk ditinjau. Rule pembacaan bisa diubah, dan rule baru bisa dibuat dari email yang gagal dibaca. Hanya fitur ini yang memakai internet, dan hanya setelah Anda mengaktifkannya.\n\n## Unduhan\n\n| Sistem | File |\n|---|---|\n| Fedora / openSUSE | `.rpm` |\n| Ubuntu / Debian | `.deb` |\n| Linux lain | `.AppImage` (lebih besar karena membawa WebKitGTK sendiri) |\n| Windows 10/11 | `*-setup.exe` (disarankan, tanpa hak admin) atau `.msi` |\n\n**Windows:** installer belum ditandatangani, jadi SmartScreen dapat menampilkan \"Windows protected your PC\". Pilih **More info → Run anyway**. Bila WebView2 belum terpasang, installer mengunduhnya saat instalasi (hanya sekali; aplikasi sendiri tidak memakai internet).\n\n**Verifikasi file:** unduh `SHA256SUMS` ke folder yang sama lalu jalankan `sha256sum -c --ignore-missing SHA256SUMS` (Linux) atau `Get-FileHash <file>` (PowerShell) dan bandingkan.\n\n## Data Anda\n\n- Linux: `~/.local/share/nabungo/` — Windows: `%APPDATA%\\nabungo\\`\n- Backup otomatis harian di subfolder `backups/` (14 terakhir). Backup manual dan ekspor CSV/JSON ada di Pengaturan.\n- Bila enkripsi diaktifkan, simpan recovery key: tanpa password atau recovery key data tidak bisa dibuka.\n\nUpdate dilakukan manual: unduh versi baru dari halaman Releases dan instal di atas versi lama; data tetap.\n\n\n## What's Changed\n* feat: email capture backend (Fase 9a, EML-01–EML-03) by @gilangfatahilah in https://github.com/gilangfatahilah/nabungo-desktop/pull/22\n* feat: email capture integrasi Tauri (Fase 9b, EML-01) by @gilangfatahilah in https://github.com/gilangfatahilah/nabungo-desktop/pull/23\n* Fase 9c: inbox review email capture by @gilangfatahilah in https://github.com/gilangfatahilah/nabungo-desktop/pull/24\n* Fase 9d: rule editor email capture by @gilangfatahilah in https://github.com/gilangfatahilah/nabungo-desktop/pull/25\n* chore: naikkan versi ke 0.3.0 by @gilangfatahilah in https://github.com/gilangfatahilah/nabungo-desktop/pull/26\n\n\n**Full Changelog**: https://github.com/gilangfatahilah/nabungo-desktop/compare/v0.2.0...v0.3.0",
+  "assets": [
+    {
+      "name": "Nabungo-0.3.0-1.x86_64.rpm",
+      "size": 7691007,
+      "content_type": "application/x-rpm",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/Nabungo-0.3.0-1.x86_64.rpm"
+    },
+    {
+      "name": "Nabungo_0.3.0_amd64.AppImage",
+      "size": 87620088,
+      "content_type": "application/vnd.appimage",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/Nabungo_0.3.0_amd64.AppImage"
+    },
+    {
+      "name": "Nabungo_0.3.0_amd64.deb",
+      "size": 7687634,
+      "content_type": "application/x-debian-package",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/Nabungo_0.3.0_amd64.deb"
+    },
+    {
+      "name": "Nabungo_0.3.0_x64-setup.exe",
+      "size": 6466979,
+      "content_type": "application/octet-stream",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/Nabungo_0.3.0_x64-setup.exe"
+    },
+    {
+      "name": "Nabungo_0.3.0_x64_en-US.msi",
+      "size": 9187328,
+      "content_type": "application/x-msi",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/Nabungo_0.3.0_x64_en-US.msi"
+    },
+    {
+      "name": "SHA256SUMS",
+      "size": 466,
+      "content_type": "application/octet-stream",
+      "browser_download_url": "https://github.com/gilangfatahilah/nabungo-desktop/releases/download/v0.3.0/SHA256SUMS"
+    }
+  ]
+}

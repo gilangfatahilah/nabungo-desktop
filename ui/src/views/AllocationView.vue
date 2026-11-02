@@ -15,10 +15,10 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import type { AccountDto, BucketDto } from '@/ipc'
 import { countsAsLiability } from '@/lib/accounts'
 import { formatPeriod } from '@/lib/date'
-import { moneyParts } from '@/lib/money'
 import { withErrorToast } from '@/lib/notify'
 import { formatBp } from '@/lib/percent'
 import { cn } from '@/lib/utils'
@@ -48,10 +48,7 @@ const colorOf = (b: BucketDto): string => {
 }
 
 const pct = (bp: number) => formatBp(bp, settings.locale)
-const num = (v: number) => {
-  const p = moneyParts(v, settings.locale)
-  return p.sign + p.number
-}
+const { num } = useMoneyFormat()
 const signed = (text: string, v: number) => (v > 0 ? `+${text}` : text)
 const points = (bp: number) => signed(pct(bp).replace('%', ''), bp)
 

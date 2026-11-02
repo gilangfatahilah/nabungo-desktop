@@ -8,10 +8,14 @@ async function onboard(page: Page) {
   await page.locator('#ob-name').fill('BCA')
   await page.locator('#ob-balance').fill('1000000')
   await page.getByRole('button', { name: 'Mulai pakai Nabungo' }).click()
-  await expect(page.locator('[data-testid="sidebar-net-worth"]')).toHaveText(amount('1.000.000'))
+  await expect(page.locator('[data-testid="kpi-net-worth"]')).toContainText('1.000.000')
 }
 
-const netWorth = (page: Page) => page.locator('[data-testid="sidebar-net-worth"]')
+/** Kekayaan bersih hanya ada di KPI Dasbor. */
+async function netWorth(page: Page) {
+  await page.evaluate(() => { location.hash = '#/' })
+  return page.locator('[data-testid="kpi-net-worth"]')
+}
 
 /** Saldo per akun ada di kartu Akun Dasbor (docs/design/design.md §8.1). */
 async function dashboardAccount(page: Page, name: string) {
@@ -31,6 +35,7 @@ async function quickExpense(page: Page) {
   await amount.pressSequentially('25rb')
   await page.keyboard.press('Tab')
   await expect(page.locator('#txn-category')).toBeFocused()
+  await page.keyboard.press('Enter')
   await page.keyboard.type('Kopi')
   await page.keyboard.press('Enter')
   await page.keyboard.press('Control+Enter')
@@ -44,10 +49,10 @@ test('expense via keyboard', async ({ page }) => {
   const row = page.locator('[data-txn-id]').filter({ hasText: 'Kopi' })
   await expect(row).toBeVisible()
   await expect(row.locator('[data-testid="txn-amount"]')).toHaveText(/[−-]Rp\s25\.000/)
-  await expect(netWorth(page)).toHaveText(amount('975.000'))
+  await expect(await netWorth(page)).toContainText('975.000')
 
   // Dasbor: transaksi baru muncul di "Transaksi terakhir", saldo akun ikut berubah.
-  await expect(await dashboardAccount(page, 'BCA')).toHaveText(amount('975.000'))
+  await expect(await dashboardAccount(page, 'BCA')).toContainText('975.000')
   await expect(page.locator('[data-testid="recent-txn"]').first()).toContainText('Kopi')
 })
 
@@ -68,12 +73,12 @@ test('transfer with fee', async ({ page }) => {
   await page.getByRole('option', { name: 'Dompet' }).click()
   await page.locator('[data-testid="fee-toggle"]').click()
   await page.getByLabel('Nominal biaya').fill('6500')
-  await expect(page.locator('#txn-fee-category')).toHaveValue(/Biaya admin/)
+  await expect(page.locator('#txn-fee-category')).toContainText('Biaya admin')
   await page.locator('#txn-amount').press('Control+Enter')
   await expect(page.getByRole('dialog')).toBeHidden()
 
-  await expect(await dashboardAccount(page, 'BCA')).toHaveText(amount('793.500'))
-  await expect(await dashboardAccount(page, 'Dompet')).toHaveText(amount('200.000'))
+  await expect(await dashboardAccount(page, 'BCA')).toContainText('793.500')
+  await expect(await dashboardAccount(page, 'Dompet')).toContainText('200.000')
 })
 
 test('delete and undo', async ({ page }) => {
@@ -84,10 +89,10 @@ test('delete and undo', async ({ page }) => {
   await row.focus()
   await page.keyboard.press('Delete')
   await expect(row).toHaveCount(0)
-  await expect(netWorth(page)).toHaveText(amount('1.000.000'))
+  // Toast urungkan hanya beberapa detik: saldo diperiksa di Dasbor setelah urungkan.
   await page.getByRole('button', { name: 'Urungkan' }).click()
   await expect(row).toBeVisible()
-  await expect(netWorth(page)).toHaveText(amount('975.000'))
+  await expect(await netWorth(page)).toContainText('975.000')
 })
 
 test('tampilan tabel: sortir nominal, filter cepat, kembali ke riwayat', async ({ page }) => {

@@ -2,13 +2,12 @@
 import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Input } from '@/components/ui/input'
+import { useMoneyFormat } from '@/composables/useMoneyFormat'
 import { parseAmount } from '@/ipc'
 import { errorMessage, type Translate } from '@/lib/errors'
-import { moneyParts } from '@/lib/money'
-import type { LocaleDto } from '@/ipc'
 
 // Sel budget: teks biasa, klik/Enter → input inline. Enter/blur/Tab menyimpan, Esc batal, kosong = hapus budget.
-const props = defineProps<{ categoryId: string; name: string; amount: number | null; locale: LocaleDto }>()
+const props = defineProps<{ categoryId: string; name: string; amount: number | null }>()
 const emit = defineEmits<{ save: [amount: number | null]; error: [message: string] }>()
 
 const { t } = useI18n()
@@ -16,10 +15,8 @@ const editing = ref(false)
 const text = ref('')
 let closing = false
 
-const display = (v: number) => {
-  const p = moneyParts(v, props.locale)
-  return p.sign + p.number
-}
+// Mode sembunyikan nominal hanya berlaku untuk teks; input edit tetap menampilkan nilai asli.
+const { num: display } = useMoneyFormat()
 
 function open() {
   text.value = props.amount === null ? '' : String(props.amount)
